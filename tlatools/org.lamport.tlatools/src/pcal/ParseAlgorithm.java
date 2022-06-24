@@ -106,7 +106,9 @@
 ***************************************************************************/
 package pcal;
 
+import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.Vector;
 
 import pcal.exception.ParseAlgorithmException;
@@ -354,6 +356,7 @@ public class ParseAlgorithm
            // called, so we must not omit the pc variable.
            omitPC = false;
          } ;
+
        if (     (   PeekAtAlgToken(1).equals("fair") 
                  && (   PeekAtAlgToken(2).equals("process")
                      || (   PeekAtAlgToken(2).equals("+")
@@ -361,7 +364,8 @@ public class ParseAlgorithm
                         )
                     )
                 )
-    		 || PeekAtAlgToken(1).equals("process")   )
+    		 || PeekAtAlgToken(1).equals("process")
+             || PeekAtAlgToken(1).equals("choreography"))
          { AST.Multiprocess multiproc = new AST.Multiprocess() ;
            TLAtoPCalMapping map = PcalParams.tlaPcalMapping ;
            PCalLocation multiprocBegin = new PCalLocation(map.algLine, map.algColumn);
@@ -372,7 +376,8 @@ public class ParseAlgorithm
            multiproc.prcds  = procedures ;
            multiproc.procs  = new Vector() ;
            while (PeekAtAlgToken(1).equals("fair") ||
-        		   PeekAtAlgToken(1).equals("process"))
+        		   PeekAtAlgToken(1).equals("process") ||
+                   PeekAtAlgToken(1).equals("choreography"))
              { int fairness = AST.UNFAIR_PROC;
               if (PeekAtAlgToken(1).equals("fair")) {
         		   MustGobbleThis("fair");
@@ -382,8 +387,12 @@ public class ParseAlgorithm
         		   } else {
         		   fairness = AST.WF_PROC;
         		   }
-                } else 
-                { if (PcalParams.FairnessOption.equals("wf")) {
+             } else if (PeekAtAlgToken(1).equals("choreography")) {
+                  // TODO ignore fairness for now
+                  List<AST.Process> proc =  GetChoreography() ;
+                  proc.forEach(multiproc.procs::addElement);
+              } else
+             { if (PcalParams.FairnessOption.equals("wf")) {
                 	fairness = AST.WF_PROC;
                     } else if (PcalParams.FairnessOption.equals("sf")) {
                     	fairness = AST.SF_PROC;
@@ -720,6 +729,36 @@ public class ParseAlgorithm
        result.setOrigin(new Region(beginLoc, endLoc)) ;
        return result ;
      }
+
+    public static List<AST.Process> GetChoreography() throws ParseAlgorithmException {
+        GobbleThis("choreography");
+
+        // Parse party declarations
+        while (PeekAtAlgToken(1).equals("(")) {
+            GobbleThis("(");
+            String partyVar = GetAlgToken();
+            boolean b = GobbleEqualOrIf();
+            TLAExpr partySet = GetExpr();
+            GobbleThis(")");
+            if (PeekAtAlgToken(1).equals("variables")) {
+                Vector localVars = GetVarDecls();
+                int a = 1;
+            }
+            if (PeekAtAlgToken(1).equals(",")) {
+                GobbleThis(",");
+            } else {
+                break;
+            }
+        }
+
+        GobbleBeginOrLeftBrace() ;
+        Vector stmts = GetStmtSeq();
+        GobbleEndOrRightBrace("choreography") ;
+
+       // Translate into regular PlusCal
+        List<AST.Process> res = new ArrayList<>();
+        return res;
+    }
 
    public static AST.Process GetProcess() throws ParseAlgorithmException
      { AST.Process result = new AST.Process() ;
@@ -1084,6 +1123,7 @@ public class ParseAlgorithm
        if (nextTok.equals("if"))     { return GetIf(0) ; }     ;
        if (nextTok.equals("either")) { return GetEither() ; }     ;
        if (nextTok.equals("with"))   { return GetWith(0) ; }   ;
+       if (nextTok.equals("all"))    { return GetAll(0) ; }   ;
        if (nextTok.equals("when"))   { return GetWhen(true) ; }   ;
        if (nextTok.equals("await"))  { return GetWhen(false) ; }   ;
        if (nextTok.equals("print"))  { return GetPrintS() ; } ;
@@ -1325,6 +1365,10 @@ public class ParseAlgorithm
                      .getOrigin().getEnd())) ;
         return result ;
      }
+
+    public static AST GetAll(int depth) throws ParseAlgorithmException {
+        return InnerGetWith(depth, null) ;
+    }
 
    /**
     * For constructing the TLA+ to PlusCal mapping, the original GetWith
@@ -4062,7 +4106,7 @@ public class ParseAlgorithm
     * The PlusCal code currently calls this only with replace = true and 
     * outputVec = null.
     * 
-    * @param inputVec        Input String Vector 
+    * @param inputVec        Input String Vector
     * @param outputVec       Output String Vector, or null
     * @param curLoc          <row, column> (Java coordinates) of beginning of search.
     * @param replace         True iff replacing comments by spaces.

@@ -667,6 +667,28 @@ public class AST
           }
       }
 
+    public static class All extends AST
+    { public String    var  = "" ;
+      public boolean   isEq = true ; // true means "=", false "\\in"
+      public TLAExpr   exp  = null ;
+      public Vector    Do   = null ; // of SimpleStmt
+      /*****************************************************************
+       * Can't use "do" because that's a Java keyword.                  *
+       *****************************************************************/
+      public All() { };
+      public String toString()
+      { return
+              Indent(lineCol()) +
+                      "[type   |-> \"All\", " + NewLine() +
+                      " var    |-> \"" + var + "\"," + NewLine() +
+                      " eqOrIn |-> " + boolToEqOrIn(isEq) + ","  + NewLine() +
+                      " exp    |-> " + exp.toString() + "," + NewLine() +
+                      Indent(" do     |-> ") + VectorToSeqString(Do) + "]" +
+                      EndIndent() +
+                      EndIndent() ;
+      }
+    }
+
     public static class When extends AST
       { public TLAExpr   exp  = null ;
         public When() {};
