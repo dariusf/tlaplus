@@ -114,6 +114,7 @@ import pcal.exception.TLAExprException;
 import pcal.exception.TokenizerException;
 import pcal.exception.UnrecoverableException;
 import tla2tex.Debug;
+import tlc2.util.Vect;
 
 
 public class ParseAlgorithm
@@ -824,9 +825,7 @@ public class ParseAlgorithm
         List<AST> body1 = res.stream()
                 .map(wp -> wp.thing)
                 .collect(Collectors.toList());
-        AST.Process proc1 = new AST.Process();
-        proc1.name = proc.name;
-        proc1.body = new Vector<>(body1);
+        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
 
         List<AST.Process> newProcesses = res.stream()
                 .flatMap(wp -> wp.procs.stream())
@@ -837,11 +836,85 @@ public class ParseAlgorithm
         return newProcesses;
     }
 
+    private static AST.Process createProcess(String name, boolean isEq, TLAExpr id, Vector<AST> body, Vector<AST.VarDecl> decls) {
+        // TODO see what else GetProcess does
+        AST.Process proc1 = new AST.Process();
+        proc1.name = name;
+        proc1.isEq = isEq;
+        proc1.id = id;
+        proc1.body = body;
+        proc1.decls = decls;
+        proc1.plusLabels = new Vector<>(0);
+        proc1.minusLabels = new Vector<>(0);
+        proc1.proceduresCalled = new Vector<>(0);
+        return proc1;
+    }
+
+    private static TLAExpr tlaExpr(String fmt, Object... args) {
+       String s = String.format(fmt, args);
+        Vector<String> line = new Vector<>();
+        line.add(s);
+        PcalCharReader reader = new PcalCharReader(line, 0, 0, 1, 0);
+        try {
+            return Tokenize.TokenizeExpr(reader);
+        } catch (TokenizerException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static AST.Process allStatementProcess(String id, TLAExpr exp) {
+
+//    process (q \in qs)
+//    variables auxps = ps;
+//    {
+//        qa:
+//        while (auxps /= {}) {
+//            with (pp \in { pr \in ps : pc[pr] = "pa" }) {
+//                out := out \ union {<<pp, self>>};
+//                auxps := auxps \ {pp};
+//            }
+//        }
+//    }
+
+        Vector<AST.VarDecl> decls = new Vector<>();
+        AST.VarDecl varDecl = new AST.VarDecl();
+        varDecl.var = "aux" + id;
+        varDecl.isEq = true;
+        varDecl.val = exp;
+        decls.add(varDecl);
+        Vector<AST> body = new Vector<>();
+        AST.With with = new AST.With();
+        with.exp = tlaExpr("pp \\in { pr \\in ps : pc[pr  = \"pa\"}");
+        with.Do = new Vector<AST>();
+        AST.Assign assign1 = new AST.Assign();
+        assign1.ass = new Vector<AST>();
+        AST.SingleAssign a1 = new AST.SingleAssign();
+        assign1.ass.add(a1);
+        AST.Lhs lhs = new AST.Lhs();
+        lhs.var = "auxps";
+        a1.lhs = lhs;
+        a1.rhs = tlaExpr("a \\ {{pp}}");
+        // TODO add the body here
+        with.Do.add(assign1);
+        AST.While loop = new AST.While();
+        loop.test = tlaExpr("aux # {}");
+        loop.unlabDo = new Vector<>();
+        loop.unlabDo.add(with);
+        body.add(loop);
+        AST.Process proc = createProcess(id, false, exp, body, decls);
+        return proc;
+    }
+
     private static WithProc<AST> expandAllStatement(Map<String, Party> ownership,
                                                     Map<String, Party> partyDecls,
                                                     AST stmt) {
        if (stmt instanceof AST.All) {
-           return new WithProc<>(stmt, List.of());
+           AST.When wait = new AST.When();
+           AST.All all = (AST.All) stmt;
+           wait.exp = tlaExpr("\\A %s \\in %s : pc[%s] = \"Done\"", all.var, all.exp, all.var);
+           AST.Process proc = allStatementProcess(all.var, all.exp);
+//           TODO recurse into proc
+           return new WithProc<>(wait, List.of(proc));
        } else if (stmt instanceof AST.With) {
            return new WithProc<>(stmt, List.of());
        } else {
@@ -894,16 +967,7 @@ public class ParseAlgorithm
             Vector<AST> stmts1 = new Vector<>(stmts.stream()
                     .map(s -> project(ownership, party, s))
                     .collect(Collectors.toList()));
-            AST.Process process = new AST.Process();
-            process.name = party.partyVar;
-            process.isEq = party.equalOrIn;
-            process.id = party.partySet;
-            process.body = stmts1;
-            process.decls = new Vector(party.localVars);
-            process.plusLabels = new Vector(0);
-            process.minusLabels = new Vector(0);
-            process.proceduresCalled = new Vector(0);
-            // TODO see what else GetProcess does
+            AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet, stmts1, new Vector(party.localVars));
             return process;
         }).collect(Collectors.toList());
         return res;
@@ -942,6 +1006,11 @@ public class ParseAlgorithm
             e1.labElse = projectAll(ownership, party, e.labElse);
             e1.labThen = projectAll(ownership, party, e.labThen);
             return e1;
+        } else if (stmt instanceof AST.When) {
+            AST.When e = (AST.When) stmt;
+//            AST.When e1 = new AST.When();
+            // TODO check if test expressions all reside on same party
+            return e;
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
