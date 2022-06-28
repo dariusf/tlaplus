@@ -847,6 +847,7 @@ public class ParseAlgorithm
         proc1.plusLabels = new Vector<>(0);
         proc1.minusLabels = new Vector<>(0);
         proc1.proceduresCalled = new Vector<>(0);
+        proc1.setOrigin(new Region(0, 0, 0));
         return proc1;
     }
 
@@ -856,18 +857,24 @@ public class ParseAlgorithm
         line.add(s);
         PcalCharReader reader = new PcalCharReader(line, 0, 0, 1, 0);
         try {
-            return Tokenize.TokenizeExpr(reader);
+            TLAExpr e = Tokenize.TokenizeExpr(reader);
+            e.setOrigin(new Region(0, 0, 0));
+            return e;
         } catch (TokenizerException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static AST.Process allStatementProcess(String id, TLAExpr exp) {
+    private static int varI;
+    static String fresh() {
+        return "v" + (varI++);
+    }
+
+    private static AST.Process allStatementProcess(String ig, TLAExpr ps) {
 
 //    process (q \in qs)
 //    variables auxps = ps;
 //    {
-//        qa:
 //        while (auxps /= {}) {
 //            with (pp \in { pr \in ps : pc[pr] = "pa" }) {
 //                out := out \ union {<<pp, self>>};
@@ -875,33 +882,50 @@ public class ParseAlgorithm
 //            }
 //        }
 //    }
+        String p = fresh();
+        String auxps = fresh();
 
         Vector<AST.VarDecl> decls = new Vector<>();
-        AST.VarDecl varDecl = new AST.VarDecl();
-        varDecl.var = "aux" + id;
-        varDecl.isEq = true;
-        varDecl.val = exp;
-        decls.add(varDecl);
+        {
+            AST.VarDecl varDecl = new AST.VarDecl();
+            varDecl.var = auxps;
+            varDecl.isEq = true;
+            varDecl.val = ps;
+            decls.add(varDecl);
+        }
         Vector<AST> body = new Vector<>();
         AST.With with = new AST.With();
-        with.exp = tlaExpr("pp \\in { pr \\in ps : pc[pr  = \"pa\"}");
+        with.setOrigin(ps.getOrigin());
+        String pp = fresh();
+        String pr = fresh();
+        String paLabel = fresh(); // TODO
+        with.exp = tlaExpr("%s \\in { %s \\in %s : pc[%s] = \"%s\"}", pp, pr, ps, pr, paLabel);
+        // TODO rename q->self, p->pp
+//        substituteForAll
         with.Do = new Vector<AST>();
         AST.Assign assign1 = new AST.Assign();
+        assign1.setOrigin(ps.getOrigin());
         assign1.ass = new Vector<AST>();
         AST.SingleAssign a1 = new AST.SingleAssign();
+        a1.setOrigin(ps.getOrigin());
         assign1.ass.add(a1);
         AST.Lhs lhs = new AST.Lhs();
-        lhs.var = "auxps";
+        {
+            lhs.setOrigin(ps.getOrigin());
+            lhs.var = auxps;
+            lhs.sub = tlaExpr(""); // has to be initialized
+        }
         a1.lhs = lhs;
-        a1.rhs = tlaExpr("a \\ {{pp}}");
+        a1.rhs = tlaExpr("%s \\ {{%s}}", auxps, pp);
         // TODO add the body here
         with.Do.add(assign1);
         AST.While loop = new AST.While();
-        loop.test = tlaExpr("aux # {}");
+        loop.test = tlaExpr("%s # {}", auxps);
         loop.unlabDo = new Vector<>();
         loop.unlabDo.add(with);
+        loop.setOrigin(ps.getOrigin());
         body.add(loop);
-        AST.Process proc = createProcess(id, false, exp, body, decls);
+        AST.Process proc = createProcess(p, false, ps, body, decls);
         return proc;
     }
 
@@ -909,8 +933,9 @@ public class ParseAlgorithm
                                                     Map<String, Party> partyDecls,
                                                     AST stmt) {
        if (stmt instanceof AST.All) {
-           AST.When wait = new AST.When();
            AST.All all = (AST.All) stmt;
+           AST.When wait = new AST.When();
+           wait.setOrigin(stmt.getOrigin());
            wait.exp = tlaExpr("\\A %s \\in %s : pc[%s] = \"Done\"", all.var, all.exp, all.var);
            AST.Process proc = allStatementProcess(all.var, all.exp);
 //           TODO recurse into proc
@@ -979,13 +1004,14 @@ public class ParseAlgorithm
      */
     private static AST project(Map<String, Party> ownership, Party party, AST stmt) {
         if (stmt instanceof AST.All) {
-            AST.All all = (AST.All) stmt;
-            AST.All all1 = new AST.All();
-            all1.var = all.var;
-            all1.isEq = all.isEq;
-            all1.exp = all.exp;
-            all1.Do = projectAll(ownership, party, all.Do);
-            return all1;
+            AST.All e = (AST.All) stmt;
+            AST.All e1 = new AST.All();
+            e1.var = e.var;
+            e1.isEq = e.isEq;
+            e1.exp = e.exp;
+            e1.Do = projectAll(ownership, party, e.Do);
+            e1.setOrigin(e.getOrigin());
+            return e1;
 //        } else if (stmt instanceof AST.Either) {
 //            AST.Either e = (AST.Either) stmt;
 //            AST.Either e1 = new AST.Either();
@@ -995,6 +1021,7 @@ public class ParseAlgorithm
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
             e1.clauses = projectAll(ownership, party, e.clauses);
+            e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
@@ -1005,10 +1032,12 @@ public class ParseAlgorithm
             e1.unlabThen = projectAll(ownership, party, e.unlabThen);
             e1.labElse = projectAll(ownership, party, e.labElse);
             e1.labThen = projectAll(ownership, party, e.labThen);
+            e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.When) {
             AST.When e = (AST.When) stmt;
 //            AST.When e1 = new AST.When();
+//            e1.setOrigin(e.getOrigin());
             // TODO check if test expressions all reside on same party
             return e;
         } else if (stmt instanceof AST.Clause) {
@@ -1016,22 +1045,25 @@ public class ParseAlgorithm
             AST.Clause e1 = new AST.Clause();
             e1.labOr = projectAll(ownership, party, e.labOr);
             e1.unlabOr = projectAll(ownership, party, e.unlabOr);
+            e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
             AST.Assign e1 = new AST.Assign();
             e1.ass = projectAll(ownership, party, e.ass);
+            e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.SingleAssign) {
             AST.SingleAssign e = (AST.SingleAssign) stmt;
-            AST.SingleAssign e1 = new AST.SingleAssign();
             AST.Lhs lhs = e.lhs;
             // TODO check the rhs uses only expressions available on this party
             Optional<AST.VarDecl> first = party.localVars.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
             if (first.isPresent()) {
-                return e1;
+                return e;
             } else {
-                return new AST.Skip();
+                AST.Skip e1 = new AST.Skip();
+                e1.setOrigin(e.getOrigin());
+                return e1;
             }
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Send")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
@@ -1041,9 +1073,11 @@ public class ParseAlgorithm
             // expand to user-provided macros
             if (isSend) {
                 AST.MacroCall send = new AST.MacroCall();
+                send.setOrigin(stmt.getOrigin());
                 send.name = "Send";
                 send.args = new Vector<TLAExpr>();
                 send.args.add(((AST.MacroCall) stmt).args.get(1));
+                // TODO use tlaExpr
                 TLAExpr e = new TLAExpr();
                 e.tokens = new Vector<>(); // lines
                 e.tokens.add(new Vector<>()); // add a line
@@ -1053,9 +1087,11 @@ public class ParseAlgorithm
                 return send;
             } else if (isRecv) {
                 AST.MacroCall recv = new AST.MacroCall();
+                recv.setOrigin(stmt.getOrigin());
                 recv.name = "Receive";
                 recv.args = new Vector<TLAExpr>();
                 recv.args.add(((AST.MacroCall) stmt).args.get(0));
+                // TODO use tlaExpr
                 TLAExpr e = new TLAExpr();
                 e.tokens = new Vector<>(); // lines
                 e.tokens.add(new Vector<>()); // add a line
