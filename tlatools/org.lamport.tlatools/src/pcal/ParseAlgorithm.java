@@ -866,8 +866,8 @@ public class ParseAlgorithm
     }
 
     private static int varI;
-    static String fresh() {
-        return "v" + (varI++);
+    static String fresh(String prefix) {
+        return prefix + "_" + (varI++);
     }
 
     private static AST.Process allStatementProcess(String ig, TLAExpr ps) {
@@ -882,8 +882,8 @@ public class ParseAlgorithm
 //            }
 //        }
 //    }
-        String p = fresh();
-        String auxps = fresh();
+        String p = fresh("proc");
+        String auxps = fresh("ps");
 
         Vector<AST.VarDecl> decls = new Vector<>();
         {
@@ -896,9 +896,9 @@ public class ParseAlgorithm
         Vector<AST> body = new Vector<>();
         AST.With with = new AST.With();
         with.setOrigin(ps.getOrigin());
-        String pp = fresh();
-        String pr = fresh();
-        String paLabel = fresh(); // TODO
+        String pp = fresh("pp");
+        String pr = fresh("pr");
+        String paLabel = fresh("pa"); // TODO
         with.exp = tlaExpr("%s \\in { %s \\in %s : pc[%s] = \"%s\"}", pp, pr, ps, pr, paLabel);
         // TODO rename q->self, p->pp
 //        substituteForAll
