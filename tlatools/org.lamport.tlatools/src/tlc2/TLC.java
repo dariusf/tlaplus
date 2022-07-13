@@ -13,29 +13,19 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import model.InJarFilenameToStream;
 import model.ModelInJar;
+import tla2sany.semantic.*;
 import tlc2.debug.TLCDebugger;
 import tlc2.output.EC;
 import tlc2.output.ErrorTraceMessagePrinterRecorder;
 import tlc2.output.MP;
 import tlc2.output.Messages;
-import tlc2.tool.DFIDModelChecker;
-import tlc2.tool.ITool;
-import tlc2.tool.ModelChecker;
-import tlc2.tool.Simulator;
-import tlc2.tool.SingleThreadedSimulator;
+import tlc2.tool.*;
 import tlc2.tool.fp.FPSet;
 import tlc2.tool.fp.FPSetConfiguration;
 import tlc2.tool.fp.FPSetFactory;
@@ -52,6 +42,7 @@ import tlc2.util.IStateWriter;
 import tlc2.util.NoopStateWriter;
 import tlc2.util.RandomGenerator;
 import tlc2.util.StateWriter;
+import tlc2.value.IValue;
 import tlc2.value.RandomEnumerableValues;
 import util.Assert.TLCRuntimeException;
 import util.DebugPrinter;
@@ -86,7 +77,7 @@ public class TLC {
      * Possible TLC run modes: either model checking or simulation.
      */
     public enum RunMode {
-    	MODEL_CHECK, SIMULATE;
+    	MODEL_CHECK, SIMULATE, MONITOR;
     }
     
 
@@ -416,7 +407,11 @@ public class TLC {
         int index = 0;
 		while (index < args.length)
         {
-            if (args[index].equals("-simulate") || args[index].equals("-generate"))
+            if (args[index].equals("-monitor")) {
+                runMode = RunMode.MONITOR;
+                index++;
+            }
+            else if (args[index].equals("-simulate") || args[index].equals("-generate"))
             {
             	if (args[index].equals("-generate")) {
 					System.setProperty(Tool.class.getName() + ".probabilistic", Boolean.TRUE.toString());
@@ -1154,34 +1149,38 @@ public class TLC {
             final int result;
 			if (RunMode.SIMULATE.equals(runMode)) {
                 // random simulation
-                if (noSeed)
-                {
+                if (noSeed) {
                     seed = rng.nextLong();
                     rng.setSeed(seed);
-                } else
-                {
+                } else {
                     rng.setSeed(seed, aril);
                 }
                 RandomEnumerableValues.setSeed(seed);
-				printStartupBanner(EC.TLC_MODE_SIMU, getSimulationRuntime(seed));
-				
-				Simulator simulator;
-				if (debugPort >= 0) {
-					assert TLCGlobals.getNumWorkers() == 1
-							: "TLCDebugger does not support running with multiple workers.";
-					final TLCDebugger instance = TLCDebugger.Factory.getInstance(debugPort, suspend, halt);
-					synchronized (instance) {
-						tool = new DebugTool(mainFile, configFile, resolver, Tool.Mode.Simulation, params, instance);
-					}
-					simulator = new SingleThreadedSimulator(tool, metadir, traceFile, deadlock, traceDepth, 
-	                        traceNum, traceActions, rng, seed, resolver);
-				} else {
-					tool = new FastTool(mainFile, configFile, resolver, Tool.Mode.Simulation, params);
-					simulator = new Simulator(tool, metadir, traceFile, deadlock, traceDepth, 
-	                        traceNum, traceActions, rng, seed, resolver, TLCGlobals.getNumWorkers());
-				}
+                printStartupBanner(EC.TLC_MODE_SIMU, getSimulationRuntime(seed));
+
+                Simulator simulator;
+                if (debugPort >= 0) {
+                    assert TLCGlobals.getNumWorkers() == 1
+                            : "TLCDebugger does not support running with multiple workers.";
+                    final TLCDebugger instance = TLCDebugger.Factory.getInstance(debugPort, suspend, halt);
+                    synchronized (instance) {
+                        tool = new DebugTool(mainFile, configFile, resolver, Tool.Mode.Simulation, params, instance);
+                    }
+                    simulator = new SingleThreadedSimulator(tool, metadir, traceFile, deadlock, traceDepth,
+                            traceNum, traceActions, rng, seed, resolver);
+                } else {
+                    tool = new FastTool(mainFile, configFile, resolver, Tool.Mode.Simulation, params);
+                    simulator = new Simulator(tool, metadir, traceFile, deadlock, traceDepth,
+                            traceNum, traceActions, rng, seed, resolver, TLCGlobals.getNumWorkers());
+                }
                 TLCGlobals.simulator = simulator;
                 result = simulator.simulate();
+            } else if (RunMode.MONITOR.equals(runMode)) {
+                tool = new FastTool(mainFile, configFile, resolver, Tool.Mode.Simulation, params);
+                Map<UniqueString, IValue> initialState = tool.getInitStates().elementAt(0).getVals();
+                ModuleNode rootModule = tool.getSpecProcessor().getSpecObj().getRootModule();
+                Monitoring.convert(initialState, rootModule);
+                result = EC.NO_ERROR;
 			} else { // RunMode.MODEL_CHECK
 				if (noSeed) {
                     seed = rng.nextLong();
