@@ -2,8 +2,7 @@ package tlc2;
 
 import tla2sany.semantic.*;
 import tlc2.value.IValue;
-import tlc2.value.impl.IntValue;
-import tlc2.value.impl.StringValue;
+import tlc2.value.impl.*;
 import util.UniqueString;
 
 import java.io.IOException;
@@ -12,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Monitoring {
 
@@ -25,6 +25,12 @@ public class Monitoring {
         }
     }
 
+    static int n = 0;
+
+    static String fresh() {
+        return "v" + n++;
+    }
+
     public static void convert(Map<UniqueString, IValue> initialState, ModuleNode rootModule) {
         UniqueString moduleName = rootModule.getName();
         List<OpDeclNode> variables = Arrays.asList(rootModule.getVariableDecls());
@@ -35,14 +41,18 @@ public class Monitoring {
                 .collect(Collectors.toList());
 
 
-        String monitorFns = definitions.stream().map(d -> {
+        String monitorFns = definitions.stream().flatMap(d -> {
+            if (d.getBody() instanceof SubstInNode) {
+                // INSTANCE declarations are one instance of this
+                return Stream.of();
+            }
             if (!(d.getBody() instanceof OpApplNode)) {
                 throw fail("not op appl node?");
             }
             MAction action = splitPreEff(d.getBody());
             String body = translate(action);
             String eq = "if !reflect.DeepEqual(m.state, c) {\npanic(\"state not equal\")\n}";
-            return String.format("func (m *Monitor) %s(c State, params map[string]interface{}, msg map[string]interface{}) {\n%s\n%s\n}", d.getName(), eq, body);
+            return Stream.of(String.format("func (m *Monitor) %s(c State, params map[string]interface{}, msg map[string]interface{}) {\n%s\n%s\n}", d.getName(), eq, body));
         }).collect(Collectors.joining("\n"));
 
         String pkg = "monitoring";
@@ -66,10 +76,14 @@ public class Monitoring {
     private static boolean operatorWhitelist(SemanticNode d) {
         if (d instanceof OpDefNode) {
             String name = ((OpDefNode) d).getName().toString();
+            List<String> extra = List.of("TC", "TCConsistent", "SoupSize", "TargetLength", "TargetA", "ConstrB", "TargetCommit", "TargetAbort");
             if (name.contains("TypeOK") || name.contains("Spec") || name.contains("vars") ||
                     name.contains("Next") || name.contains("Init")) {
                 // Init is ignored because it's already availale.
                 // we should get the actions from Next but we just keep everything left instead.
+                return false;
+            } else if (extra.contains(name)) {
+                // User-defined blacklist
                 return false;
             } else if (List.of("Messages", "Receive", "Send", "ToSet", "Option", "Some", "None").contains(name)) {
                 // Library functions
@@ -112,7 +126,7 @@ public class Monitoring {
         return body instanceof StringNode || body instanceof NumeralNode;
     }
 
-    private static ArrayList<ExprOrOpArgNode> operatorArgs(SemanticNode body) {
+    private static List<ExprOrOpArgNode> operatorArgs(SemanticNode body) {
         if (!(body instanceof OpApplNode)) {
             throw fail("not an operator");
         }
@@ -148,12 +162,14 @@ public class Monitoring {
 
     private static String translate(MAction action) {
         return action.pre.stream().map(Monitoring::translatePre)
+                .map(b -> b.block)
                 .collect(Collectors.joining("\n")) + "\n\n" +
                 action.effects.stream().map(Monitoring::translateEffect)
+                        .map(b -> b.block)
                         .collect(Collectors.joining("\n"));
     }
 
-    private static String translateEffect(SemanticNode fml) {
+    private static GoBlock translateEffect(SemanticNode fml) {
         if (!(fml instanceof OpApplNode)) {
             throw fail("not app?");
         }
@@ -169,17 +185,34 @@ public class Monitoring {
                 var = args.get(1);
                 val = args.get(0);
             }
-            String var1 = translateExpr(var);
-            String val1 = translateExpr(val);
-            if (var1.equals(val1)) {
-                return String.format("// UNCHANGED %s", var1);
+
+            if (val instanceof OpApplNode && ((OpApplNode) val).getOperator().getName().equals("$Except")) {
+                List<ExprOrOpArgNode> child = operatorArgs(val);
+                ExprOrOpArgNode unprimed = child.get(0);
+                List<ExprOrOpArgNode> pairArgs = operatorArgs(child.get(1));
+                ExprOrOpArgNode map = operatorArgs(pairArgs.get(0)).get(0);
+                ExprOrOpArgNode key = pairArgs.get(1);
+                return goBlock("%s[%s] = %s",
+                        translateExpr(unprimed),
+                        translateExpr(map),
+                        translateExpr(key));
+            }
+
+            GoExpr var1 = translateExpr(var);
+            GoExpr val1 = translateExpr(val);
+            // this does not check definitions, which is fine if both are variables.
+            // in other words we error on the side of generating a spurious assignment.
+            if (var1.expr.equals(val1.expr)) {
+                return goBlock("// UNCHANGED %s", var1);
             } else {
-                return String.format("%s = %s", var1, val1);
+                return goBlock("%s = %s", var1, val1);
             }
         } else if (name.equals("$ConjList")) {
-            return args.stream().map(Monitoring::translateEffect).collect(Collectors.joining("\n"));
+            return goBlock(args.stream().map(Monitoring::translateEffect)
+                    .map(b -> b.block)
+                    .collect(Collectors.joining("\n")));
         } else if (name.equals("$IfThenElse")) {
-            return String.format("if %s {\n%s\n} else {\n%s\n}",
+            return goBlock("if %s {\n%s\n} else {\n%s\n}",
                     translateExpr(args.get(0)),
                     translateEffect(args.get(1)),
                     translateEffect(args.get(2)));
@@ -192,77 +225,172 @@ public class Monitoring {
         String expr;
     }
 
-//    private static List<String> goBlock(Object... args) {
-//        List<String> res = new ArrayList<>();
-//        Arrays.stream(args).forEach(a -> {
-//            if (a instanceof String) {
-//                res.add((String) a);
-//            } else if (a instanceof GoExpr) {
-//                res.addAll(((GoExpr) a).defs);
-//                res.add(((GoExpr) a).expr);
-//            } else {
-//                throw fail("invalid");
-//            }
-//        });
+    private static class GoBlock {
+        String block;
+
+        public GoBlock(String block) {
+            this.block = block;
+        }
+    }
+
+//    private static GoExpr goExprDef(String def, String ) {
+//        GoExpr res = new GoExpr();
+//        res.defs.add(def);
+//        res.expr = expr;
 //        return res;
 //    }
 
-    private static GoExpr goExpr(Object... args) {
+    private static GoExpr goExpr(GoBlock block, String fmt, Object... args) {
         GoExpr res = new GoExpr();
-        String expr = Arrays.stream(args).map(a -> {
-            if (a instanceof String) {
-                return (String) a;
-            } else if (a instanceof GoExpr) {
-                res.defs.addAll(((GoExpr) a).defs);
-                return ((GoExpr) a).expr;
-            } else {
-                throw fail("invalid");
-            }
-        }).collect(Collectors.joining(" "));
-        res.expr = expr;
+        res.defs.add(block.block);
+        GoExpr e = goExpr(fmt, args);
+        res.defs.addAll(e.defs);
+        res.expr = e.expr;
         return res;
     }
 
-    private static String translatePre(SemanticNode fml) {
+    private static GoExpr joinGoExpr(List<GoExpr> exprs, String s) {
+        GoExpr res = new GoExpr();
+        res.expr = exprs.stream().map(e -> {
+            res.defs.addAll(e.defs);
+            return e.expr;
+        }).collect(Collectors.joining(s));
+        return res;
+    }
+
+    /**
+     * args may be strings or GoExprs.
+     * definitions are accumulated.
+     */
+    private static GoExpr goExpr(String fmt, Object... args) {
+        GoExpr res = new GoExpr();
+        Object[] args1 = Arrays.stream(args).flatMap(a -> {
+            if (a instanceof String) {
+                return Stream.of(a);
+            } else if (a instanceof List) {
+                throw fail("invalid");
+//                return ((List<?>) a).stream().peek(b -> {
+//                    // this only goes one level deep
+//                    if (b instanceof GoExpr) {
+//                        res.defs.addAll(((GoExpr) b).defs);
+//                    }
+//                });
+            } else if (a instanceof GoExpr) {
+                res.defs.addAll(((GoExpr) a).defs);
+                return Stream.of(((GoExpr) a).expr);
+            } else {
+                throw fail("invalid");
+            }
+        }).toArray();
+        res.expr = String.format(fmt, args1);
+        return res;
+    }
+
+    /**
+     * printf, but if the arguments are GoExprs, their definitions are taken
+     * out and placed at the top of the resulting block.
+     */
+    private static GoBlock goBlock(String fmt, Object... args) {
+        List<String> defs = new ArrayList<>();
+        Object[] args1 = Arrays.stream(args).flatMap(a -> {
+            if (a instanceof GoExpr) {
+                defs.addAll(((GoExpr) a).defs);
+                return Stream.of(((GoExpr) a).expr);
+            } else if (a instanceof List) {
+                throw fail("invalid");
+//                return ((List<?>) a).stream().peek(b -> {
+//                    // this only goes one level deep
+//                    if (b instanceof GoExpr) {
+//                        defs.addAll(((GoExpr) b).defs);
+//                    }
+//                });
+            }
+            return Stream.of(a);
+        }).toArray();
+        return new GoBlock(String.join("", defs) + "\n" + String.format(fmt, args1));
+    }
+
+    private static GoBlock translatePre(SemanticNode fml) {
         if (!(fml instanceof OpApplNode)) {
             throw fail("not app?");
         }
         String name = ((OpApplNode) fml).getOperator().getName().toString();
         List<ExprOrOpArgNode> args = operatorArgs(fml);
         if (name.equals("=")) {
-            return String.format("if !(%s == %s) {\npanic(\"precondition failed\")\n}",
+            return goBlock("if !(%s == %s) {\npanic(\"precondition failed\")\n}",
                     translateExpr(args.get(0)),
                     translateExpr(args.get(1)));
-//            return goBlock("if");
-        } else if (name.equals("Receive")) {
-            return String.format("if !reflect.DeepEqual(%s, msg) {\npanic(\"message different\")\n}",
+        } else if (name.equals("UNCHANGED")) {
+            return goBlock("");
+        } else if (name.equals("Send") || name.equals("Receive")) {
+            return goBlock("if !reflect.DeepEqual(%s, msg) {\npanic(\"message different\")\n}",
                     translateExpr(args.get(0)));
+        } else if (name.equals("/=")) {
+            GoExpr a1 = translateExpr(args.get(0));
+            GoExpr a2 = translateExpr(args.get(1));
+            return goBlock("if %s == %s {\npanic(\"equal\")\n}", a1, a2);
+        } else if (name.equals("\\in")) {
+            GoExpr thing = translateExpr(args.get(0));
+            GoExpr coll = translateExpr(args.get(1));
+            return goBlock("if _, ok := %s[%s]; ok {\npanic(\"inside\")\n}", coll, thing);
+        } else if (name.equals("\\notin")) {
+            GoExpr thing = translateExpr(args.get(0));
+            GoExpr coll = translateExpr(args.get(1));
+//            String v = fresh();
+//            return goBlock("%s := true\nfor _, v := range %s {\nif v == %s {\n%s = false\n}\n}\nif %s {\npanic(\"inside\")\n}",
+//                    v, coll, thing, v, v);
+//            if val, ok := dict["foo"]; ok {
+//                //do something here
+//            }
+            return goBlock("if _, ok := %s[%s]; !ok {\npanic(\"inside\")\n}", coll, thing);
         }
         throw fail("unrecognised operator " + name);
     }
 
+    /**
+     * this produces an expression, but without defs
+     */
     private static String translateIValue(IValue v) {
         if (v instanceof StringValue) {
             return "\"" + ((StringValue) v).getVal() + "\"";
         } else if (v instanceof IntValue) {
             return v.toString();
+        } else if (v instanceof SetEnumValue) {
+            // empty set
+            return "map[interface{}]bool{}";
+        } else if (v instanceof TupleValue) {
+            // empty seq
+            return "[]interface{}{}";
+        } else if (v instanceof FcnRcdValue) {
+            // record literals, like [r1 |-> "working"]
+            List<String> res = new ArrayList<>();
+            for (int i = 0; i < ((FcnRcdValue) v).domain.length; i++) {
+                res.add(String.format("%s: %s",
+                        translateIValue(((FcnRcdValue) v).domain[i]),
+                        translateIValue(((FcnRcdValue) v).values[i])));
+            }
+            return String.format("map[interface{}]interface{}{%s}", res.stream().collect(Collectors.joining(", ")));
         }
         throw fail("invalid type of value " + v.getClass().getSimpleName());
     }
 
-    private static String translateExpr(SemanticNode fml) {
+    private static GoExpr translateExpr(SemanticNode fml) {
         if (isConstant(fml)) {
             if (fml instanceof StringNode) {
-                return "\"" + ((StringNode) fml).getRep().toString() + "\"";
+                return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
             } else if (fml instanceof NumeralNode) {
-                return ((NumeralNode) fml).val() + "";
+                return goExpr(((NumeralNode) fml).val() + "");
             }
             throw fail("unknown");
         } else if (isVar(fml)) {
             String name = getVarName((OpApplNode) fml);
+            if (name.equals("$Tuple")) {
+                // somehow empty sequences land in here
+                return goExpr("[]interface{}{}");
+            }
             // primed variables are handled at a different level
 //            return String.format("state[\"%s\"]", name);
-            return String.format("m.%s", name);
+            return goExpr("m.%s", name);
 //            return name;
         } else if (isPrimedVar(fml)) {
             List<ExprOrOpArgNode> args = operatorArgs(fml);
@@ -279,17 +407,38 @@ public class Monitoring {
                 case "-":
                 case "*":
                 case "/":
-                    return String.format("%s %s %s", translateExpr(args.get(0)), name, translateExpr(args.get(1)));
+                    return goExpr("%s %s %s", translateExpr(args.get(0)), name, translateExpr(args.get(1)));
+                case "Some":
+                    return goExpr("[]interface{}{%s}", translateExpr(args.get(0)));
+                case "Append":
+                    return goExpr("append(%s, %s)", translateExpr(args.get(0)), translateExpr(args.get(1)));
+                case "ToSet":
+                    String v = fresh();
+                    GoExpr a1 = translateExpr(args.get(0));
+                    GoBlock def = goBlock("%s := map[interface{}]bool{}\nfor _, v := range %s {\n%s[v] = true\n}", v, a1, v);
+                    return goExpr(def, "%s", v);
+                case "$FcnApply":
+                    GoExpr map = translateExpr(args.get(0));
+                    GoExpr key = translateExpr(args.get(1));
+                    return goExpr("%s[%s]", map, key);
+                case "$SetEnumerate":
+                    List<GoExpr> exprs = args.stream().map(Monitoring::translateExpr).collect(Collectors.toList());
+                    return goExpr("map[interface{}]bool{%s}", joinGoExpr(exprs, ", "));
                 case "$RcdConstructor":
-                    return String.format("map[string]interface{}{%s}", args.stream().map(a -> {
+                    List<GoExpr> all = args.stream().map(a -> {
                         OpApplNode op = (OpApplNode) a;
                         if (op.getOperator().getName().equals("$Pair")) {
-                            ArrayList<ExprOrOpArgNode> args1 = operatorArgs(op);
-                            return String.format("%s: %s", args1.get(0), args1.get(1));
+                            List<ExprOrOpArgNode> args1 = operatorArgs(op);
+                            return goExpr("%s: %s",
+                                    translateExpr(args1.get(0)),
+                                    translateExpr(args1.get(1)));
                         } else {
                             throw fail("unexpected");
                         }
-                    }).collect(Collectors.joining(", ")));
+                    }).collect(Collectors.toList());
+                    return goExpr("map[string]interface{}{%s}", joinGoExpr(all, ", "));
+                case "$Except":
+                    throw fail("handled at a higher level");
                 default:
                     throw fail("unknown?" + name);
             }
