@@ -132,14 +132,15 @@ public class PlusCalExtensions {
         // Translate into regular PlusCal
         Map<String, Party> quantified = computeOwnership(partyDecls, stmts);
         ownership.putAll(quantified);
-        List<AST.Process> res = project(ownership, partyDecls, stmts);
+        var res = project(ownership, partyDecls, stmts);
 
-        res = res.stream()
-                .flatMap(p -> expandAllStatement(ownership, partyDecls, p).stream())
-                .flatMap(p -> expandParStatement(ownership, partyDecls, p).stream())
+        var res1 = res.entrySet().stream()
+                .flatMap(p -> expandAllStatement(ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .map(Map.Entry::getValue)
                 .collect(Collectors.toList());
 
-        return res;
+        return res1;
     }
 
     /**
@@ -209,10 +210,11 @@ public class PlusCalExtensions {
      */
     private static List<AST.Process> expandParStatement(Map<String, Party> ownership,
                                                         Map<String, Party> partyDecls,
+                                                        Party which,
                                                         AST.Process proc) {
         // TODO this is the same as expandAllStatement except for the function passed to map here
         List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
-                .map(s -> expandParStatement(ownership, partyDecls, s))
+                .map(s -> expandParStatement(ownership, partyDecls, which, s))
                 .collect(Collectors.toList());
 
         List<AST> body1 = res.stream()
@@ -288,8 +290,7 @@ public class PlusCalExtensions {
     /**
      * Turn a single par clause into its own process
      */
-    private static AST.Process parStatementProcess(String pid, AST.Clause cl) {
-        TLAExpr processIdentSet = tlaExpr("{\"%s\"}", pid);
+    private static AST.Process parStatementProcess(TLAExpr set, AST.Clause cl) {
         String processActionName = fresh("proc");
         Vector<AST.VarDecl> decls = new Vector<>();
         Vector<AST> body = new Vector<>();
@@ -299,7 +300,7 @@ public class PlusCalExtensions {
         } else {
             body.addAll(cl.labOr);
         }
-        return createProcess(processActionName, false, processIdentSet, body, decls);
+        return createProcess(processActionName, false, set, body, decls);
     }
 
     private static AST.Process allStatementProcess(String ig, TLAExpr ps) {
@@ -366,6 +367,7 @@ public class PlusCalExtensions {
      */
     private static WithProc<AST> expandParStatement(Map<String, Party> ownership,
                                                     Map<String, Party> partyDecls,
+                                                    Party which,
                                                     AST stmt) {
         if (stmt instanceof AST.Par) {
             AST.Par par = (AST.Par) stmt;
@@ -373,8 +375,10 @@ public class PlusCalExtensions {
             wait.setOrigin(stmt.getOrigin());
             Vector<AST.Clause> clauses = par.clauses;
             var threads = clauses.stream().map(c -> {
-                var id = fresh("par");
-                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(id, c));
+                String p = fresh(which.partyVar + "_par");
+                var id = String.format("\"%s\"", p);
+                var set = tlaExpr("{%s}", id);
+                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(set, c));
             }).collect(Collectors.toList());
 
             var var = fresh("v");
@@ -443,18 +447,17 @@ public class PlusCalExtensions {
         throw new Error(s);
     }
 
-    private static List<AST.Process> project(Map<String, Party> ownership,
-                                             Map<String, Party> partyDecls,
-                                             Vector<AST> stmts) {
-        List<AST.Process> res = partyDecls.entrySet().stream().map(e -> {
+    private static Map<Party, AST.Process> project(Map<String, Party> ownership,
+                                                   Map<String, Party> partyDecls,
+                                                   Vector<AST> stmts) {
+        return partyDecls.entrySet().stream().map(e -> {
             Party party = e.getValue();
             Vector<AST> stmts1 = new Vector<>(stmts.stream()
                     .map(s -> project(ownership, party, s))
                     .collect(Collectors.toList()));
             AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet, stmts1, new Vector(party.localVars));
-            return process;
-        }).collect(Collectors.toList());
-        return res;
+            return new AbstractMap.SimpleEntry<>(party, process);
+        }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
