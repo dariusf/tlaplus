@@ -522,6 +522,11 @@ public class PlusCalExtensions {
                     // projection may create skips here; in that case drop those nodes
                     .filter(sa -> sa instanceof AST.SingleAssign)
                     .collect(Collectors.toList()));
+            if (e1.ass.isEmpty()) {
+                AST.Skip e2 = new AST.Skip();
+                e2.setOrigin(e.getOrigin());
+                return e2;
+            }
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.SingleAssign) {
@@ -533,6 +538,8 @@ public class PlusCalExtensions {
                 return e;
             } else {
                 AST.Skip e1 = new AST.Skip();
+                // AST.Assert e1 = new AST.Assert();
+                // e1.exp = tlaExpr("TRUE");
                 e1.setOrigin(e.getOrigin());
                 return e1;
             }
