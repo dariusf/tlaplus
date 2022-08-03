@@ -94,8 +94,8 @@ public class PlusCalExtensions {
         return result ;
     }
 
-
-    public static List<AST.Process> GetChoreography() throws ParseAlgorithmException {
+    public static List<AST.Process> GetChoreography(Vector<AST.VarDecl> globals,
+                                                    Vector<AST.Macro> macros) throws ParseAlgorithmException {
         GobbleThis("choreography");
 
         Map<String, Party> partyDecls = new HashMap<>();
@@ -129,11 +129,29 @@ public class PlusCalExtensions {
         Vector<AST> stmts = GetStmtSeq();
         GobbleEndOrRightBrace("choreography") ;
 
+        //////
         // Translate into regular PlusCal
+        //////
+
+        // Preprocessing to handle cancellations
+        Map<String, AST.Cancel> cancellations = new HashMap<>();
+        findCancellations(cancellations, stmts);
+        cancellations.forEach((key, value) -> {
+            AST.VarDecl v = new AST.VarDecl();
+            v.var = String.format("cancelled_%s", key);
+            v.val = tlaExpr("FALSE");
+            v.isEq = true;
+            globals.add(v);
+        });
+        stmts = transformCancellations(stmts);
+        // TODO transform affected labels
+
+        // Ownership and projection
         Map<String, Party> quantified = computeOwnership(partyDecls, stmts);
         ownership.putAll(quantified);
-        var res = project(ownership, partyDecls, stmts);
+        var res = project(globals, ownership, partyDecls, stmts);
 
+        // Post-projection elaboration
         var res1 = res.entrySet().stream()
                 .flatMap(p -> expandAllStatement(ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
@@ -141,6 +159,41 @@ public class PlusCalExtensions {
                 .collect(Collectors.toList());
 
         return res1;
+    }
+
+
+    private static void findCancellations(Map<String, AST.Cancel> res, Vector<AST> stmts) {
+        stmts.forEach(s -> findCancellations(res, s));
+    }
+
+    private static void findCancellations(Map<String, AST.Cancel> res, AST stmt) {
+        if (stmt instanceof AST.All) {
+            findCancellations(res, ((AST.All) stmt).Do);
+        } else if (stmt instanceof AST.LabelEither) {
+            findCancellations(res, ((AST.LabelEither) stmt).clauses);
+        } else if (stmt instanceof AST.Par) {
+            findCancellations(res, ((AST.Par) stmt).clauses);
+        } else if (stmt instanceof AST.LabelIf) {
+            findCancellations(res, ((AST.LabelIf) stmt).unlabElse);
+            findCancellations(res, ((AST.LabelIf) stmt).unlabThen);
+            findCancellations(res, ((AST.LabelIf) stmt).labElse);
+            findCancellations(res, ((AST.LabelIf) stmt).labThen);
+        } else if (stmt instanceof AST.When) {
+            // nothing to do
+        } else if (stmt instanceof AST.Clause) {
+            findCancellations(res, ((AST.Clause) stmt).labOr);
+            findCancellations(res, ((AST.Clause) stmt).unlabOr);
+        } else if (stmt instanceof AST.Assign) {
+            // nothing
+        } else if (stmt instanceof AST.SingleAssign) {
+            // nothing
+        } else if (stmt instanceof AST.Cancel) {
+            res.put(((AST.Cancel) stmt).to, (AST.Cancel) stmt);
+        } else if (stmt instanceof AST.MacroCall) {
+            // nothing
+        } else {
+            fail("unimplemented findCancellations " + stmt);
+        }
     }
 
     /**
@@ -202,6 +255,30 @@ public class PlusCalExtensions {
         result.setOrigin(new Region(beginLoc,
                 ((AST) result.clauses.elementAt(result.clauses.size()-1))
                         .getOrigin().getEnd())) ;
+        return result ;
+    }
+
+    /**
+     * Very similar to {@link ParseAlgorithm#GetGoto()}
+     */
+    public static AST.Cancel GetCancel() throws ParseAlgorithmException
+    { MustGobbleThis("cancel") ;
+        AST.Cancel result = new AST.Cancel() ;
+        result.col  = lastTokCol ;
+        result.line = lastTokLine ;
+        result.who   = GetAlgToken() ;
+        result.to   = GetAlgToken() ;
+        result.setOrigin(new Region(new PCalLocation(result.line-1, result.col-1),
+                new PCalLocation(lastTokLine-1, lastTokCol-1+result.to.length()))) ;
+        gotoUsed = true ;
+        // The translator accepts `goto "Done"' and treats it like
+        // `goto Done'.  Testing reveals that the outer
+        // parentheses seem to be removed before we get here, but I
+        // don't trust my tests, so let's check for both.
+        if (result.to.equals("Done") || result.to.equals("\"Done\"")) {
+            gotoDoneUsed = true;
+        }
+        GobbleThis(";") ;
         return result ;
     }
 
@@ -346,7 +423,8 @@ public class PlusCalExtensions {
         {
             lhs.setOrigin(ps.getOrigin());
             lhs.var = auxps;
-            lhs.sub = tlaExpr(""); // has to be initialized
+//            lhs.sub = tlaExpr(""); // has to be initialized
+            lhs.sub = PcalTranslate.MakeExpr(new Vector());
         }
         a1.lhs = lhs;
         a1.rhs = tlaExpr("%s \\ {{%s}}", auxps, pp);
@@ -447,15 +525,17 @@ public class PlusCalExtensions {
         throw new Error(s);
     }
 
-    private static Map<Party, AST.Process> project(Map<String, Party> ownership,
+    private static Map<Party, AST.Process> project(Vector<AST.VarDecl> globals,
+                                                   Map<String, Party> ownership,
                                                    Map<String, Party> partyDecls,
                                                    Vector<AST> stmts) {
         return partyDecls.entrySet().stream().map(e -> {
             Party party = e.getValue();
-            Vector<AST> stmts1 = new Vector<>(stmts.stream()
-                    .map(s -> project(ownership, party, s))
-                    .collect(Collectors.toList()));
-            AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet, stmts1, new Vector(party.localVars));
+            Vector<AST> stmts1 = stmts.stream()
+                    .map(s -> project(globals, ownership, party, s))
+                    .collect(Collectors.toCollection(Vector::new));
+            AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet,
+                    stmts1, new Vector(party.localVars));
             return new AbstractMap.SimpleEntry<>(party, process);
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
@@ -464,14 +544,17 @@ public class PlusCalExtensions {
      * Main projection function, splitting a statement into its local equivalent for the given party,
      * with ownership as context
      */
-    private static AST project(Map<String, Party> ownership, Party party, AST stmt) {
+    private static AST project(Vector<AST.VarDecl> globals,
+                               Map<String, Party> ownership,
+                               Party party,
+                               AST stmt) {
         if (stmt instanceof AST.All) {
             AST.All e = (AST.All) stmt;
             AST.All e1 = new AST.All();
             e1.var = e.var;
             e1.isEq = e.isEq;
             e1.exp = e.exp;
-            e1.Do = projectAll(ownership, party, e.Do);
+            e1.Do = projectAll(globals, ownership, party, e.Do);
             e1.setOrigin(e.getOrigin());
             return e1;
 //        } else if (stmt instanceof AST.Either) {
@@ -482,13 +565,13 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
-            e1.clauses = projectAll(ownership, party, e.clauses);
+            e1.clauses = projectAll(globals, ownership, party, e.clauses);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = new AST.Par();
-            e1.clauses = projectAll(ownership, party, e.clauses);
+            e1.clauses = projectAll(globals, ownership, party, e.clauses);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.LabelIf) {
@@ -496,10 +579,10 @@ public class PlusCalExtensions {
             AST.LabelIf e1 = new AST.LabelIf();
             // TODO check if test expressions all reside on same party
             e1.test = e.test;
-            e1.unlabElse = projectAll(ownership, party, e.unlabElse);
-            e1.unlabThen = projectAll(ownership, party, e.unlabThen);
-            e1.labElse = projectAll(ownership, party, e.labElse);
-            e1.labThen = projectAll(ownership, party, e.labThen);
+            e1.unlabElse = projectAll(globals, ownership, party, e.unlabElse);
+            e1.unlabThen = projectAll(globals, ownership, party, e.unlabThen);
+            e1.labElse = projectAll(globals, ownership, party, e.labElse);
+            e1.labThen = projectAll(globals, ownership, party, e.labThen);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.When) {
@@ -511,14 +594,14 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
-            e1.labOr = projectAll(ownership, party, e.labOr);
-            e1.unlabOr = projectAll(ownership, party, e.unlabOr);
+            e1.labOr = projectAll(globals, ownership, party, e.labOr);
+            e1.unlabOr = projectAll(globals, ownership, party, e.unlabOr);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
             AST.Assign e1 = new AST.Assign();
-            e1.ass = new Vector<>(((Vector<AST>) projectAll(ownership, party, e.ass)).stream()
+            e1.ass = new Vector<>(((Vector<AST>) projectAll(globals, ownership, party, e.ass)).stream()
                     // projection may create skips here; in that case drop those nodes
                     .filter(sa -> sa instanceof AST.SingleAssign)
                     .collect(Collectors.toList()));
@@ -532,17 +615,40 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.SingleAssign) {
             AST.SingleAssign e = (AST.SingleAssign) stmt;
             AST.Lhs lhs = e.lhs;
+
             // TODO check the rhs uses only expressions available on this party
+
+            // try locals first
             Optional<AST.VarDecl> first = party.localVars.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
             if (first.isPresent()) {
                 return e;
-            } else {
-                AST.Skip e1 = new AST.Skip();
-                // AST.Assert e1 = new AST.Assert();
-                // e1.exp = tlaExpr("TRUE");
-                e1.setOrigin(e.getOrigin());
-                return e1;
             }
+
+            // try globals
+            Optional<AST.VarDecl> global = globals.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
+            if (global.isPresent()) {
+                return e;
+            }
+
+            // this assignment must not involve this party
+            AST.Skip e1 = new AST.Skip();
+            // AST.Assert e1 = new AST.Assert();
+            // e1.exp = tlaExpr("TRUE");
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.Cancel) {
+            AST.Cancel e = (AST.Cancel) stmt;
+            AST e1;
+            if (party.partyVar.equals(e.who)) {
+                AST.Cancel e2 = new AST.Cancel();
+                e2.to = e.to;
+                e2.who = null; // deliberate, for now
+                e1 = e2;
+            } else {
+                e1 = new AST.Skip();
+            }
+            e1.setOrigin(e.getOrigin());
+            return e1;
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Send")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
             String receiver = ithMacroArgAsVar((AST.MacroCall) stmt, 1);
@@ -586,13 +692,91 @@ public class PlusCalExtensions {
         }
     }
 
+    private static Vector<AST> transformCancellations(Vector<AST> stmts) {
+        return stmts.stream()
+                .map(PlusCalExtensions::transformCancellations)
+                .collect(Collectors.toCollection(Vector::new));
+    }
+
+    private static AST transformCancellations(AST stmt) {
+        if (stmt instanceof AST.All) {
+            AST.All e = (AST.All) stmt;
+            AST.All e1 = new AST.All();
+            e1.var = e.var;
+            e1.isEq = e.isEq;
+            e1.exp = e.exp;
+            e1.Do = transformCancellations(e.Do);
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.LabelEither) {
+            AST.LabelEither e = (AST.LabelEither) stmt;
+            AST.LabelEither e1 = new AST.LabelEither();
+            e1.clauses = transformCancellations(e.clauses);
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.Par) {
+            AST.Par e = (AST.Par) stmt;
+            AST.Par e1 = new AST.Par();
+            e1.clauses = transformCancellations(e.clauses);
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.LabelIf) {
+            AST.LabelIf e = (AST.LabelIf) stmt;
+            AST.LabelIf e1 = new AST.LabelIf();
+            e1.test = e.test;
+            e1.unlabElse = transformCancellations(e.unlabElse);
+            e1.unlabThen = transformCancellations(e.unlabThen);
+            e1.labElse = transformCancellations(e.labElse);
+            e1.labThen = transformCancellations(e.labThen);
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.When) {
+            return stmt;
+        } else if (stmt instanceof AST.Clause) {
+            AST.Clause e = (AST.Clause) stmt;
+            AST.Clause e1 = new AST.Clause();
+            e1.labOr = transformCancellations(e.labOr);
+            e1.unlabOr = transformCancellations(e.unlabOr);
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.Assign) {
+            return stmt;
+        } else if (stmt instanceof AST.SingleAssign) {
+            return stmt;
+        } else if (stmt instanceof AST.Cancel) {
+            AST.Assign assign = new AST.Assign();
+            assign.ass = new Vector<AST>();
+            AST.SingleAssign singleAssign = new AST.SingleAssign();
+            {
+                String lbl = ((AST.Cancel) stmt).to;
+//                AST.Lhs lhs = new AST.Lhs();
+                {
+                    singleAssign.lhs.var = String.format("cancelled_%s", lbl);
+                    singleAssign.lhs.setOrigin(stmt.getOrigin());
+                    singleAssign.lhs.sub = PcalTranslate.MakeExpr(new Vector());
+                }
+//                singleAssign.lhs = lhs;
+                singleAssign.rhs = tlaExpr("TRUE");
+                singleAssign.setOrigin(stmt.getOrigin());
+            }
+            assign.ass.add(singleAssign);
+            assign.setOrigin(stmt.getOrigin());
+            return assign;
+        } else if (stmt instanceof AST.MacroCall) {
+            return stmt;
+        } else {
+            fail("unimplemented project(Party, AST) " + stmt);
+            return null;
+        }
+    }
+
     /**
      * For recursive calls
      */
-    private static Vector<AST> projectAll(Map<String, Party> ownership, Party party, Vector<AST> all) {
-        return new Vector<>(all.stream()
-                .map(s -> project(ownership, party, s))
-                .collect(Collectors.toList()));
+    private static Vector<AST> projectAll(Vector<AST.VarDecl> globals, Map<String, Party> ownership, Party party, Vector<AST> all) {
+        return all.stream()
+                .map(s -> project(globals, ownership, party, s))
+                .collect(Collectors.toCollection(Vector::new));
     }
 
     private static String ithMacroArgAsVar(AST.MacroCall stmt, int i) {

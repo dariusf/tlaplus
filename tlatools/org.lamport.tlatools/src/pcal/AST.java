@@ -912,6 +912,19 @@ public class AST
           }
       }
 
+    public static class Cancel extends AST
+    { public String    to       = "" ;
+      public String    who       = "" ;
+      public Cancel() {};
+      public String toString()
+      { return
+              lineCol() +
+                      "[type |-> \"cancel\", " +
+                      " who |-> \"" + who + "\", " +
+                      " to |-> \"" + to + "\"]" ;
+      }
+    }
+
     public static class Macro extends AST
       { public String name   = "" ;
         public Vector params = null ; // of Strings

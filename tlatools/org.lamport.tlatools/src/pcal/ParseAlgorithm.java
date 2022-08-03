@@ -386,7 +386,7 @@ public class ParseAlgorithm
         		   }
              } else if (PeekAtAlgToken(1).equals("choreography")) {
                   // TODO ignore fairness for now
-                  List<AST.Process> proc = PlusCalExtensions.GetChoreography() ;
+                  List<AST.Process> proc = PlusCalExtensions.GetChoreography(vdecls, macros) ;
                   proc.forEach(multiproc.procs::addElement);
                   continue;
               } else
@@ -1091,6 +1091,7 @@ public class ParseAlgorithm
    public static AST GetStmt() throws ParseAlgorithmException
      { String nextTok = PeekAtAlgToken(1) ;
        if (nextTok.equals("if"))     { return GetIf(0) ; }     ;
+       if (nextTok.equals("cancel")) { return PlusCalExtensions.GetCancel() ; }     ;
        if (nextTok.equals("either")) { return GetEither() ; }     ;
        if (nextTok.equals("par"))    { return PlusCalExtensions.GetPar() ; }     ;
        if (nextTok.equals("with"))   { return GetWith(0) ; }   ;
