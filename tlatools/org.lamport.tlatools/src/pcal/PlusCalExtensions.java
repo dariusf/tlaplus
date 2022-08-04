@@ -201,10 +201,10 @@ public class PlusCalExtensions {
         // Ownership and projection
         Map<String, Party> quantified = computeOwnership(partyDecls, stmts);
         ownership.putAll(quantified);
-        var res = project(globals, ownership, partyDecls, cancellations, stmts);
+        Map<Party, AST.Process> res = project(globals, ownership, partyDecls, cancellations, stmts);
 
         // Post-projection elaboration
-        var res1 = res.entrySet().stream()
+        List<AST.Process> res1 = res.entrySet().stream()
                 .flatMap(p -> expandAllStatement(ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
@@ -650,16 +650,16 @@ public class PlusCalExtensions {
             AST.When wait = new AST.When();
             wait.setOrigin(stmt.getOrigin());
             Vector<AST.Clause> clauses = par.clauses;
-            var threads = clauses.stream().map(c -> {
+            List<AbstractMap.SimpleEntry<String, AST.Process>> threads = clauses.stream().map(c -> {
                 String p = fresh(which.partyVar + "_par");
-                var id = String.format("\"%s\"", p);
-                var set = tlaExpr("{%s}", id);
+                String id = String.format("\"%s\"", p);
+                TLAExpr set = tlaExpr("{%s}", id);
                 return new AbstractMap.SimpleEntry<>(id, parStatementProcess(set, c));
             }).collect(Collectors.toList());
 
-            var var = fresh("v");
-            var s = threads.stream().map(AbstractMap.SimpleEntry::getKey).collect(Collectors.joining(", "));
-            var processes = threads.stream().map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
+            String var = fresh("v");
+            String s = threads.stream().map(AbstractMap.SimpleEntry::getKey).collect(Collectors.joining(", "));
+            List<AST.Process> processes = threads.stream().map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
             wait.exp = tlaExpr("\\A %s \\in {%s} : pc[%s] = \"Done\"", var, s, var);
 //           TODO recurse into proc?
             return new WithProc<>(wait, processes);
