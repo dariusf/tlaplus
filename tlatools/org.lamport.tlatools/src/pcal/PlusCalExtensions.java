@@ -404,6 +404,9 @@ public class PlusCalExtensions {
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Task) {
             AST.Task e = (AST.Task) stmt;
+            if (e.lbl != null) {
+                fail("tasks cannot have labels, as it is unclear how many statements in their body the label should apply to");
+            }
             res = ((Stream<AST>) transformTask(e.Do, Optional.of(e)));
 //        } else if (stmt instanceof AST.With) {
             // TODO
