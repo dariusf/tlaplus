@@ -373,6 +373,12 @@ public class PlusCalExtensions {
         return flatMapProcessBody(proc, s -> transformTask(s, Optional.empty()));
     }
 
+    private static void copyInto(AST to, AST from) {
+        to.lbl = from.lbl;
+        to.lblLocation = from.lblLocation;
+        to.setOrigin(from.getOrigin());
+    }
+
     private static Stream<AST> transformTask(AST stmt, Optional<AST.Task> task) {
         Stream<AST> res;
         if (stmt instanceof AST.All) {
@@ -382,19 +388,19 @@ public class PlusCalExtensions {
             e1.isEq = e.isEq;
             e1.exp = e.exp;
             e1.Do = ((Stream<AST>) transformTask(e.Do, task)).collect(Collectors.toCollection(Vector::new));
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
             e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = new AST.Par();
             e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Task) {
             AST.Task e = (AST.Task) stmt;
@@ -410,14 +416,14 @@ public class PlusCalExtensions {
             e1.labThen = ((Stream<AST>) transformTask(e.labThen, task)).collect(Collectors.toCollection(Vector::new));
             e1.unlabElse = ((Stream<AST>) transformTask(e.unlabElse, task)).collect(Collectors.toCollection(Vector::new));
             e1.unlabThen = ((Stream<AST>) transformTask(e.unlabThen, task)).collect(Collectors.toCollection(Vector::new));
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
             e1.labOr = ((Stream<AST>) transformTask(e.labOr, task)).collect(Collectors.toCollection(Vector::new));
             e1.unlabOr = ((Stream<AST>) transformTask(e.unlabOr, task)).collect(Collectors.toCollection(Vector::new));
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.When) {
             res = Stream.of(stmt);
@@ -749,7 +755,7 @@ public class PlusCalExtensions {
             e1.isEq = e.isEq;
             e1.exp = e.exp;
             e1.Do = projectAll(globals, ownership, cancellations, e.Do, party);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
 //        } else if (stmt instanceof AST.Either) {
 //            AST.Either e = (AST.Either) stmt;
@@ -760,13 +766,13 @@ public class PlusCalExtensions {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
             e1.clauses = projectAll(globals, ownership, cancellations, e.clauses, party);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = new AST.Par();
             e1.clauses = projectAll(globals, ownership, cancellations, e.clauses, party);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Task) {
             boolean thisParty = cancellations.get(((AST.Task) stmt).label).who.equals(party.partyVar);
@@ -775,7 +781,7 @@ public class PlusCalExtensions {
                 AST.Task e1 = new AST.Task();
                 e1.label = e.label;
                 e1.Do = projectAll(globals, ownership, cancellations, e.Do, party);
-                e1.setOrigin(e.getOrigin());
+                copyInto(e1, e);
                 return e1;
             } else {
                 AST.Skip e2 = new AST.Skip();
@@ -793,12 +799,12 @@ public class PlusCalExtensions {
             e1.unlabThen = projectAll(globals, ownership, cancellations, e.unlabThen, party);
             e1.labElse = projectAll(globals, ownership, cancellations, e.labElse, party);
             e1.labThen = projectAll(globals, ownership, cancellations, e.labThen, party);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.When) {
             AST.When e = (AST.When) stmt;
 //            AST.When e1 = new AST.When();
-//            e1.setOrigin(e.getOrigin());
+//            copyInto(e1, e);
             // TODO check if test expressions all reside on same party
             return e;
         } else if (stmt instanceof AST.Clause) {
@@ -806,7 +812,7 @@ public class PlusCalExtensions {
             AST.Clause e1 = new AST.Clause();
             e1.labOr = projectAll(globals, ownership, cancellations, e.labOr, party);
             e1.unlabOr = projectAll(globals, ownership, cancellations, e.unlabOr, party);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
@@ -820,7 +826,7 @@ public class PlusCalExtensions {
                 e2.setOrigin(e.getOrigin());
                 return e2;
             }
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.SingleAssign) {
             AST.SingleAssign e = (AST.SingleAssign) stmt;
@@ -844,7 +850,7 @@ public class PlusCalExtensions {
             AST.Skip e1 = new AST.Skip();
             // AST.Assert e1 = new AST.Assert();
             // e1.exp = tlaExpr("TRUE");
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel e = (AST.Cancel) stmt;
@@ -857,7 +863,7 @@ public class PlusCalExtensions {
             } else {
                 e1 = new AST.Skip();
             }
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Send")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
@@ -916,19 +922,19 @@ public class PlusCalExtensions {
             e1.isEq = e.isEq;
             e1.exp = e.exp;
             e1.Do = transformCancellations(e.Do);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
             e1.clauses = transformCancellations(e.clauses);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = new AST.Par();
             e1.clauses = transformCancellations(e.clauses);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
@@ -938,7 +944,7 @@ public class PlusCalExtensions {
             e1.unlabThen = transformCancellations(e.unlabThen);
             e1.labElse = transformCancellations(e.labElse);
             e1.labThen = transformCancellations(e.labThen);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.When) {
             return stmt;
@@ -947,21 +953,21 @@ public class PlusCalExtensions {
             AST.With e1 = new AST.With();
             e1.var = e.var;
             e1.Do = transformCancellations(e.Do);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Task) {
             AST.Task e = (AST.Task) stmt;
             AST.Task e1 = new AST.Task();
             e1.label = e.label;
             e1.Do = transformCancellations(e.Do);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
             e1.labOr = transformCancellations(e.labOr);
             e1.unlabOr = transformCancellations(e.unlabOr);
-            e1.setOrigin(e.getOrigin());
+            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Assign) {
             return stmt;
