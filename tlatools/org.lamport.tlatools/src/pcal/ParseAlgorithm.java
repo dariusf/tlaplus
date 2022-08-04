@@ -2556,10 +2556,8 @@ public class ParseAlgorithm
                          || node.getClass().equals(
                                AST.PrintSObj.getClass())  
                          || node.getClass().equals(
-                               AST.AssertObj.getClass())
-                         // Task is just a marker which doesn't change control flow, so this is fine
-                         || node instanceof AST.Task
-                     || node.getClass().equals(
+                               AST.AssertObj.getClass())  
+                         || node.getClass().equals(
                                AST.SkipObj.getClass())  
                          || node.getClass().equals(
                                AST.MacroCallObj.getClass())  )
