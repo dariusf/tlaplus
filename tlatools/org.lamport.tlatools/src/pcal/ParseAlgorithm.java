@@ -1094,6 +1094,7 @@ public class ParseAlgorithm
        if (nextTok.equals("cancel")) { return PlusCalExtensions.GetCancel() ; }     ;
        if (nextTok.equals("either")) { return GetEither() ; }     ;
        if (nextTok.equals("par"))    { return PlusCalExtensions.GetPar() ; }     ;
+       if (nextTok.equals("task"))   { return PlusCalExtensions.GetTask() ; }     ;
        if (nextTok.equals("with"))   { return GetWith(0) ; }   ;
        if (nextTok.equals("all"))    { return PlusCalExtensions.GetAll(0) ; }   ;
        if (nextTok.equals("when"))   { return GetWhen(true) ; }   ;
@@ -2555,8 +2556,10 @@ public class ParseAlgorithm
                          || node.getClass().equals(
                                AST.PrintSObj.getClass())  
                          || node.getClass().equals(
-                               AST.AssertObj.getClass())  
-                         || node.getClass().equals(
+                               AST.AssertObj.getClass())
+                         // Task is just a marker which doesn't change control flow, so this is fine
+                         || node instanceof AST.Task
+                     || node.getClass().equals(
                                AST.SkipObj.getClass())  
                          || node.getClass().equals(
                                AST.MacroCallObj.getClass())  )

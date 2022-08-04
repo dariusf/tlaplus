@@ -496,6 +496,10 @@ public class PcalSymTab {
             ExtractEither((AST.Either) ast, context, cType);
         else if (ast.getClass().equals(AST.LabelEitherObj.getClass()))
             ExtractLabelEither((AST.LabelEither) ast, context, cType);
+         else if (ast instanceof AST.Task) {
+             for (int i = 0; i < ((AST.Task) ast).Do.size(); i++)
+                 ExtractStmt((AST) ((AST.Task) ast).Do.elementAt(i), context, cType);
+         }
         else PcalDebug.ReportBug("Unexpected AST type " + ast.toString());
     }
 

@@ -840,6 +840,16 @@ public class PcalTLAGen
             GenAssert((AST.Assert) ast, c, context, prefix, col);
         else if (ast.getClass().equals(AST.SkipObj.getClass()))
             GenSkip((AST.Skip) ast, c, context, prefix, col);
+        else if (ast instanceof AST.Task) {
+            GenWhen(PlusCalExtensions.convertTask((AST.Task) ast), c, context, prefix, col);
+            ((Vector<AST>) ((AST.Task) ast).Do).forEach(a -> {
+                try {
+                    GenStmt(a, c, context, prefix, col);
+                } catch (PcalTLAGenException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
         else
             PcalDebug.ReportBug("Unexpected AST type " + ast.toString());
     }

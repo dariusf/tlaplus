@@ -4,6 +4,7 @@ import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static pcal.ParseAlgorithm.*;
@@ -94,6 +95,57 @@ public class PlusCalExtensions {
         return result ;
     }
 
+    public static AST.Task GetTask() throws ParseAlgorithmException
+    {
+//        if (depth == 0)
+//        {
+        GobbleThis("task") ;
+        PCalLocation begLoc = GetLastLocationStart() ;
+//            if (cSyntax) { GobbleThis("(") ; } ;
+//        } ;
+
+        AST.Task result = new AST.Task();
+        result.col  = lastTokCol ;
+        result.line = lastTokLine ;
+        result.label = GetAlgToken() ;
+//        result.isEq = GobbleEqualOrIf() ;
+//        result.exp  = GetExpr() ;
+//        if (pSyntax || ! PeekAtAlgToken(1).equals(")"))
+//        { GobbleCommaOrSemicolon();
+//            /**************************************************************
+//             * Gobble the ";" or "," ending the <VarEqOrIn>, which may be  *
+//             * eliminated before a ")" or "do".                            *
+//             **************************************************************/
+//        } ;
+//        if (result.exp.tokens.size() == 0)
+//        { ParsingError("Empty all expression at ") ;} ;
+        if (pSyntax && PeekAtAlgToken(1).equals("do"))
+        { GobbleThis("do") ;
+            result.Do   = GetStmtSeq() ;
+            GobbleThis("end") ;
+//            GobbleThis("all") ;
+            GobbleThis("task") ;
+            GobbleThis(";");
+        }
+        else if (cSyntax) // && PeekAtAlgToken(1).equals(")"))
+        { //MustGobbleThis(")") ;
+            result.Do = GetCStmt() ;
+        }
+//        else
+//        { result.Do = new Vector() ;
+//            result.Do.addElement(InnerGetAll(depth+1, begLoc)) ;
+//        };
+        try {
+            result.setOrigin(new Region(begLoc,
+                    ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            throw new ParseAlgorithmException("Missing body of task statement", result);
+        }
+        return result ;
+    }
+
+//    public static Map<String, AST.Cancel> cancellations;
+
     public static List<AST.Process> GetChoreography(Vector<AST.VarDecl> globals,
                                                     Vector<AST.Macro> macros) throws ParseAlgorithmException {
         GobbleThis("choreography");
@@ -143,24 +195,25 @@ public class PlusCalExtensions {
             v.isEq = true;
             globals.add(v);
         });
-        stmts = transformCancellations(stmts);
-        // TODO transform affected labels
+        // don't transform away cancellations until after projection
 
         // Ownership and projection
         Map<String, Party> quantified = computeOwnership(partyDecls, stmts);
         ownership.putAll(quantified);
-        var res = project(globals, ownership, partyDecls, stmts);
+        var res = project(globals, ownership, partyDecls, cancellations, stmts);
 
         // Post-projection elaboration
         var res1 = res.entrySet().stream()
                 .flatMap(p -> expandAllStatement(ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .map(Map.Entry::getValue)
                 .collect(Collectors.toList());
 
+        // TODO optimize, remove the no-op processes entirely
+
         return res1;
     }
-
 
     private static void findCancellations(Map<String, AST.Cancel> res, Vector<AST> stmts) {
         stmts.forEach(s -> findCancellations(res, s));
@@ -178,6 +231,10 @@ public class PlusCalExtensions {
             findCancellations(res, ((AST.LabelIf) stmt).unlabThen);
             findCancellations(res, ((AST.LabelIf) stmt).labElse);
             findCancellations(res, ((AST.LabelIf) stmt).labThen);
+        } else if (stmt instanceof AST.With) {
+            findCancellations(res, ((AST.With) stmt).Do);
+        } else if (stmt instanceof AST.Task) {
+            findCancellations(res, ((AST.Task) stmt).Do);
         } else if (stmt instanceof AST.When) {
             // nothing to do
         } else if (stmt instanceof AST.Clause) {
@@ -197,7 +254,7 @@ public class PlusCalExtensions {
     }
 
     /**
-     * So when transforming a process recursively, anything nested inside can elaborate into more processes
+     * So when transforming a process recursively, anything nested inside can expand into more processes
      */
     static class WithProc<T> {
         final T thing;
@@ -282,21 +339,52 @@ public class PlusCalExtensions {
         return result ;
     }
 
+    private static List<AST.Process> expandCancellations(AST.Process proc) {
+        return transformProcessBody(proc, s -> new WithProc<>(transformCancellations(s), List.of()));
+//        stmts = transformCancellations(stmts);
+//        return null;
+    }
+
     /**
-     * Recurse into a process, expanding occurrences of par statements, which may generate more processes
+     * Expand occurrences of par statements in a process
      */
     private static List<AST.Process> expandParStatement(Map<String, Party> ownership,
                                                         Map<String, Party> partyDecls,
                                                         Party which,
                                                         AST.Process proc) {
-        // TODO this is the same as expandAllStatement except for the function passed to map here
+        return transformProcessBody(proc, s -> expandParStatement(ownership, partyDecls, which, s));
+////         TODO this is the same as expandAllStatement except for the function passed to map here
+//        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
+//                .map()
+//                .collect(Collectors.toList());
+//
+//        List<AST> body1 = res.stream()
+//                .map(wp -> wp.thing)
+//                .collect(Collectors.toList());
+//        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
+//
+//        List<AST.Process> newProcesses = res.stream()
+//                .flatMap(wp -> wp.procs.stream())
+//                .collect(Collectors.toCollection(ArrayList::new));
+//
+//        newProcesses.add(proc1);
+//
+//        return newProcesses;
+    }
+
+    /**
+     * f is a function for transforming single statements and possibly generating more processes
+     */
+    private static List<AST.Process> transformProcessBody(AST.Process proc,
+                                                          Function<AST, WithProc<AST>> f) {
         List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
-                .map(s -> expandParStatement(ownership, partyDecls, which, s))
+                .map(f)
                 .collect(Collectors.toList());
 
         List<AST> body1 = res.stream()
                 .map(wp -> wp.thing)
                 .collect(Collectors.toList());
+
         AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
 
         List<AST.Process> newProcesses = res.stream()
@@ -311,22 +399,24 @@ public class PlusCalExtensions {
     private static List<AST.Process> expandAllStatement(Map<String, Party> ownership,
                                                         Map<String, Party> partyDecls,
                                                         AST.Process proc) {
-        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
-                .map(s -> expandAllStatement(ownership, partyDecls, s))
-                .collect(Collectors.toList());
+        return transformProcessBody(proc, s -> expandAllStatement(ownership, partyDecls, s));
 
-        List<AST> body1 = res.stream()
-                .map(wp -> wp.thing)
-                .collect(Collectors.toList());
-        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
-
-        List<AST.Process> newProcesses = res.stream()
-                .flatMap(wp -> wp.procs.stream())
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        newProcesses.add(proc1);
-
-        return newProcesses;
+//        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
+//                .map(s -> expandAllStatement(ownership, partyDecls, s))
+//                .collect(Collectors.toList());
+//
+//        List<AST> body1 = res.stream()
+//                .map(wp -> wp.thing)
+//                .collect(Collectors.toList());
+//        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
+//
+//        List<AST.Process> newProcesses = res.stream()
+//                .flatMap(wp -> wp.procs.stream())
+//                .collect(Collectors.toCollection(ArrayList::new));
+//
+//        newProcesses.add(proc1);
+//
+//        return newProcesses;
     }
 
     private static AST.Process createProcess(String name, boolean isEq, TLAExpr id,
@@ -528,11 +618,11 @@ public class PlusCalExtensions {
     private static Map<Party, AST.Process> project(Vector<AST.VarDecl> globals,
                                                    Map<String, Party> ownership,
                                                    Map<String, Party> partyDecls,
-                                                   Vector<AST> stmts) {
+                                                   Map<String, AST.Cancel> cancellations, Vector<AST> stmts) {
         return partyDecls.entrySet().stream().map(e -> {
             Party party = e.getValue();
             Vector<AST> stmts1 = stmts.stream()
-                    .map(s -> project(globals, ownership, party, s))
+                    .map(s -> project(globals, ownership, cancellations, party, s))
                     .collect(Collectors.toCollection(Vector::new));
             AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet,
                     stmts1, new Vector(party.localVars));
@@ -546,15 +636,17 @@ public class PlusCalExtensions {
      */
     private static AST project(Vector<AST.VarDecl> globals,
                                Map<String, Party> ownership,
+                               Map<String, AST.Cancel> cancellations,
                                Party party,
                                AST stmt) {
+        // System.out.printf("project(%s, %s)\n", party.partyVar, stmt.getClass().getSimpleName());
         if (stmt instanceof AST.All) {
             AST.All e = (AST.All) stmt;
             AST.All e1 = new AST.All();
             e1.var = e.var;
             e1.isEq = e.isEq;
             e1.exp = e.exp;
-            e1.Do = projectAll(globals, ownership, party, e.Do);
+            e1.Do = projectAll(globals, ownership, cancellations, e.Do, party);
             e1.setOrigin(e.getOrigin());
             return e1;
 //        } else if (stmt instanceof AST.Either) {
@@ -565,24 +657,40 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
-            e1.clauses = projectAll(globals, ownership, party, e.clauses);
+            e1.clauses = projectAll(globals, ownership, cancellations, e.clauses, party);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = new AST.Par();
-            e1.clauses = projectAll(globals, ownership, party, e.clauses);
+            e1.clauses = projectAll(globals, ownership, cancellations, e.clauses, party);
             e1.setOrigin(e.getOrigin());
             return e1;
+        } else if (stmt instanceof AST.Task) {
+            boolean thisParty = cancellations.get(((AST.Task) stmt).label).who.equals(party.partyVar);
+            if (thisParty) {
+                AST.Task e = (AST.Task) stmt;
+                AST.Task e1 = new AST.Task();
+                e1.label = e.label;
+                e1.Do = projectAll(globals, ownership, cancellations, e.Do, party);
+                e1.setOrigin(e.getOrigin());
+                return e1;
+            } else {
+                AST.Skip e2 = new AST.Skip();
+                e2.setOrigin(stmt.getOrigin());
+                return e2;
+            }
+//        } else if (stmt instanceof AST.With) {
+             // TODO
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
             AST.LabelIf e1 = new AST.LabelIf();
             // TODO check if test expressions all reside on same party
             e1.test = e.test;
-            e1.unlabElse = projectAll(globals, ownership, party, e.unlabElse);
-            e1.unlabThen = projectAll(globals, ownership, party, e.unlabThen);
-            e1.labElse = projectAll(globals, ownership, party, e.labElse);
-            e1.labThen = projectAll(globals, ownership, party, e.labThen);
+            e1.unlabElse = projectAll(globals, ownership, cancellations, e.unlabElse, party);
+            e1.unlabThen = projectAll(globals, ownership, cancellations, e.unlabThen, party);
+            e1.labElse = projectAll(globals, ownership, cancellations, e.labElse, party);
+            e1.labThen = projectAll(globals, ownership, cancellations, e.labThen, party);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.When) {
@@ -594,14 +702,14 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
-            e1.labOr = projectAll(globals, ownership, party, e.labOr);
-            e1.unlabOr = projectAll(globals, ownership, party, e.unlabOr);
+            e1.labOr = projectAll(globals, ownership, cancellations, e.labOr, party);
+            e1.unlabOr = projectAll(globals, ownership, cancellations, e.unlabOr, party);
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
             AST.Assign e1 = new AST.Assign();
-            e1.ass = new Vector<>(((Vector<AST>) projectAll(globals, ownership, party, e.ass)).stream()
+            e1.ass = new Vector<>(((Vector<AST>) projectAll(globals, ownership, cancellations, e.ass, party)).stream()
                     // projection may create skips here; in that case drop those nodes
                     .filter(sa -> sa instanceof AST.SingleAssign)
                     .collect(Collectors.toList()));
@@ -732,6 +840,20 @@ public class PlusCalExtensions {
             return e1;
         } else if (stmt instanceof AST.When) {
             return stmt;
+        } else if (stmt instanceof AST.With) {
+            AST.With e = (AST.With) stmt;
+            AST.With e1 = new AST.With();
+            e1.var = e.var;
+            e1.Do = transformCancellations(e.Do);
+            e1.setOrigin(e.getOrigin());
+            return e1;
+        } else if (stmt instanceof AST.Task) {
+            AST.Task e = (AST.Task) stmt;
+            AST.Task e1 = new AST.Task();
+            e1.label = e.label;
+            e1.Do = transformCancellations(e.Do);
+            e1.setOrigin(e.getOrigin());
+            return e1;
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
@@ -740,6 +862,8 @@ public class PlusCalExtensions {
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.Assign) {
+            return stmt;
+        } else if (stmt instanceof AST.Skip) {
             return stmt;
         } else if (stmt instanceof AST.SingleAssign) {
             return stmt;
@@ -770,12 +894,19 @@ public class PlusCalExtensions {
         }
     }
 
+    public static AST.When convertTask(AST.Task task) {
+        AST.When when = new AST.When();
+        when.exp = tlaExpr("~ cancelled_%s", task.label);
+        when.setOrigin(task.getOrigin());
+        return when;
+    }
+
     /**
      * For recursive calls
      */
-    private static Vector<AST> projectAll(Vector<AST.VarDecl> globals, Map<String, Party> ownership, Party party, Vector<AST> all) {
+    private static Vector<AST> projectAll(Vector<AST.VarDecl> globals, Map<String, Party> ownership, Map<String, AST.Cancel> cancellations, Vector<AST> all, Party party) {
         return all.stream()
-                .map(s -> project(globals, ownership, party, s))
+                .map(s -> project(globals, ownership, cancellations, party, s))
                 .collect(Collectors.toCollection(Vector::new));
     }
 

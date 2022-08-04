@@ -667,6 +667,28 @@ public class AST
           }
       }
 
+    public static class Task extends AST
+    {
+      public String label = "" ;
+//      public boolean   isEq = true ; // true means "=", false "\\in"
+//      public TLAExpr   exp  = null ;
+      public Vector    Do   = null ; // of SimpleStmt
+      /*****************************************************************
+       * Can't use "do" because that's a Java keyword.                  *
+       *****************************************************************/
+      public Task() { };
+      public String toString()
+      { return "task";
+//              Indent(lineCol()) +
+//                      "[type   |-> \"with\", " + NewLine() +
+//                      " var    |-> \"" + var + "\"," + NewLine() +
+//                      " eqOrIn |-> " + boolToEqOrIn(isEq) + ","  + NewLine() +
+//                      " exp    |-> " + exp.toString() + "," + NewLine() +
+//                      Indent(" do     |-> ") + VectorToSeqString(Do) + "]" +
+//                      EndIndent() +
+//                      EndIndent() ;
+      }
+    }
     public static class All extends AST
     { public String    var  = "" ;
       public boolean   isEq = true ; // true means "=", false "\\in"
