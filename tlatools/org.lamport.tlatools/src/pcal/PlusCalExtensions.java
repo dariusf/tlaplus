@@ -6,6 +6,7 @@ import pcal.exception.TokenizerException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static pcal.ParseAlgorithm.*;
 
@@ -208,6 +209,7 @@ public class PlusCalExtensions {
                 .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .map(Map.Entry::getValue)
+                .map(PlusCalExtensions::expandTask)
                 .collect(Collectors.toList());
 
         // TODO optimize, remove the no-op processes entirely
@@ -343,6 +345,106 @@ public class PlusCalExtensions {
         return transformProcessBody(proc, s -> new WithProc<>(transformCancellations(s), List.of()));
 //        stmts = transformCancellations(stmts);
 //        return null;
+    }
+
+
+    private static AST.Process flatMapProcessBody(AST.Process proc,
+                                                  Function<AST, Stream<AST>> f) {
+        List<AST> res = ((Vector<AST>) proc.body).stream()
+                .flatMap(f)
+                .collect(Collectors.toList());
+
+//        List<AST> body1 = res.stream()
+//                .map(wp -> wp.thing)
+//                .collect(Collectors.toList());
+
+        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(res), proc.decls);
+
+//        List<AST.Process> newProcesses = res.stream()
+//                .flatMap(wp -> wp.procs.stream())
+//                .collect(Collectors.toCollection(ArrayList::new));
+//        newProcesses.add(proc1);
+//        return newProcesses;
+
+        return proc1;
+    }
+
+    private static AST.Process expandTask(AST.Process proc) {
+        return flatMapProcessBody(proc, s -> transformTask(s, Optional.empty()));
+    }
+
+    private static Stream<AST> transformTask(AST stmt, Optional<AST.Task> task) {
+        Stream<AST> res;
+        if (stmt instanceof AST.All) {
+            AST.All e = (AST.All) stmt;
+            AST.All e1 = new AST.All();
+            e1.var = e.var;
+            e1.isEq = e.isEq;
+            e1.exp = e.exp;
+            e1.Do = ((Stream<AST>) transformTask(e.Do, task)).collect(Collectors.toCollection(Vector::new));
+            e1.setOrigin(e.getOrigin());
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.LabelEither) {
+            AST.LabelEither e = (AST.LabelEither) stmt;
+            AST.LabelEither e1 = new AST.LabelEither();
+            e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
+            e1.setOrigin(e.getOrigin());
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.Par) {
+            AST.Par e = (AST.Par) stmt;
+            AST.Par e1 = new AST.Par();
+            e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
+            e1.setOrigin(e.getOrigin());
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.Task) {
+            AST.Task e = (AST.Task) stmt;
+            res = ((Stream<AST>) transformTask(e.Do, Optional.of(e)));
+//        } else if (stmt instanceof AST.With) {
+            // TODO
+//            res = Stream.of(e1);
+        } else if (stmt instanceof AST.LabelIf) {
+            AST.LabelIf e = (AST.LabelIf) stmt;
+            AST.LabelIf e1 = new AST.LabelIf();
+            e1.test = e.test;
+            e1.labElse = ((Stream<AST>) transformTask(e.labElse, task)).collect(Collectors.toCollection(Vector::new));
+            e1.labThen = ((Stream<AST>) transformTask(e.labThen, task)).collect(Collectors.toCollection(Vector::new));
+            e1.unlabElse = ((Stream<AST>) transformTask(e.unlabElse, task)).collect(Collectors.toCollection(Vector::new));
+            e1.unlabThen = ((Stream<AST>) transformTask(e.unlabThen, task)).collect(Collectors.toCollection(Vector::new));
+            e1.setOrigin(e.getOrigin());
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.Clause) {
+            AST.Clause e = (AST.Clause) stmt;
+            AST.Clause e1 = new AST.Clause();
+            e1.labOr = ((Stream<AST>) transformTask(e.labOr, task)).collect(Collectors.toCollection(Vector::new));
+            e1.unlabOr = ((Stream<AST>) transformTask(e.unlabOr, task)).collect(Collectors.toCollection(Vector::new));
+            e1.setOrigin(e.getOrigin());
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.When) {
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.Assign) {
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.SingleAssign) {
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.Cancel) {
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.MacroCall) {
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.Skip) {
+            res = Stream.of(stmt);
+        } else {
+            fail("unimplemented transformTask(Party, AST) " + stmt);
+            return null;
+        }
+        if (task.isEmpty()) {
+            return res;
+        } else {
+            AST.When guard = convertTask(task.get());
+            return Stream.concat(Stream.of(guard), res);
+        }
+    }
+
+    private static Stream<AST> transformTask(Vector<AST> s, Optional<AST.Task> task) {
+        return s.stream().flatMap(s1 -> transformTask(s1, task));
     }
 
     /**
