@@ -46,12 +46,7 @@ import tlc2.tool.impl.ParameterizedSpecObj.PostCondition;
 import tlc2.tool.impl.Tool;
 import tlc2.tool.management.ModelCheckerMXWrapper;
 import tlc2.tool.management.TLCStandardMBean;
-import tlc2.util.DotStateWriter;
-import tlc2.util.FP64;
-import tlc2.util.IStateWriter;
-import tlc2.util.NoopStateWriter;
-import tlc2.util.RandomGenerator;
-import tlc2.util.StateWriter;
+import tlc2.util.*;
 import tlc2.value.RandomEnumerableValues;
 import util.Assert.TLCRuntimeException;
 import util.DebugPrinter;
@@ -404,7 +399,9 @@ public class TLC {
 	    boolean colorize = false;
 	    boolean actionLabels = false;
 		boolean snapshot = false;
-		
+
+        boolean asJson = false;
+
 		boolean generateTESpec = true;
 		boolean forceGenerateTESpec = false;
 		Path teSpecOut = null;
@@ -572,6 +569,12 @@ public class TLC {
                 	actionLabels = dotArgs.contains("actionlabels");
                 	snapshot = dotArgs.contains("snapshot");
 					dumpFile = getDumpFile(args[index++], ".dot");
+                }
+                else if (((index + 1) < args.length) && args[index].startsWith("json"))
+                {
+                    index++; // consume "json...".
+                    asJson = true;
+                    dumpFile = getDumpFile(args[index++], ".json");
                 }
                 else if (index < args.length)
                 {
@@ -1073,7 +1076,9 @@ public class TLC {
 			try {
 				if (asDot) {
 					this.stateWriter = new DotStateWriter(dumpFile, colorize, actionLabels, snapshot);
-				} else {
+				} else if (asJson) {
+                    this.stateWriter = new JsonStateWriter(dumpFile);
+                } else {
 					this.stateWriter = new StateWriter(dumpFile);
 				}
 			} catch (IOException e) {

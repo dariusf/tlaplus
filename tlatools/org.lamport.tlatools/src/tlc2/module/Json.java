@@ -185,7 +185,7 @@ public class Json {
    * @param value the value to convert
    * @return the converted {@code JsonElement}
    */
-  private static JsonElement getNode(IValue value) throws IOException {
+  public static JsonElement getNode(IValue value) throws IOException {
     if (value instanceof RecordValue) {
       return getObjectNode((RecordValue) value);
     } else if (value instanceof TupleValue) {
