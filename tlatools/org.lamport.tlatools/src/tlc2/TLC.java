@@ -397,7 +397,8 @@ public class TLC {
 	    boolean actionLabels = false;
 		boolean snapshot = false;
 		boolean stuttering = false;
-		
+        boolean asJson = false;
+
 		boolean generateTESpec = true;
 		boolean generateTESpecBinaryTrace = true;
 		boolean forceGenerateTESpec = false;
@@ -579,6 +580,12 @@ public class TLC {
                 	snapshot = dotArgs.contains("snapshot");
                 	stuttering = dotArgs.contains("stuttering");
 					dumpFile = getDumpFile(args[index++], ".dot");
+                }
+                else if (((index + 1) < args.length) && args[index].startsWith("json"))
+                {
+                    index++; // consume "json...".
+                    asJson = true;
+                    dumpFile = getDumpFile(args[index++], ".json");
                 }
                 else if (index < args.length)
                 {
@@ -1084,7 +1091,9 @@ public class TLC {
 			try {
 				if (asDot) {
 					this.stateWriter = new DotStateWriter(dumpFile, colorize, actionLabels, snapshot, stuttering);
-				} else {
+				} else if (asJson) {
+                    this.stateWriter = new JsonStateWriter(dumpFile);
+                } else {
 					this.stateWriter = new StateWriter(dumpFile);
 				}
 			} catch (IOException e) {
