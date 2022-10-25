@@ -34,6 +34,8 @@ import java.util.stream.Collectors;
 
 public class JsonStateWriter extends StateWriter {
 
+	private boolean first = true;
+
 	public JsonStateWriter(final String fname) throws IOException {
 		super(fname);
 		this.writer.append("[\n");
@@ -43,15 +45,21 @@ public class JsonStateWriter extends StateWriter {
 	 * @see tlc2.util.StateWriter#writeState(tlc2.tool.TLCState)
 	 */
 	public synchronized void writeState(final TLCState state) {
+		if (first) {
+			this.first = false;
+		} else {
+			this.writer.append("\n, ");
+		}
+
+		this.writer.write("{");
 		this.writer.append(state.getVals().entrySet().stream().map(e -> {
 			try {
-				return String.format("{\"%s\": %s}", e.getKey(), Json.getNode(e.getValue()));
+				return String.format("\"%s\": %s", e.getKey(), Json.getNode(e.getValue()));
 			} catch (IOException ex) {
 				throw new RuntimeException(ex);
 			}
 		}).collect(Collectors.joining(",")));
-
-		this.writer.append(",\n");
+		this.writer.write("}");
 	}
 
 	/* (non-Javadoc)
