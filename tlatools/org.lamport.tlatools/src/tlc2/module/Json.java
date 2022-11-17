@@ -193,7 +193,7 @@ public class Json {
     } else if (value instanceof StringValue) {
       return new JsonPrimitive(((StringValue) value).val.toString());
     } else if (value instanceof ModelValue) {
-      return new JsonPrimitive(((ModelValue) value).val.toString());
+      return getModelValueNode((ModelValue) value);
     } else if (value instanceof IntValue) {
       return new JsonPrimitive(((IntValue) value).val);
     } else if (value instanceof BoolValue) {
@@ -203,7 +203,7 @@ public class Json {
     } else if (value instanceof FcnLambdaValue) {
       return getObjectNode((FcnRcdValue) ((FcnLambdaValue) value).toFcnRcd());
     } else if (value instanceof SetEnumValue) {
-      return getArrayNode((SetEnumValue) value);
+      return getSetNode((SetEnumValue) value);
     } else if (value instanceof SetOfRcdsValue) {
       return getArrayNode((SetEnumValue) ((SetOfRcdsValue) value).toSetEnum());
     } else if (value instanceof SetOfTuplesValue) {
@@ -390,6 +390,34 @@ public class Json {
       jsonArray.add(getNode(values[i]));
     }
     return jsonArray;
+  }
+
+  /**
+   * Encodes the given set value as an object with a type property.
+   *
+   * @param value the value to convert
+   * @return the converted {@code JsonElement}
+   */
+  private static JsonElement getSetNode(SetEnumValue value) throws IOException {
+    value.normalize();
+    JsonObject jsonObject = new JsonObject();
+    jsonObject.add("type", new JsonPrimitive("set"));
+    jsonObject.add("value", getArrayNode(value));
+    return jsonObject;
+  }
+
+  /**
+   * Encodes the given model value as an object with a type property.
+   *
+   * @param value the value to convert
+   * @return the converted {@code JsonElement}
+   */
+  private static JsonElement getModelValueNode(ModelValue value) throws IOException {
+    value.normalize();
+    JsonObject jsonObject = new JsonObject();
+    jsonObject.add("type", new JsonPrimitive("model"));
+    jsonObject.add("value", new JsonPrimitive(((ModelValue) value).val.toString()));
+    return jsonObject;
   }
 
   /**
