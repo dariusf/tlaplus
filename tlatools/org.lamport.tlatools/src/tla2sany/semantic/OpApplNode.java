@@ -15,12 +15,8 @@ package tla2sany.semantic;
 * the bound symbols are irrelevant in computing the node's level.          *
 ***************************************************************************/
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -124,17 +120,21 @@ public class OpApplNode extends ExprNode implements ExploreNode {
    * Used only for creating "null" OpApplNode, nullOAN in Generator class.
    */
   public OpApplNode(SymbolNode sn) {
+    this(sn, new ExprNode[0]);
+  }
+
+  public OpApplNode(SymbolNode sn, ExprOrOpArgNode[] args) {
     super(OpApplKind, SyntaxTreeNode.nullSTN);
-      /*********************************************************************
-      * The original implementation had an argument -1 instead of          *
-      * OpApplKind.  I don't understand this, since a main purpose of      *
-      * creating nullOAN is to allow processing to continue after an       *
-      * error is discovered.  This causes code that checks for an          *
-      * unexpected node kind to bomb.  Apparently, the SANY1 code didn't   *
-      * check for such things.                                             *
-      *********************************************************************/
+    /*********************************************************************
+     * The original implementation had an argument -1 instead of          *
+     * OpApplKind.  I don't understand this, since a main purpose of      *
+     * creating nullOAN is to allow processing to continue after an       *
+     * error is discovered.  This causes code that checks for an          *
+     * unexpected node kind to bomb.  Apparently, the SANY1 code didn't   *
+     * check for such things.                                             *
+     *********************************************************************/
     this.operator = sn;
-    this.operands = new ExprNode[0];
+    this.operands = args;
     this.unboundedBoundSymbols = null;
 //    this.isATuple = false;
     this.boundedBoundSymbols = null;
@@ -225,6 +225,22 @@ public class OpApplNode extends ExprNode implements ExploreNode {
     this.ranges = rs;
     this.operator = Context.getGlobalContext().getSymbol(us);
      // operator.match( this, mn );
+  }
+
+  @Override
+  public OpApplNode astCopy() {
+    OpApplNode other = new OpApplNode(operator);
+    other.operands = new ExprOrOpArgNode[this.operands.length];
+    for (int i=0; i<this.operands.length; i++) {
+      other.operands[i] = this.operands[i].astCopy();
+    }
+    // these seem to be okay to be copied shallowly
+    other.unboundedBoundSymbols = unboundedBoundSymbols;
+    other.boundedBoundSymbols = boundedBoundSymbols;
+    other.ranges = this.ranges;
+    other.tupleOrs = this.tupleOrs;
+    other.subExpressionOf = this.subExpressionOf;
+    return other;
   }
 
   /**
@@ -1377,5 +1393,67 @@ public class OpApplNode extends ExprNode implements ExploreNode {
     }
 
     return e;
+  }
+
+  @Override
+  public String prettyPrint() {
+    String op = operator.getName().toString();
+
+    if (op.equals(OP_fa.toString())) {
+      return String.format("%s[%s]",
+              operands[0].prettyPrint(),
+              operands[1].prettyPrint());
+//    } else if (op.equals(OP_seq.toString())) {
+      // is OP_seq right?
+    } else if (op.equals(OP_tup.toString())) {
+      return String.format("<<%s>>",
+              Arrays.stream(operands)
+                      .map(ExprOrOpArgNode::prettyPrint)
+                      .collect(Collectors.joining(", ")));
+    } else if (op.equals(OP_se.toString())) {
+      return String.format("{%s}",
+              Arrays.stream(operands)
+                      .map(ExprOrOpArgNode::prettyPrint)
+                      .collect(Collectors.joining(", ")));
+    } else if (op.equals(OP_rc.toString())) {
+      return String.format("[%s]",
+              Arrays.stream(operands)
+                      .map(a -> {
+                        var key = ((OpApplNode) a).getArgs()[0];
+                        var val = ((OpApplNode) a).getArgs()[1];
+                        return String.format("%s |-> %s", key.prettyPrint(), val.prettyPrint());
+                      })
+                      .collect(Collectors.joining(", ")));
+    } else if (op.equals(OP_cl.toString())) {
+      return String.format("(%s /\\ %s)",
+              operands[0].prettyPrint(),
+              operands[1].prettyPrint());
+    } else if (op.equals(OP_dl.toString())) {
+      return String.format("(%s \\/ %s)",
+              operands[0].prettyPrint(),
+              operands[1].prettyPrint());
+    } else if (op.equals(OP_exc.toString())) {
+      OpApplNode one = (OpApplNode) operands[1];
+      ExprOrOpArgNode idx = ((OpApplNode) one.getArgs()[0]).getArgs()[0];
+      ExprOrOpArgNode exp = one.getArgs()[1];
+      return String.format("[%s EXCEPT ![%s] = %s]",
+              operands[0].prettyPrint(),
+              idx.prettyPrint(),
+              exp.prettyPrint());
+    }
+
+    char first = op.charAt(0);
+    if (!(first >= 'a' && first <= 'z') && operands.length == 2) {
+      return String.format("%s %s %s", operands[0].prettyPrint(), op, operands[1].prettyPrint());
+    }
+    if (op.charAt(0) == '$') {
+      throw new UnsupportedOperationException("case unimplemented: " + op);
+    }
+    String args = Arrays.stream(operands).map(ExprOrOpArgNode::prettyPrint)
+            .collect(Collectors.joining(", "));
+    if (operands.length > 0) {
+      args = String.format("(%s)", args);
+    }
+    return String.format("%s%s", op, args);
   }
 }

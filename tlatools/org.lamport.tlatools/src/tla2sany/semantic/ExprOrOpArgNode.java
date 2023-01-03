@@ -20,5 +20,12 @@ import tla2sany.st.TreeNode;
 public abstract class ExprOrOpArgNode extends LevelNode {
 
   ExprOrOpArgNode(int kind, TreeNode stn) { super(kind, stn); }
-  
+
+  public abstract String prettyPrint();
+
+  /**
+   * Makes a copy such that AST transformations do not affect the original.
+   * Implementations may copy deeply or shallowly.
+   */
+  public abstract ExprOrOpArgNode astCopy();
 }

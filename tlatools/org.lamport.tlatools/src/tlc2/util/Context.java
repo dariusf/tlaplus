@@ -8,6 +8,7 @@ package tlc2.util;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 import tla2sany.semantic.SymbolNode;
@@ -38,7 +39,7 @@ public final class Context implements Iterator<Context> {
 	 */
 
 	private final SymbolNode name;
-	private final Object value;
+	private Object value;
 	private final Context next;
 
 	public final static Context Empty = new Context(null, null, null);
@@ -142,6 +143,19 @@ public final class Context implements Iterator<Context> {
 		return null; // On Empty Context (end of chain), return null value
 	}
 
+	public Context find(final String var) {
+		Context cur = this;
+		while (cur != Empty) {
+			if (cur.name != null) {
+				if (cur.name.getName().equals(var)) {
+					return cur;
+				}
+			}
+			cur = cur.next;
+		}
+		return null;
+	}
+
 	public final Map<UniqueString, Value> toMap() {
 		if (this.name == null) {
 			if (this == Empty) {
@@ -208,7 +222,11 @@ public final class Context implements Iterator<Context> {
 	public final Object getValue() {
 		return value;
 	}
-	
+
+	public final void setValue(Object value) {
+		this.value = value;
+	}
+
 	public final boolean isEmpty() {
 		return this == Empty;
 	}

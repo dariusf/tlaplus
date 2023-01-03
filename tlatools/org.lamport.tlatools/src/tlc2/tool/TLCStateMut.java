@@ -49,7 +49,7 @@ public final class TLCStateMut extends TLCState implements Cloneable, Serializab
    */
   private static IMVPerm[] perms = null;
 
-  private TLCStateMut(IValue[] vals) { this.values = vals; }
+  public TLCStateMut(IValue[] vals) { this.values = vals; }
   
   public static void setVariables(OpDeclNode[] variables) 
   {
@@ -116,7 +116,9 @@ public final class TLCStateMut extends TLCState implements Cloneable, Serializab
 
   public final IValue lookup(UniqueString var) {
     int loc = var.getVarLoc();
-    if (loc < 0) return null;
+    if (loc < 0) {
+        return null;
+    }
     return this.values[loc];
   }
 

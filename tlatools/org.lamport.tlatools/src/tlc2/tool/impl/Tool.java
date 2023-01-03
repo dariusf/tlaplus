@@ -8,10 +8,7 @@
 package tlc2.tool.impl;
 
 import java.io.File;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Supplier;
 
 import tla2sany.parser.SyntaxTreeNode;
@@ -1039,7 +1036,7 @@ public abstract class Tool
   @ExpectInlined
   protected abstract TLCState getNextStatesAppl(final Action action, OpApplNode pred, ActionItemList acts, Context c,
           TLCState s0, TLCState s1, INextStateFunctor nss, final CostModel cm);
-  
+
   protected final TLCState getNextStatesApplImpl(final Action action, final OpApplNode pred, final ActionItemList acts, final Context c,
                                            final TLCState s0, final TLCState s1, final INextStateFunctor nss, final CostModel cm) {
         final ExprOrOpArgNode[] args = pred.getArgs();
@@ -1058,7 +1055,15 @@ public abstract class Tool
 				final OpDefNode opDef = (OpDefNode) val;
 				opcode = BuiltInOPs.getOpCode(opDef.getName());
 				if (opcode == 0) {
-					return this.getNextStates(action, opDef.getBody(), acts, this.getOpContext(opDef, args, c, true, cm, toolId), s0, s1, nss, cm);
+                    if (obsEnabled) {
+                        // this changes semantics (making TLA+ call-by-value instead of by need),
+                        // but only wrt side effects so it should be harmless in pure models
+                        Arrays.stream(pred.getArgs()).forEach(a -> this.eval(a, c, s0));
+                    }
+                    udoStack.push(opNode.getName().toString());
+                    TLCState nextStates = this.getNextStates(action, opDef.getBody(), acts, this.getOpContext(opDef, args, c, true, cm, toolId), s0, s1, nss, cm);
+                    udoStack.pop();
+                    return nextStates;
 	            }
           }
 
@@ -1932,6 +1937,7 @@ public abstract class Tool
           }
           else if (val instanceof Value) {
             res = (Value)val;
+            addObservedValue(expr, res, c);
             int alen = args.length;
             if (alen == 0) {
               if (val instanceof MethodValue) {
@@ -2012,6 +2018,11 @@ public abstract class Tool
             return res;
           }
         }
+
+//        if (expr.getOperator().getName().toString().equals("Send")) {
+//            int a = 1;
+//        }
+//      System.out.println(opcode);
 
         switch (opcode) {
         case OPCODE_bc:     // BoundedChoose
@@ -2225,10 +2236,18 @@ public abstract class Tool
                 result = (Value) result.takeExcept(vex);
               }
             }
+              addObservedValue(expr, result, c);
             return result;
           }
         case OPCODE_fa:     // FcnApply
           {
+//              Arrays.stream(expr.getArgs()).forEach(a -> {
+//                  if (a instanceof OpApplNode) {
+//                      System.out.println(((OpApplNode) a).getOperator().getName());
+//                  } else {
+//                      System.out.println("unknown " + a + " " + a.getClass().getSimpleName());
+//                  }
+//              });
             Value result = null;
             Value fval = this.eval(args[0], c, s0, s1, EvalControl.setKeepLazy(control), cm);
             if ((fval instanceof FcnRcdValue) ||
@@ -2251,6 +2270,7 @@ public abstract class Tool
               Assert.fail("A non-function (" + fval.getKindString() + ") was applied" +
                           " as a function.\n" + expr, expr, c);
             }
+            addObservedValue(expr, result, c);
             return result;
           }
         case OPCODE_fc:     // FcnConstructor
@@ -2304,7 +2324,9 @@ public abstract class Tool
               names[i] = ((StringValue)pair[0].getToolObject(toolId)).getVal();
               vals[i] = this.eval(pair[1], c, s0, s1, control, coverage ? cm.get(pairNode) : cm);
             }
-            return setSource(expr, new RecordValue(names, vals, false, cm));
+              RecordValue value = new RecordValue(names, vals, false, cm);
+              addObservedValue(expr, value, c);
+              return setSource(expr, value);
           }
         case OPCODE_rs:     // RcdSelect
           {
@@ -2735,7 +2757,58 @@ public abstract class Tool
         }
   }
 
-  protected abstract Value setSource(final SemanticNode expr, final Value value);
+    public static class TermVal {
+        public OpApplNode term;
+        public Value value;
+        public Context ctx;
+
+        public TermVal(OpApplNode term, Value value, Context ctx) {
+            this.term = term;
+            this.value = value;
+            this.ctx = ctx;
+        }
+    }
+    public Map<String, TermVal> observed = new HashMap<>();
+    Stack<String> udoStack = new Stack<>();
+    public boolean obsEnabled = false;
+
+    /**
+     * record applications of user-defined operators that are values,
+     * e.g. variables of the model
+     */
+    private void addObservedValue(OpApplNode expr, Value res, Context ctx) {
+        if (udoStack == null) {
+            return;
+        }
+        if (udoStack.size() > 0) {
+            // this means we are inside a call to a user-defined operator called by an action
+            return;
+        }
+        if (!obsEnabled) {
+            // don't record observations before we are ready.
+            // also serves as a feature flag.
+            return;
+        }
+        if (res instanceof MethodValue) {
+            // primitive operators like Naturals + trigger this case.
+            // we only want user-defined variables
+            return;
+        }
+//      UniqueString key = expr.getOperator().getName();
+
+        // we have to do this because expr doesn't have hashCode.
+        // pretty much all the AST nodes have to implement hashCode for this to work.
+        // this is available and also okay because we're only interested in very limited kinds of expressions.
+      String key = expr.prettyPrint();
+      if (!observed.containsKey(key)) {
+          System.out.println("add " + key + ": " + res);
+          observed.put(key, new TermVal(expr, res, ctx));
+//      } else {
+//          System.out.println("already saw " + key);
+      }
+    }
+
+    protected abstract Value setSource(final SemanticNode expr, final Value value);
 
   /**
    * This method determines if the argument is a valid state.  A state

@@ -27,6 +27,10 @@ public class StringNode extends ExprNode implements ExploreNode {
 
   private UniqueString value;
 
+  public StringNode(TreeNode stn) {
+    super(StringKind, stn);
+  }
+
   public StringNode(TreeNode stn, boolean strip) {
     super(StringKind, stn);
 
@@ -139,5 +143,17 @@ public class StringNode extends ExprNode implements ExploreNode {
       e.appendChild(n);
       return appendElement(doc, "StringNode", e);
    // return appendText(doc,"StringNode",value.toString());
+  }
+
+  @Override
+  public String prettyPrint() {
+    return String.format("\"%s\"", value);
+  }
+
+  @Override
+  public ExprOrOpArgNode astCopy() {
+    StringNode other = new StringNode(this.stn);
+    other.value = this.value;
+    return other;
   }
 }

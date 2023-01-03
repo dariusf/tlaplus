@@ -398,7 +398,7 @@ public class Json {
    * @param value the value to convert
    * @return the converted {@code JsonElement}
    */
-  private static JsonElement getSetNode(SetEnumValue value) throws IOException {
+  public static JsonElement getSetNode(SetEnumValue value) throws IOException {
     value.normalize();
     JsonObject jsonObject = new JsonObject();
     jsonObject.add("type", new JsonPrimitive("set"));
@@ -426,9 +426,13 @@ public class Json {
    * @param node the {@code JsonElement} to convert
    * @return the converted value
    */
-  private static Value getValue(JsonElement node) throws IOException {
+  public static Value getValue(JsonElement node) throws IOException {
     if (node.isJsonArray()) {
       return getTupleValue(node);
+    }
+    else if (node.isJsonObject() && node.getAsJsonObject().has("type") &&
+            node.getAsJsonObject().get("type").getAsString().equals("set")) {
+      return getEncodedSet(node);
     }
     else if (node.isJsonObject()) {
       return getRecordValue(node);
@@ -449,6 +453,16 @@ public class Json {
       return null;
     }
     throw new IOException("Cannot convert value: unsupported JSON value " + node.toString());
+  }
+
+  private static Value getEncodedSet(JsonElement node) throws IOException {
+      JsonArray value = node.getAsJsonObject().get("value").getAsJsonArray();
+      Value[] elts = new Value[value.size()];
+      int i = 0;
+      for (JsonElement jsonElement : value) {
+        elts[i++] = Json.getValue(jsonElement);
+      }
+      return new SetEnumValue(elts, true);
   }
 
   /**

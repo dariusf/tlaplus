@@ -181,4 +181,14 @@ public class AtNode extends ExprNode {
     e.appendChild(exceptComponents.export(doc,context));
     return e;
   }
+
+  @Override
+  public String prettyPrint() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
+
+  @Override
+  public ExprOrOpArgNode astCopy() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
 }

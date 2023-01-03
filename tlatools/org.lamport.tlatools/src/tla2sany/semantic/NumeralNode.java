@@ -31,6 +31,10 @@ public class NumeralNode extends ExprNode {
   private BigInteger bigValue = null;
   private String image;
 
+  public NumeralNode(TreeNode stn) {
+    super(NumeralKind, stn);
+  }
+
   /**
    * The following method was modified by LL on 20 Jul 2011 to handle
    * \b, \o, and \h numbers.
@@ -148,6 +152,24 @@ public class NumeralNode extends ExprNode {
       e.appendChild(n);
       return appendElement(doc, "NumeralNode", e);
     //return appendText(doc,"NumeralNode",(bigValue != null) ? bigValue.toString() : (Integer.toString(value)));
+  }
+
+  @Override
+  public String prettyPrint() {
+    if (bigValue == null) {
+      return Integer.toString(value);
+    } else {
+      return bigValue.toString();
+    }
+  }
+
+  @Override
+  public ExprOrOpArgNode astCopy() {
+    NumeralNode other = new NumeralNode(this.stn);
+    other.bigValue = this.bigValue;
+    other.value = this.value;
+    other.image = this.image;
+    return other;
   }
 }
 

@@ -305,4 +305,14 @@ implements ExploreNode, LevelConstants {
 
     return ret;
   }
+
+  @Override
+  public String prettyPrint() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
+
+  @Override
+  public ExprOrOpArgNode astCopy() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
 }

@@ -8,6 +8,8 @@ import org.w3c.dom.Element;
 import tla2sany.st.TreeNode;
 import util.UniqueString;
 
+import java.util.Objects;
+
 /**
  * Abstract class extended by classes that represent the meaning of an
  * identifier, including generalized IDs.
@@ -179,4 +181,18 @@ public abstract class SymbolNode extends LevelNode {
     e.appendChild(appendText(doc,"UID",Integer.toString(myUID)));
     return e;
   }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        SymbolNode that = (SymbolNode) o;
+        return Objects.equals(name, that.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), name);
+    }
 }

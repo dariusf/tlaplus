@@ -152,4 +152,14 @@ public class DecimalNode extends ExprNode {
     }
     return e;
   }
+
+  @Override
+  public String prettyPrint() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
+
+  @Override
+  public ExprOrOpArgNode astCopy() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
 }

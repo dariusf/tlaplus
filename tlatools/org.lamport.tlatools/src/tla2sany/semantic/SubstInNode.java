@@ -550,6 +550,16 @@ public class SubstInNode extends ExprNode {
 
       return ret;
     }
+
+  @Override
+  public String prettyPrint() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
+
+  @Override
+  public ExprOrOpArgNode astCopy() {
+    throw new UnsupportedOperationException("not yet implemented");
+  }
 }
 
 

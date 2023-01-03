@@ -344,4 +344,14 @@ public class LabelNode extends ExprNode
       ret.appendChild(arguments);
       return ret;
     }
- }
+
+    @Override
+    public String prettyPrint() {
+        throw new UnsupportedOperationException("not yet implemented");
+    }
+
+    @Override
+    public ExprOrOpArgNode astCopy() {
+        throw new UnsupportedOperationException("not yet implemented");
+    }
+}
