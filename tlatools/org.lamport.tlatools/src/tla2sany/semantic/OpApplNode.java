@@ -1443,7 +1443,7 @@ public class OpApplNode extends ExprNode implements ExploreNode {
     }
 
     char first = op.charAt(0);
-    if (!(first >= 'a' && first <= 'z') && operands.length == 2) {
+    if (!(first >= 'a' && first <= 'z') && !(first >= 'A' && first <= 'Z') && operands.length == 2) {
       return String.format("%s %s %s", operands[0].prettyPrint(), op, operands[1].prettyPrint());
     }
     if (op.charAt(0) == '$') {

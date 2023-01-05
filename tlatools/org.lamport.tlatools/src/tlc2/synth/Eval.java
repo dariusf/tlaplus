@@ -2,13 +2,9 @@ package tlc2.synth;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.aspectj.weaver.ast.Expr;
-import org.eclipse.jgit.treewalk.WorkingTreeOptions;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
-import tla2sany.parser.SyntaxTreeNode;
 import tla2sany.semantic.*;
-import tla2sany.st.TreeNode;
 import tlc2.module.Json;
 import tlc2.tool.*;
 import org.jline.reader.UserInterruptException;
@@ -25,11 +21,11 @@ import util.*;
 import java.io.*;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static tla2sany.semantic.ASTConstants.OpApplKind;
 import static tlc2.tool.ToolGlobals.*;
@@ -205,6 +201,97 @@ public class Eval {
         }
     }
 
+    OpApplNode append(ExprOrOpArgNode left, ExprOrOpArgNode right) {
+        OpDefNode appendDef = (OpDefNode) tool.getModule("Sequences").getDefinitions().stream()
+                .filter(op -> op instanceof OpDefNode && ((OpDefNode) op).getName().equals("Append"))
+                .findAny().get();
+        return new OpApplNode(appendDef,
+                new ExprOrOpArgNode[]{left, right});
+    }
+
+    OpApplNode setLiteral(ExprOrOpArgNode arg) {
+        SymbolNode setLiteral = new OpDefNode(OP_se);
+        OpApplNode set = new OpApplNode(setLiteral, new ExprOrOpArgNode[]{arg});
+        return set;
+    }
+
+    static <A, B> Function<List<A>, B> unary(Function<A, B> f) {
+        return xs -> f.apply(xs.get(0));
+    }
+
+    static <A, B> Function<List<A>, B> binary(BiFunction<A, A, B> f) {
+        return xs -> f.apply(xs.get(0), xs.get(1));
+    }
+
+    static <T> Stream<List<T>> cartesianProduct(List<List<T>> lists) {
+        if (lists.size() == 0) {
+            return Stream.of(new ArrayList<T>());
+        } else {
+            List<T> firstList = lists.get(0);
+            Stream<List<T>> remainingLists = cartesianProduct(lists.subList(1, lists.size()));
+            return remainingLists.flatMap(remainingList ->
+                    firstList.stream().map(condition -> {
+                        ArrayList<T> resultList = new ArrayList<T>();
+                        resultList.add(condition);
+                        resultList.addAll(remainingList);
+                        return resultList;
+                    })
+            );
+        }
+    }
+
+    class Enumerate {
+        Map<String, Tool.TermVal> components;
+        Context ctx;
+        TLCState state;
+
+        public Enumerate(Map<String, Tool.TermVal> components, Context ctx, TLCState state) {
+            this.components = components;
+            this.ctx = ctx;
+            this.state = state;
+        }
+
+        int rank(OpApplNode left) {
+            // balance size and generality
+            return 1;
+        }
+
+        Stream<List<OpApplNode>> product(int n) {
+            List<List<OpApplNode>> components = new ArrayList<>();
+            for (int i=0; i<n; i++) {
+                components.add(this.components.values().stream().map(a -> a.term).toList());
+            }
+            return cartesianProduct(components);
+        }
+
+        // compute next frontier
+        void next() {
+            var rules = List.of(
+                    List.of(unary(Eval.this::setLiteral)),
+                    List.of(binary(Eval.this::append))
+            );
+            Map<String, Tool.TermVal> additions = new HashMap<>();
+            for (int i=1; i<=rules.size(); i++) {
+                product(i).forEach(p -> {
+                    System.out.println(p);
+                    // TODO check first
+                    if (false) {
+                        // TODO add expr and result
+                        additions.put(null, null);
+                    }
+                });
+            }
+            components.putAll(additions);
+        }
+
+        OpApplNode done(Value target) {
+            if (components.values().stream().anyMatch(v -> v.toString().equals(target.toString()))) {
+                return components.get(target.toString()).term;
+            }
+            return null;
+        }
+    }
+
     private void modify(SemanticNode node, Context ctx, TLCStateMut goodState) {
 
 //        ExprOrOpArgNode[] args = expr.getArgs();
@@ -246,15 +333,15 @@ public class Eval {
                     // TODO grammar
                     // synthesis subproblems
                     // replace with existing component
-                    ((OpApplNode) setEnum).setArgs(new ExprOrOpArgNode[] {
-                            tool.observed.get("i").term });
+                    ((OpApplNode) setEnum).setArgs(new ExprOrOpArgNode[]{
+                            tool.observed.get("i").term});
                     // eval the right side of the primed assignment
                     IValue synthRes = tool.eval(newNode.getArgs()[1], ctx, goodState);
                     // a builtin operator
                     {
                         SymbolNode emptySetDef = new OpDefNode(OP_se);
-                        OpApplNode emptySet = new OpApplNode(emptySetDef, new ExprOrOpArgNode[]{ tool.observed.get("i").term });
-                        ((OpApplNode) setEnum).setArgs(new ExprOrOpArgNode[] { emptySet });
+                        OpApplNode emptySet = new OpApplNode(emptySetDef, new ExprOrOpArgNode[]{tool.observed.get("i").term});
+                        ((OpApplNode) setEnum).setArgs(new ExprOrOpArgNode[]{emptySet});
                     }
                     IValue synthRes1 = tool.eval(newNode.getArgs()[1], ctx, goodState);
                     // an existing lib operator like Append
@@ -264,17 +351,19 @@ public class Eval {
                                 .findAny().get();
                         SymbolNode emptySeqDef = new OpDefNode(OP_tup);
                         OpApplNode emptySeq = new OpApplNode(emptySeqDef,
-                                new ExprOrOpArgNode[]{  });
+                                new ExprOrOpArgNode[]{});
                         OpApplNode appendUse = new OpApplNode(appendDef,
-                                new ExprOrOpArgNode[]{ emptySeq, emptySeq });
-                        ((OpApplNode) setEnum).setArgs(new ExprOrOpArgNode[] { appendUse });
+                                new ExprOrOpArgNode[]{emptySeq, emptySeq});
+                        ((OpApplNode) setEnum).setArgs(new ExprOrOpArgNode[]{appendUse});
                     }
                     IValue synthRes2 = tool.eval(newNode.getArgs()[1], ctx, goodState);
 
-                    ExprOrOpArgNode[] operands = new ExprOrOpArgNode[] { thisNode, newNode };
+                    ExprOrOpArgNode[] operands = new ExprOrOpArgNode[]{thisNode, newNode};
 
                     OpApplNode op = new OpApplNode(op1, operands);
                     String s = op.prettyPrint();
+
+
                     int a = 1;
                 }
                 // otherwise terminate this branch, as this variable is irrelevant to us
@@ -332,6 +421,11 @@ public class Eval {
 
         Eval eval = new Eval();
         eval.tool = tool;
+
+        Enumerate enumerate = eval.new Enumerate(tool.observed, timeoutWithSomeArgs.con, goodState);
+
+        enumerate.next();
+
         eval.modify(timeoutWithSomeArgs.pred, timeoutWithSomeArgs.con, goodState);
 
         try (NamedInputStream stream = new NamedInputStream(path, "raft", new File(path + ".tla"))) {
