@@ -2760,10 +2760,10 @@ public abstract class Tool
 
     public static class TermVal {
         public OpApplNode term;
-        public Value value;
+        public IValue value;
         public Context ctx;
 
-        public TermVal(OpApplNode term, Value value, Context ctx) {
+        public TermVal(OpApplNode term, IValue value, Context ctx) {
             this.term = term;
             this.value = value;
             this.ctx = ctx;

@@ -25,6 +25,7 @@ public abstract class ExprOrOpArgNode extends LevelNode {
   /**
    * Makes a copy such that AST transformations do not affect the original.
    * Implementations may copy deeply or shallowly.
+   * Requires access to private fields, so not a visitor.
    */
   public abstract ExprOrOpArgNode astCopy();
 

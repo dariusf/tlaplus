@@ -6,6 +6,7 @@ import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import tla2sany.semantic.*;
 import tlc2.module.Json;
+import tlc2.pprint.Parse;
 import tlc2.tool.*;
 import org.jline.reader.UserInterruptException;
 import tla2sany.parser.TLAplusParser;
@@ -265,51 +266,72 @@ public class Eval {
         }
 
         // compute next frontier
-        void next() {
+        void next(IValue target) {
             List<List<Function<List<ExprOrOpArgNode>, OpApplNode>>> rules = List.of(
                     List.of(unary(Eval.this::setLiteral)),
                     List.of(binary(Eval.this::append))
             );
             Map<String, Tool.TermVal> additions = new HashMap<>();
+            top:
             for (int i = 0; i < rules.size(); i++) {
-                final int j = i;
-                product(i + 1).forEach(p -> {
+                for (var p : (Iterable<List<OpApplNode>>) product(i + 1)::iterator) {
                     List<ExprOrOpArgNode> p1 = p.stream()
                             .map(p2 -> (ExprOrOpArgNode) p2)
                             .collect(Collectors.toList());
                     // TODO prune non-promising expressions like {{}}?
                     //  so we don't keep them as components. hard to identify them though
-                    rules.get(j).forEach(r -> {
+                    for (Function<List<ExprOrOpArgNode>, OpApplNode> r : rules.get(i)) {
                         OpApplNode candidate = r.apply(p1);
                         try {
                             IValue res = tool.eval(candidate, ctx, state);
                             System.out.printf("%s ==> %s\n", prettyPrint(candidate), res);
+
+                            boolean better = true;
+                            if (better) {
+                                // TODO add expr and result
+                                additions.put(prettyPrint(res), new Tool.TermVal(candidate, res, ctx));
+                            }
+                            if (valueEq(res, target)) {
+                                break top;
+                            }
                         } catch (EvalException e) {
                             // not sure if it's worth pruning ill-typed expressions because they're
                             // removed in one traversal, by evaluation
                             // System.out.printf("%s =/=>\n", candidate.prettyPrint());
                         }
-                    });
-                    // TODO check first
-                    if (false) {
-                        // TODO add expr and result
-                        additions.put(null, null);
                     }
-                });
+                }
             }
             components.putAll(additions);
         }
 
-        OpApplNode done(Value target) {
-            if (components.values().stream().anyMatch(v -> v.toString().equals(target.toString()))) {
-                return components.get(target.toString()).term;
+        OpApplNode synthesize(IValue target) {
+            while (true) {
+                next(target);
+                if (done(target)) {
+                    System.out.println("done");
+                    OpApplNode answer = components.get(target.toString()).term;
+                    System.out.println(prettyPrint(answer));
+                    return answer;
+                }
             }
-            return null;
+        }
+
+        private boolean done(IValue target) {
+            return components.values().stream().anyMatch(v -> valueEq(v.value, target));
         }
     }
 
     public static String prettyPrint(ExprOrOpArgNode node) {
         return node.accept(new PrettyPrintVisitor());
+    }
+
+    public static String prettyPrint(IValue v) {
+        return v.toString();
+    }
+
+    public static boolean valueEq(IValue v1, IValue v2) {
+        return prettyPrint(v1).equals(prettyPrint(v2));
     }
 
     private void modify(SemanticNode node, Context ctx, TLCStateMut goodState) {
@@ -443,7 +465,13 @@ public class Eval {
 
         Enumerate enumerate = eval.new Enumerate(tool.observed, timeoutWithSomeArgs.con, goodState);
 
-        enumerate.next();
+//        IValue target = jsonToValue("[s1 |-> {}, s2 |-> {\"s2\"}, s3 |-> {}]", 0);
+        IValue target = jsonToValue(
+                "{\"s1\": {\"type\": \"set\", value: []}," +
+                "\"s2\": {\"type\": \"set\", value: [\"s2\"]}," +
+                "\"s3\": {\"type\": \"set\", value: []}" +
+                "}");
+        OpApplNode answer = enumerate.synthesize(target);
 
         eval.modify(timeoutWithSomeArgs.pred, timeoutWithSomeArgs.con, goodState);
 
@@ -602,5 +630,13 @@ public class Eval {
                 throw new RuntimeException(e);
             }
         }).toArray(IValue[]::new);
+    }
+
+    private static IValue jsonToValue(String s) {
+        try {
+            return Json.getValue(JsonParser.parseString(s));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
