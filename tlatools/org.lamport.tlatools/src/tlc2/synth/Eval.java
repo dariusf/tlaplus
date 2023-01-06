@@ -257,6 +257,35 @@ public class Eval {
             return 1;
         }
 
+        Stream<ExprOrOpArgNode> mutations(ExprOrOpArgNode node) {
+            if (!(node instanceof OpApplNode)) {
+                return Stream.of(node);
+            } else {
+                OpApplNode n = (OpApplNode) node;
+                List<ExprOrOpArgNode> candidates = new ArrayList<>();
+                List<List<ExprOrOpArgNode>> args = Arrays.stream(n.getArgs())
+                        .map(a -> mutations(a).collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+                for (int i=0; i<n.getArgs().length; i++) {
+                    List<List<ExprOrOpArgNode>> args1 = new ArrayList<>(args);
+                    List<ExprOrOpArgNode> possibilities = new ArrayList<>(args1.get(i));
+                    for (Map.Entry<String, Tool.TermVal> entry : components.entrySet()) {
+                        possibilities.add(entry.getValue().term);
+                    }
+                    args1.set(i, possibilities);
+                    cartesianProduct(args1).forEach(a -> {
+                        OpApplNode m = n.astCopy();
+                        m.setArgs(a.toArray(new ExprOrOpArgNode[0]));
+                        candidates.add(m);
+                    });
+                }
+                if (candidates.isEmpty()) {
+                    return Stream.of(n);
+                }
+                return candidates.stream();
+            }
+        }
+
         Stream<List<OpApplNode>> product(int n) {
             List<List<OpApplNode>> components = new ArrayList<>();
             for (int i = 0; i < n; i++) {
@@ -285,6 +314,9 @@ public class Eval {
                         try {
                             IValue res = tool.eval(candidate, ctx, state);
                             System.out.printf("%s ==> %s\n", prettyPrint(candidate), res);
+
+
+                            List<ExprOrOpArgNode> collect1 = mutations(candidate).collect(Collectors.toList());
 
                             boolean better = true;
                             if (better) {
