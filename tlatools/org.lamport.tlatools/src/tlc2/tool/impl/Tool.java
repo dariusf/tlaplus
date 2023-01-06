@@ -34,6 +34,7 @@ import tla2sany.semantic.ThmOrAssumpDefNode;
 import tlc2.TLCGlobals;
 import tlc2.output.EC;
 import tlc2.output.MP;
+import tlc2.synth.Eval;
 import tlc2.tool.Action;
 import tlc2.tool.BuiltInOPs;
 import tlc2.tool.EvalControl;
@@ -2799,7 +2800,7 @@ public abstract class Tool
         // we have to do this because expr doesn't have hashCode.
         // pretty much all the AST nodes have to implement hashCode for this to work.
         // this is available and also okay because we're only interested in very limited kinds of expressions.
-      String key = expr.prettyPrint();
+      String key = Eval.prettyPrint(expr);
       if (!observed.containsKey(key)) {
           System.out.println("add " + key + ": " + res);
           observed.put(key, new TermVal(expr, res, ctx));

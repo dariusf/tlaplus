@@ -3,6 +3,7 @@
 package tla2sany.semantic;
 
 import tla2sany.st.TreeNode;
+import tlc2.synth.Visitor;
 
 /**
  * This class represents a semantic node that is either an OpArgNode
@@ -21,11 +22,11 @@ public abstract class ExprOrOpArgNode extends LevelNode {
 
   ExprOrOpArgNode(int kind, TreeNode stn) { super(kind, stn); }
 
-  public abstract String prettyPrint();
-
   /**
    * Makes a copy such that AST transformations do not affect the original.
    * Implementations may copy deeply or shallowly.
    */
   public abstract ExprOrOpArgNode astCopy();
+
+  public abstract <A> A accept(Visitor<A> visitor);
 }

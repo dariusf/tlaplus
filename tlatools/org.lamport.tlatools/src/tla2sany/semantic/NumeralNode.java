@@ -13,6 +13,7 @@ import tla2sany.explorer.ExploreNode;
 import tla2sany.explorer.ExplorerVisitor;
 import tla2sany.st.TreeNode;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 
 /**
  * Describes a numeral like 4095.  This number is represented by the
@@ -155,12 +156,8 @@ public class NumeralNode extends ExprNode {
   }
 
   @Override
-  public String prettyPrint() {
-    if (bigValue == null) {
-      return Integer.toString(value);
-    } else {
-      return bigValue.toString();
-    }
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 
   @Override

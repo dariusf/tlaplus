@@ -27,6 +27,7 @@ import tla2sany.parser.SyntaxTreeNode;
 import tla2sany.st.TreeNode;
 import tla2sany.utilities.Strings;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 import tlc2.tool.BuiltInOPs;
 import tlc2.value.ITupleValue;
 import tlc2.value.IValue;
@@ -1396,64 +1397,7 @@ public class OpApplNode extends ExprNode implements ExploreNode {
   }
 
   @Override
-  public String prettyPrint() {
-    String op = operator.getName().toString();
-
-    if (op.equals(OP_fa.toString())) {
-      return String.format("%s[%s]",
-              operands[0].prettyPrint(),
-              operands[1].prettyPrint());
-//    } else if (op.equals(OP_seq.toString())) {
-      // is OP_seq right?
-    } else if (op.equals(OP_tup.toString())) {
-      return String.format("<<%s>>",
-              Arrays.stream(operands)
-                      .map(ExprOrOpArgNode::prettyPrint)
-                      .collect(Collectors.joining(", ")));
-    } else if (op.equals(OP_se.toString())) {
-      return String.format("{%s}",
-              Arrays.stream(operands)
-                      .map(ExprOrOpArgNode::prettyPrint)
-                      .collect(Collectors.joining(", ")));
-    } else if (op.equals(OP_rc.toString())) {
-      return String.format("[%s]",
-              Arrays.stream(operands)
-                      .map(a -> {
-                        var key = ((OpApplNode) a).getArgs()[0];
-                        var val = ((OpApplNode) a).getArgs()[1];
-                        return String.format("%s |-> %s", key.prettyPrint(), val.prettyPrint());
-                      })
-                      .collect(Collectors.joining(", ")));
-    } else if (op.equals(OP_cl.toString())) {
-      return String.format("(%s /\\ %s)",
-              operands[0].prettyPrint(),
-              operands[1].prettyPrint());
-    } else if (op.equals(OP_dl.toString())) {
-      return String.format("(%s \\/ %s)",
-              operands[0].prettyPrint(),
-              operands[1].prettyPrint());
-    } else if (op.equals(OP_exc.toString())) {
-      OpApplNode one = (OpApplNode) operands[1];
-      ExprOrOpArgNode idx = ((OpApplNode) one.getArgs()[0]).getArgs()[0];
-      ExprOrOpArgNode exp = one.getArgs()[1];
-      return String.format("[%s EXCEPT ![%s] = %s]",
-              operands[0].prettyPrint(),
-              idx.prettyPrint(),
-              exp.prettyPrint());
-    }
-
-    char first = op.charAt(0);
-    if (!(first >= 'a' && first <= 'z') && !(first >= 'A' && first <= 'Z') && operands.length == 2) {
-      return String.format("%s %s %s", operands[0].prettyPrint(), op, operands[1].prettyPrint());
-    }
-    if (op.charAt(0) == '$') {
-      throw new UnsupportedOperationException("case unimplemented: " + op);
-    }
-    String args = Arrays.stream(operands).map(ExprOrOpArgNode::prettyPrint)
-            .collect(Collectors.joining(", "));
-    if (operands.length > 0) {
-      args = String.format("(%s)", args);
-    }
-    return String.format("%s%s", op, args);
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 }

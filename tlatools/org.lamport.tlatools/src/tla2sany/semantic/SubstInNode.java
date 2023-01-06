@@ -33,6 +33,7 @@ import tla2sany.st.TreeNode;
 import tla2sany.utilities.Strings;
 import tla2sany.utilities.Vector;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 import util.UniqueString;
 
 public class SubstInNode extends ExprNode {
@@ -552,8 +553,8 @@ public class SubstInNode extends ExprNode {
     }
 
   @Override
-  public String prettyPrint() {
-    throw new UnsupportedOperationException("not yet implemented");
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 
   @Override

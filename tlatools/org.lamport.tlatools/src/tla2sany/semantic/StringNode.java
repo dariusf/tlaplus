@@ -12,6 +12,7 @@ import tla2sany.explorer.ExploreNode;
 import tla2sany.explorer.ExplorerVisitor;
 import tla2sany.st.TreeNode;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 import util.UniqueString;
 
 
@@ -146,8 +147,8 @@ public class StringNode extends ExprNode implements ExploreNode {
   }
 
   @Override
-  public String prettyPrint() {
-    return String.format("\"%s\"", value);
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 
   @Override

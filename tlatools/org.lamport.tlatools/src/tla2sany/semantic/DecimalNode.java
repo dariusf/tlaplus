@@ -12,6 +12,7 @@ import tla2sany.explorer.ExploreNode;
 import tla2sany.explorer.ExplorerVisitor;
 import tla2sany.st.TreeNode;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 
 /**
  * Describes a decimal like 1347.052.  This number is represented by the
@@ -154,8 +155,8 @@ public class DecimalNode extends ExprNode {
   }
 
   @Override
-  public String prettyPrint() {
-    throw new UnsupportedOperationException("not yet implemented");
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 
   @Override

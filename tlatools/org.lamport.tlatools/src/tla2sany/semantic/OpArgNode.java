@@ -15,6 +15,7 @@ import tla2sany.explorer.ExplorerVisitor;
 import tla2sany.parser.SyntaxTreeNode;
 import tla2sany.st.TreeNode;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 import util.UniqueString;
 
 /**
@@ -158,8 +159,8 @@ public class OpArgNode extends ExprOrOpArgNode {
   }
 
   @Override
-  public String prettyPrint() {
-    throw new UnsupportedOperationException("not yet implemented");
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 
   @Override

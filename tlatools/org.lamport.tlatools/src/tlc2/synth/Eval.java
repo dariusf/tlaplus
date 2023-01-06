@@ -258,7 +258,7 @@ public class Eval {
 
         Stream<List<OpApplNode>> product(int n) {
             List<List<OpApplNode>> components = new ArrayList<>();
-            for (int i=0; i<n; i++) {
+            for (int i = 0; i < n; i++) {
                 components.add(this.components.values().stream().map(a -> a.term).toList());
             }
             return cartesianProduct(components);
@@ -266,14 +266,30 @@ public class Eval {
 
         // compute next frontier
         void next() {
-            var rules = List.of(
+            List<List<Function<List<ExprOrOpArgNode>, OpApplNode>>> rules = List.of(
                     List.of(unary(Eval.this::setLiteral)),
                     List.of(binary(Eval.this::append))
             );
             Map<String, Tool.TermVal> additions = new HashMap<>();
-            for (int i=1; i<=rules.size(); i++) {
-                product(i).forEach(p -> {
-                    System.out.println(p);
+            for (int i = 0; i < rules.size(); i++) {
+                final int j = i;
+                product(i + 1).forEach(p -> {
+                    List<ExprOrOpArgNode> p1 = p.stream()
+                            .map(p2 -> (ExprOrOpArgNode) p2)
+                            .collect(Collectors.toList());
+                    // TODO prune non-promising expressions like {{}}?
+                    //  so we don't keep them as components. hard to identify them though
+                    rules.get(j).forEach(r -> {
+                        OpApplNode candidate = r.apply(p1);
+                        try {
+                            IValue res = tool.eval(candidate, ctx, state);
+                            System.out.printf("%s ==> %s\n", prettyPrint(candidate), res);
+                        } catch (EvalException e) {
+                            // not sure if it's worth pruning ill-typed expressions because they're
+                            // removed in one traversal, by evaluation
+                            // System.out.printf("%s =/=>\n", candidate.prettyPrint());
+                        }
+                    });
                     // TODO check first
                     if (false) {
                         // TODO add expr and result
@@ -290,6 +306,10 @@ public class Eval {
             }
             return null;
         }
+    }
+
+    public static String prettyPrint(ExprOrOpArgNode node) {
+        return node.accept(new PrettyPrintVisitor());
     }
 
     private void modify(SemanticNode node, Context ctx, TLCStateMut goodState) {
@@ -361,8 +381,7 @@ public class Eval {
                     ExprOrOpArgNode[] operands = new ExprOrOpArgNode[]{thisNode, newNode};
 
                     OpApplNode op = new OpApplNode(op1, operands);
-                    String s = op.prettyPrint();
-
+                    String s = prettyPrint(op);
 
                     int a = 1;
                 }

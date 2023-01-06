@@ -11,6 +11,7 @@ import tla2sany.explorer.ExploreNode;
 import tla2sany.explorer.ExplorerVisitor;
 import tla2sany.utilities.Strings;
 import tla2sany.xml.SymbolContext;
+import tlc2.synth.Visitor;
 
 public class AtNode extends ExprNode {
 
@@ -183,8 +184,8 @@ public class AtNode extends ExprNode {
   }
 
   @Override
-  public String prettyPrint() {
-    throw new UnsupportedOperationException("not yet implemented");
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
   }
 
   @Override
