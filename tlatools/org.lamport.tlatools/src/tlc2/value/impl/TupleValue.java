@@ -60,7 +60,7 @@ public class TupleValue extends Value implements Applicable, ITupleValue {
   public IValue[] getElems() {
 	  return elems;
   }
-  
+
   @Override
   public final byte getKind() { return TUPLEVALUE; }
 

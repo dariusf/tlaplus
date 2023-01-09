@@ -4,6 +4,9 @@ import tla2sany.semantic.ExprOrOpArgNode;
 import tla2sany.semantic.NumeralNode;
 import tla2sany.semantic.OpApplNode;
 import tla2sany.semantic.StringNode;
+import tlc2.value.impl.IntValue;
+import tlc2.value.impl.RecordValue;
+import tlc2.value.impl.StringValue;
 
 /**
  * There is already {@link tla2sany.semantic.SemanticNode.ChildrenVisitor},
@@ -24,6 +27,18 @@ public abstract class Visitor<A> {
 
     // for all cases which don't something more specific implemented
     public A visit(ExprOrOpArgNode node) {
+        throw new UnsupportedOperationException("unimplemented");
+    }
+
+    public A visit(IntValue intValue) {
+        throw new UnsupportedOperationException("unimplemented");
+    }
+
+    public A visit(RecordValue recordValue) {
+        throw new UnsupportedOperationException("unimplemented");
+    }
+
+    public A visit(StringValue stringValue) {
         throw new UnsupportedOperationException("unimplemented");
     }
 }

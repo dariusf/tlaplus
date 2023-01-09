@@ -2,11 +2,12 @@ package tlc2.synth;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.aspectj.weaver.ast.Expr;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import tla2sany.semantic.*;
+import tlc2.TLCGlobals;
 import tlc2.module.Json;
-import tlc2.pprint.Parse;
 import tlc2.tool.*;
 import org.jline.reader.UserInterruptException;
 import tla2sany.parser.TLAplusParser;
@@ -26,6 +27,7 @@ import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static tla2sany.semantic.ASTConstants.OpApplKind;
@@ -241,6 +243,11 @@ public class Eval {
         }
     }
 
+//    public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
+//        Set<Object> seen = ConcurrentHashMap.newKeySet();
+//        return t -> seen.add(keyExtractor.apply(t));
+//    }
+
     class Enumerate {
         Map<String, Tool.TermVal> components;
         Context ctx;
@@ -257,50 +264,143 @@ public class Eval {
             return 1;
         }
 
-        Stream<ExprOrOpArgNode> mutations(ExprOrOpArgNode node) {
+        Stream<ExprOrOpArgNode> mutationsRec(ExprOrOpArgNode node, boolean top) {
             if (!(node instanceof OpApplNode)) {
-                return Stream.of(node);
+                if (top) {
+                    return Stream.of(node);
+                }
+                return Stream.concat(Stream.of(node), components.values().stream().map(v -> v.term));
             } else {
                 OpApplNode n = (OpApplNode) node;
                 List<ExprOrOpArgNode> candidates = new ArrayList<>();
                 List<List<ExprOrOpArgNode>> args = Arrays.stream(n.getArgs())
-                        .map(a -> mutations(a).collect(Collectors.toList()))
+                        .map(a -> mutationsRec(a, false).collect(Collectors.toList()))
                         .collect(Collectors.toList());
-                for (int i=0; i<n.getArgs().length; i++) {
-                    List<List<ExprOrOpArgNode>> args1 = new ArrayList<>(args);
-                    List<ExprOrOpArgNode> possibilities = new ArrayList<>(args1.get(i));
-                    for (Map.Entry<String, Tool.TermVal> entry : components.entrySet()) {
-                        possibilities.add(entry.getValue().term);
+
+                // cartesianProduct([]) = {{}}, so there will be one element if this operator
+                // has no operands, which causes it to be added once
+                cartesianProduct(args).filter(a -> !a.isEmpty()).forEach(a -> {
+                    OpApplNode m = n.astCopy();
+                    m.setArgs(a.toArray(new ExprOrOpArgNode[0]));
+                    candidates.add(m);
+                });
+
+                if (top) {
+                    return candidates.stream();
+                }
+                return Stream.concat(candidates.stream(), components.values().stream().map(v -> v.term));
+//                        .filter(distinctByKey(Eval::prettyPrint));
+            }
+        }
+
+        // only mutates at the current level
+        Stream<ExprOrOpArgNode> extraMutations(ExprOrOpArgNode node) {
+            if (!(node instanceof OpApplNode)) {
+                return Stream.of();
+            } else {
+                OpApplNode n = (OpApplNode) node;
+                if (n.getArgs().length == 0) {
+                    return Stream.of();
+                }
+                // TODO don't return singleton?
+                // TODO we create an invalid EXCEPT
+
+                int argCount;
+                if (BuiltInOPs.getOpCode(n.getOperator().getName()) == OPCODE_exc) {
+                    argCount = 3;
+                } else {
+                    argCount = n.getArgs().length;
+                }
+
+                List<ExprOrOpArgNode> candidates = new ArrayList<>();
+                List<List<ExprOrOpArgNode>> args = IntStream.range(0, argCount)
+                        .mapToObj(i -> components.values().stream()
+                                .map(v -> (ExprOrOpArgNode) v.term)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+
+                // cartesianProduct([]) = {{}}, so there will be one element if this operator
+                // has no operands, which causes it to be added once
+                cartesianProduct(args).filter(a -> !a.isEmpty()).forEach(a -> {
+                    OpApplNode m = n.astCopy();
+                    if (BuiltInOPs.getOpCode(n.getOperator().getName()) == OPCODE_exc) {
+                        OpApplNode pair = (OpApplNode) n.getArgs()[1].astCopy();
+                        OpApplNode idx;
+                        if (pair.getArgs()[0] instanceof OpApplNode) {
+                            idx = ((OpApplNode) pair.getArgs()[0]).astCopy();
+                            idx.setArgs(new ExprOrOpArgNode[]{ a.get(1) });
+                        } else {
+                            idx = (OpApplNode) a.get(1);
+                        }
+                        pair.setArgs(new ExprOrOpArgNode[]{ idx, a.get(2) });
+                        m.setArgs(new ExprOrOpArgNode[] { a.get(0), pair });
+//                        m.setArgs(a.toArray(ExprOrOpArgNode[]::new));
+                    } else {
+                        m.setArgs(a.toArray(ExprOrOpArgNode[]::new));
                     }
-                    args1.set(i, possibilities);
-                    cartesianProduct(args1).forEach(a -> {
-                        OpApplNode m = n.astCopy();
-                        m.setArgs(a.toArray(new ExprOrOpArgNode[0]));
-                        candidates.add(m);
-                    });
-                }
-                if (candidates.isEmpty()) {
-                    return Stream.of(n);
-                }
+                    candidates.add(m);
+                });
+
+//                List<String> collect = candidates.stream().map(a -> prettyPrint(a)).collect(Collectors.toList());
+
+//                if (top) {
                 return candidates.stream();
+//                }
+//                return Stream.concat(candidates.stream(), components.values().stream().map(v -> v.term));
+//                        .filter(distinctByKey(Eval::prettyPrint));
             }
         }
 
         Stream<List<OpApplNode>> product(int n) {
-            List<List<OpApplNode>> components = new ArrayList<>();
+            List<List<OpApplNode>> c = new ArrayList<>();
             for (int i = 0; i < n; i++) {
-                components.add(this.components.values().stream().map(a -> a.term).toList());
+                c.add(this.components.values().stream().map(a -> a.term).toList());
             }
-            return cartesianProduct(components);
+            return cartesianProduct(c);
         }
 
         // compute next frontier
         void next(IValue target) {
+            Map<String, Tool.TermVal> additions = new HashMap<>();
+
+            System.out.println("level 0");
+            // the zeroth level: mutating components
+            components.keySet().forEach(k -> {
+                System.out.println(k);
+            });
+            for (Map.Entry<String, Tool.TermVal> entry : components.entrySet()) {
+                System.out.println("(" + components.size() + ") generating mutations of " + prettyPrint(entry.getValue().term));
+                List<ExprOrOpArgNode> mut = extraMutations(entry.getValue().term).collect(Collectors.toList());
+
+//                List<String> debug1 = mut.stream().map(Eval::prettyPrint).collect(Collectors.toList());
+                for (ExprOrOpArgNode m : mut) {
+                    String debug = prettyPrint(m);
+                    try {
+                        IValue res = tool.eval(m, ctx, state);
+                        System.out.printf("%s ==> %s\n", prettyPrint(m), res);
+
+                        boolean better = true;
+                        if (better) {
+                            // TODO cast for now
+                            // don't save these values as the component set grows too quickly, and most are not valuable
+//                            additions.put(prettyPrint(res), new Tool.TermVal((OpApplNode) m, res, ctx));
+                        }
+                        if (valueEq(res, target)) {
+                            break;
+                        }
+                    } catch (Assert.TLCRuntimeException | EvalException e) {
+                        // do nothing
+//                        System.out.println("invalid " + debug);
+                    }
+                }
+            }
+
+            System.out.println("applying rules");
+            // apply rules to build new components, then mutate them
+
             List<List<Function<List<ExprOrOpArgNode>, OpApplNode>>> rules = List.of(
                     List.of(unary(Eval.this::setLiteral)),
-                    List.of(binary(Eval.this::append))
-            );
-            Map<String, Tool.TermVal> additions = new HashMap<>();
+                    List.of(binary(Eval.this::append)));
             top:
             for (int i = 0; i < rules.size(); i++) {
                 for (var p : (Iterable<List<OpApplNode>>) product(i + 1)::iterator) {
@@ -312,20 +412,35 @@ public class Eval {
                     for (Function<List<ExprOrOpArgNode>, OpApplNode> r : rules.get(i)) {
                         OpApplNode candidate = r.apply(p1);
                         try {
-                            IValue res = tool.eval(candidate, ctx, state);
-                            System.out.printf("%s ==> %s\n", prettyPrint(candidate), res);
+                            {
+                                IValue res = tool.eval(candidate, ctx, state);
+                                System.out.printf("%s ==> %s\n", prettyPrint(candidate), res);
 
-
-                            List<ExprOrOpArgNode> collect1 = mutations(candidate).collect(Collectors.toList());
-
-                            boolean better = true;
-                            if (better) {
-                                // TODO add expr and result
-                                additions.put(prettyPrint(res), new Tool.TermVal(candidate, res, ctx));
+                                boolean better = true;
+                                if (better) {
+                                    additions.put(prettyPrint(res), new Tool.TermVal(candidate, res, ctx));
+                                }
+                                if (valueEq(res, target)) {
+                                    break top;
+                                }
                             }
-                            if (valueEq(res, target)) {
-                                break top;
+
+                            List<ExprOrOpArgNode> mut = extraMutations(candidate).collect(Collectors.toList());
+
+                            for (ExprOrOpArgNode m : mut) {
+                                IValue res = tool.eval(m, ctx, state);
+                                System.out.printf("%s ==> %s\n", prettyPrint(m), res);
+
+                                boolean better = true;
+                                if (better) {
+                                    // TODO cast for now
+                                    additions.put(prettyPrint(res), new Tool.TermVal((OpApplNode) m, res, ctx));
+                                }
+                                if (valueEq(res, target)) {
+                                    break top;
+                                }
                             }
+
                         } catch (EvalException e) {
                             // not sure if it's worth pruning ill-typed expressions because they're
                             // removed in one traversal, by evaluation
@@ -334,6 +449,9 @@ public class Eval {
                     }
                 }
             }
+
+            // commit all changes
+            System.out.println("COMMIT");
             components.putAll(additions);
         }
 
@@ -447,6 +565,7 @@ public class Eval {
     FastTool tool;
 
     public static void main(String[] args) throws Exception {
+        TLCGlobals.warn = false;
         String path = "/Users/darius/refinement-mappings/trace-specs/raft-outbox/raft";
         String config = "/Users/darius/refinement-mappings/trace-specs/raft-outbox/raft";
 
@@ -471,6 +590,7 @@ public class Eval {
         // this records evaluated expressions as a side effect
         StateVec ignored = tool.getNextStates(timeoutWithSomeArgs, goodState);
 
+        tool.obsEnabled = false;
 
 //        IValue eval = tool.eval(any.pred, ref);
 //        FormalParamNode r = (FormalParamNode) ref.getName();
@@ -500,9 +620,9 @@ public class Eval {
 //        IValue target = jsonToValue("[s1 |-> {}, s2 |-> {\"s2\"}, s3 |-> {}]", 0);
         IValue target = jsonToValue(
                 "{\"s1\": {\"type\": \"set\", value: []}," +
-                "\"s2\": {\"type\": \"set\", value: [\"s2\"]}," +
-                "\"s3\": {\"type\": \"set\", value: []}" +
-                "}");
+                        "\"s2\": {\"type\": \"set\", value: [\"s2\"]}," +
+                        "\"s3\": {\"type\": \"set\", value: []}" +
+                        "}");
         OpApplNode answer = enumerate.synthesize(target);
 
         eval.modify(timeoutWithSomeArgs.pred, timeoutWithSomeArgs.con, goodState);

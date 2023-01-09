@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 
 import tla2sany.semantic.SemanticNode;
 import tlc2.TLCGlobals;
+import tlc2.synth.Visitor;
 import tlc2.tool.FingerprintException;
 import tlc2.tool.TLCState;
 import tlc2.tool.coverage.CostModel;
@@ -396,4 +397,8 @@ public abstract class Value implements ValueConstants, Serializable, IValue {
 		}
 		return new ArrayList<>(0);
 	}
+
+    public <A> A accept(Visitor<A> visitor) {
+      throw new UnsupportedOperationException("not yet implemented");
+    }
 }

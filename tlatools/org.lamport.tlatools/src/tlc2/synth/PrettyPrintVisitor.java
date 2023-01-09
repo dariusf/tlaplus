@@ -67,9 +67,17 @@ public class PrettyPrintVisitor extends Visitor<String> {
                     node.getArgs()[0].accept(this),
                     node.getArgs()[1].accept(this));
         } else if (op.equals(OP_exc.toString())) {
-            OpApplNode one = (OpApplNode) node.getArgs()[1];
-            ExprOrOpArgNode idx = ((OpApplNode) one.getArgs()[0]).getArgs()[0];
-            ExprOrOpArgNode exp = one.getArgs()[1];
+            // an $Except has two args, a variable, and a $Pair, whose args are the key and value to assign
+            OpApplNode pair = (OpApplNode) node.getArgs()[1];
+            ExprOrOpArgNode idx;
+//            if (pair.getArgs()[0] instanceof OpApplNode) {
+                // in [a EXCEPT ![i] = ...], the i is wrapped in a singleton $Seq OpApplNode
+                idx = ((OpApplNode) pair.getArgs()[0]).getArgs()[0];
+//            } else {
+//                // a string key
+//                idx = pair.getArgs()[0];
+//            }
+            ExprOrOpArgNode exp = pair.getArgs()[1];
             return String.format("[%s EXCEPT ![%s] = %s]",
                     node.getArgs()[0].accept(this),
                     idx.accept(this),

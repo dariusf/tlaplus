@@ -20,6 +20,7 @@ import tla2sany.semantic.SymbolNode;
 import tla2sany.st.Location;
 import tlc2.output.EC;
 import tlc2.output.MP;
+import tlc2.synth.Visitor;
 import tlc2.tool.Action;
 import tlc2.tool.FingerprintException;
 import tlc2.tool.StateVec;
@@ -896,4 +897,9 @@ public class RecordValue extends Value implements Applicable {
 			}
 			return nestedVars;
 		}
+
+    @Override
+    public <A> A accept(Visitor<A> visitor) {
+        return visitor.visit(this);
+    }
 }

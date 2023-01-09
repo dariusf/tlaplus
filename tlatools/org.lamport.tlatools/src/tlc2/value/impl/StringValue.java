@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Random;
 
+import tlc2.synth.Visitor;
 import tlc2.tool.FingerprintException;
 import tlc2.tool.coverage.CostModel;
 import tlc2.util.FP64;
@@ -300,4 +301,9 @@ public class StringValue extends Value {
 		vos.assign(res, index);
 		return res;
 	}
+
+  @Override
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
+  }
 }

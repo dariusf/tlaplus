@@ -8,6 +8,7 @@ package tlc2.value.impl;
 
 import java.io.IOException;
 
+import tlc2.synth.Visitor;
 import tlc2.tool.FingerprintException;
 import tlc2.util.FP64;
 import tlc2.value.IMVPerm;
@@ -237,4 +238,8 @@ public class IntValue extends Value {
     }
   }
 
+  @Override
+  public <A> A accept(Visitor<A> visitor) {
+    return visitor.visit(this);
+  }
 }

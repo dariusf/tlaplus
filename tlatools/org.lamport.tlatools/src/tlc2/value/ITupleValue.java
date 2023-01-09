@@ -33,4 +33,8 @@ public interface ITupleValue extends IValue {
 
 	@Override
 	int size();
+
+	default IValue getLast() {
+		return getElems()[getElems().length - 1];
+	}
 }
