@@ -316,19 +316,23 @@ public class Monitoring {
         }
         String name = ((OpApplNode) fml).getOperator().getName().toString();
         List<ExprOrOpArgNode> args = operatorArgs(fml);
-        if (name.equals("=")) {
-            return goBlock("if !(%s == %s) {\npanic(\"precondition failed\")\n}",
-                    translateExpr(args.get(0)),
-                    translateExpr(args.get(1)));
-        } else if (name.equals("UNCHANGED")) {
+        if (name.equals("UNCHANGED")) {
             return goBlock("");
         } else if (name.equals("Send") || name.equals("Receive")) {
             return goBlock("if !reflect.DeepEqual(%s, msg) {\npanic(\"message different\")\n}",
                     translateExpr(args.get(0)));
+        } else if (name.equals("=")) {
+            return goBlock("if !(%s == %s) {\npanic(\"precondition failed\")\n}",
+                    translateExpr(args.get(0)),
+                    translateExpr(args.get(1)));
         } else if (name.equals("/=")) {
             GoExpr a1 = translateExpr(args.get(0));
             GoExpr a2 = translateExpr(args.get(1));
-            return goBlock("if %s == %s {\npanic(\"equal\")\n}", a1, a2);
+            return goBlock("if %s == %s {\npanic(\"/= precondition violated\")\n}", a1, a2);
+        } else if (Set.of("<", "<=", ">", ">=").contains(name)){
+            GoExpr a1 = translateExpr(args.get(0));
+            GoExpr a2 = translateExpr(args.get(1));
+            return goBlock("if ! (%s %s %s) {\npanic(\"%s precondition violated\")\n}", a1, name, a2, name);
         } else if (name.equals("\\in")) {
             GoExpr thing = translateExpr(args.get(0));
             GoExpr coll = translateExpr(args.get(1));
