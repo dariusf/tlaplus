@@ -37,3 +37,4 @@ tlatools/org.lamport.tlatools/test-model/test.out
 .tlacache/
 .Rproj.user
 *.go
+tlatools/org.lamport.tlatools/classes
