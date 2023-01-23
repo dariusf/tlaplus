@@ -769,6 +769,20 @@ public class AST
           }
       }
 
+    public static class Par extends AST
+    { public Vector    clauses = null ; // of Clause
+      public Par() { };
+      public String toString()
+      { return
+              Indent(lineCol()) +
+                      "[type    |-> \"par\"," + NewLine() +
+                      Indent(" clauses |-> ") + VectorToSeqString(clauses)
+                      + "]" +
+                      EndIndent() + NewLine() +
+                      EndIndent() ;
+      }
+    }
+
     public static class LabelEither extends AST
       { public Vector    clauses = null ; // of Clause
         public LabelEither() { };

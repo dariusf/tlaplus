@@ -107,7 +107,6 @@
 package pcal;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TLAExprException;
@@ -1055,6 +1054,7 @@ public class ParseAlgorithm
                       && (   tok.equals("end")
                           || tok.equals("else")
                           || tok.equals("elsif")
+                          || tok.equals("and")
                           || tok.equals("or")     ))
                   || ( cSyntax && tok.equals("}")) ))
          { String nextLabel = GetLabel() ;
@@ -1092,8 +1092,9 @@ public class ParseAlgorithm
      { String nextTok = PeekAtAlgToken(1) ;
        if (nextTok.equals("if"))     { return GetIf(0) ; }     ;
        if (nextTok.equals("either")) { return GetEither() ; }     ;
+       if (nextTok.equals("par"))    { return PlusCalExtensions.GetPar() ; }     ;
        if (nextTok.equals("with"))   { return GetWith(0) ; }   ;
-       if (nextTok.equals("all"))    { return GetAll(0) ; }   ;
+       if (nextTok.equals("all"))    { return PlusCalExtensions.GetAll(0) ; }   ;
        if (nextTok.equals("when"))   { return GetWhen(true) ; }   ;
        if (nextTok.equals("await"))  { return GetWhen(false) ; }   ;
        if (nextTok.equals("print"))  { return GetPrintS() ; } ;
@@ -1176,6 +1177,7 @@ public class ParseAlgorithm
            || (tok.equals("elsif"))
            || (tok.equals("either"))
            || (tok.equals("or"))
+           || (tok.equals("and"))
            || (tok.equals("end"))
            || (tok.equals("with"))
            || (tok.equals("when"))
@@ -1288,107 +1290,51 @@ public class ParseAlgorithm
         */
        result.setOrigin(new Region (beginLoc, lastStmt.getOrigin().getEnd())) ;
        return result ;
-     }  
+     }
 
-   public static AST.LabelEither  GetEither() throws ParseAlgorithmException
-     { MustGobbleThis("either") ;
-       PCalLocation beginLoc = GetLastLocationStart() ;
-       AST.LabelEither result = new AST.LabelEither() ;
-       result.col  = lastTokCol ;
-       result.line = lastTokLine ;
-       result.clauses = new Vector() ;
-       boolean done = false ;
-       boolean hasOr = false ;
-       while (! done)
+    public static AST.LabelEither  GetEither() throws ParseAlgorithmException
+    { MustGobbleThis("either") ;
+        PCalLocation beginLoc = GetLastLocationStart() ;
+        AST.LabelEither result = new AST.LabelEither() ;
+        result.col  = lastTokCol ;
+        result.line = lastTokLine ;
+        result.clauses = new Vector() ;
+        boolean done = false ;
+        boolean hasOr = false ;
+        while (! done)
         { AST.Clause nextClause = new AST.Clause() ;
-          nextClause.labOr = new Vector() ;
-          if (pSyntax)
+            nextClause.labOr = new Vector() ;
+            if (pSyntax)
             { nextClause.unlabOr = GetStmtSeq() ; }
-          else
+            else
             { nextClause.unlabOr = GetCStmt() ; }
-          if (nextClause.unlabOr.size() == 0)
+            if (nextClause.unlabOr.size() == 0)
             {throw new ParseAlgorithmException(
-                "`either' statement with empty `or' clause", result) ; } ;
-          nextClause.setOrigin(new Region(
-                  ((AST) nextClause.unlabOr.elementAt(0)).getOrigin().getBegin(), 
-                  ((AST) nextClause.unlabOr.elementAt(nextClause.unlabOr.size()-1))
-                         .getOrigin().getEnd())) ; 
-          result.clauses.addElement(nextClause) ;
-          String nextTok = PeekAtAlgToken(1) ;
-          if (nextTok.equals("or"))
-            { MustGobbleThis("or") ; 
-              hasOr = true ;
+                    "`either' statement with empty `or' clause", result) ; } ;
+            nextClause.setOrigin(new Region(
+                    ((AST) nextClause.unlabOr.elementAt(0)).getOrigin().getBegin(),
+                    ((AST) nextClause.unlabOr.elementAt(nextClause.unlabOr.size()-1))
+                            .getOrigin().getEnd())) ;
+            result.clauses.addElement(nextClause) ;
+            String nextTok = PeekAtAlgToken(1) ;
+            if (nextTok.equals("or"))
+            { MustGobbleThis("or") ;
+                hasOr = true ;
             }
-          else
+            else
             { done = true ; }
         } ;
         if (pSyntax)
-          { MustGobbleThis("end") ;
+        { MustGobbleThis("end") ;
             GobbleThis("either") ;
             GobbleThis(";") ;
-          } ;
-        if (! hasOr) 
-          { throw new ParseAlgorithmException("`either' statement has no `or'", result) ;
-          } ;
+        } ;
+        if (! hasOr)
+        { throw new ParseAlgorithmException("`either' statement has no `or'", result) ;
+        } ;
         result.setOrigin(new Region(beginLoc,
-                  ((AST) result.clauses.elementAt(result.clauses.size()-1))
-                     .getOrigin().getEnd())) ;
-        return result ;
-     }
-
-    public static AST GetAll(int depth) throws ParseAlgorithmException {
-        return InnerGetAll(depth, null) ;
-    }
-
-    /**
-     * Just a with statement with different keyword, return type, constructor, error messages.
-     * The reason we don't parameterize InnerGetWith is that there is no supertype of With/All
-     * that has all the fields we need to assign.
-     */
-    public static AST.All InnerGetAll(int depth, PCalLocation beginLoc) throws ParseAlgorithmException
-    {
-        PCalLocation begLoc = beginLoc ;
-        if (depth == 0)
-        { GobbleThis("all") ;
-            begLoc = GetLastLocationStart() ;
-            if (cSyntax) { GobbleThis("(") ; } ;
-        } ;
-        AST.All result = new AST.All() ;
-        result.col  = lastTokCol ;
-        result.line = lastTokLine ;
-        result.var  = GetAlgToken() ;
-        result.isEq = GobbleEqualOrIf() ;
-        result.exp  = GetExpr() ;
-        if (pSyntax || ! PeekAtAlgToken(1).equals(")"))
-        { GobbleCommaOrSemicolon();
-            /**************************************************************
-             * Gobble the ";" or "," ending the <VarEqOrIn>, which may be  *
-             * eliminated before a ")" or "do".                            *
-             **************************************************************/
-        } ;
-        if (result.exp.tokens.size() == 0)
-        { ParsingError("Empty all expression at ") ;} ;
-        if (pSyntax && PeekAtAlgToken(1).equals("do"))
-        { GobbleThis("do") ;
-            result.Do   = GetStmtSeq() ;
-            GobbleThis("end") ;
-            GobbleThis("all") ;
-            GobbleThis(";");
-        }
-        else if (cSyntax && PeekAtAlgToken(1).equals(")"))
-        { MustGobbleThis(")") ;
-            result.Do = GetCStmt() ;
-        }
-        else
-        { result.Do = new Vector() ;
-            result.Do.addElement(InnerGetAll(depth+1, begLoc)) ;
-        };
-        try {
-            result.setOrigin(new Region(begLoc,
-                    ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;
-        } catch (ArrayIndexOutOfBoundsException e) {
-            throw new ParseAlgorithmException("Missing body of all statement", result);
-        }
+                ((AST) result.clauses.elementAt(result.clauses.size()-1))
+                        .getOrigin().getEnd())) ;
         return result ;
     }
 
@@ -3442,7 +3388,7 @@ public class ParseAlgorithm
 //    private static String Loc(int line , int col)
 //      { return  }
 
-    private static void ParsingError(String msg) throws ParseAlgorithmException
+    static void ParsingError(String msg) throws ParseAlgorithmException
       { throw new ParseAlgorithmException(
            msg + "\n    line " + lastTokLine + ", column " + lastTokCol );
       }
@@ -3522,6 +3468,7 @@ public class ParseAlgorithm
                 || nxt.equals("else")
                 || nxt.equals("elsif")
                 || nxt.equals("or")
+                || nxt.equals("and")
                 || nxt.equals("do")
                 || nxt.equals("macro")
                 || nxt.equals("procedure")
@@ -3629,7 +3576,7 @@ public class ParseAlgorithm
     * 
     * @return
     */
-   private static PCalLocation GetLastLocationStart() {
+   static PCalLocation GetLastLocationStart() {
        return new PCalLocation(lastTokLine-1, lastTokCol-1) ;
    }
    

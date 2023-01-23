@@ -38,6 +38,63 @@ public class PlusCalExtensions {
         }
     }
 
+    public static AST GetAll(int depth) throws ParseAlgorithmException {
+        return InnerGetAll(depth, null) ;
+    }
+
+    /**
+     * Just a with statement with different keyword, return type, constructor, error messages.
+     * The reason we don't parameterize {@link ParseAlgorithm#InnerGetWith} is that there is no supertype of With/All
+     * that has all the fields we need to assign.
+     */
+    public static AST.All InnerGetAll(int depth, PCalLocation beginLoc) throws ParseAlgorithmException
+    {
+        PCalLocation begLoc = beginLoc ;
+        if (depth == 0)
+        { GobbleThis("all") ;
+            begLoc = GetLastLocationStart() ;
+            if (cSyntax) { GobbleThis("(") ; } ;
+        } ;
+        AST.All result = new AST.All() ;
+        result.col  = lastTokCol ;
+        result.line = lastTokLine ;
+        result.var  = GetAlgToken() ;
+        result.isEq = GobbleEqualOrIf() ;
+        result.exp  = GetExpr() ;
+        if (pSyntax || ! PeekAtAlgToken(1).equals(")"))
+        { GobbleCommaOrSemicolon();
+            /**************************************************************
+             * Gobble the ";" or "," ending the <VarEqOrIn>, which may be  *
+             * eliminated before a ")" or "do".                            *
+             **************************************************************/
+        } ;
+        if (result.exp.tokens.size() == 0)
+        { ParsingError("Empty all expression at ") ;} ;
+        if (pSyntax && PeekAtAlgToken(1).equals("do"))
+        { GobbleThis("do") ;
+            result.Do   = GetStmtSeq() ;
+            GobbleThis("end") ;
+            GobbleThis("all") ;
+            GobbleThis(";");
+        }
+        else if (cSyntax && PeekAtAlgToken(1).equals(")"))
+        { MustGobbleThis(")") ;
+            result.Do = GetCStmt() ;
+        }
+        else
+        { result.Do = new Vector() ;
+            result.Do.addElement(InnerGetAll(depth+1, begLoc)) ;
+        };
+        try {
+            result.setOrigin(new Region(begLoc,
+                    ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            throw new ParseAlgorithmException("Missing body of all statement", result);
+        }
+        return result ;
+    }
+
+
     public static List<AST.Process> GetChoreography() throws ParseAlgorithmException {
         GobbleThis("choreography");
 
@@ -77,13 +134,17 @@ public class PlusCalExtensions {
         ownership.putAll(quantified);
         List<AST.Process> res = project(ownership, partyDecls, stmts);
 
-        res = res.stream().flatMap(p ->
-                        expandAllStatement(ownership, partyDecls, p).stream())
+        res = res.stream()
+                .flatMap(p -> expandAllStatement(ownership, partyDecls, p).stream())
+                .flatMap(p -> expandParStatement(ownership, partyDecls, p).stream())
                 .collect(Collectors.toList());
 
         return res;
     }
 
+    /**
+     * So when transforming a process recursively, anything nested inside can elaborate into more processes
+     */
     static class WithProc<T> {
         final T thing;
         final List<AST.Process> procs;
@@ -92,6 +153,80 @@ public class PlusCalExtensions {
             this.thing = thing;
             this.procs = procs;
         }
+    }
+
+    /**
+     * This is essentially {@link ParseAlgorithm#GetEither()} with the keywords changed
+     */
+    public static AST.Par  GetPar() throws ParseAlgorithmException
+    { MustGobbleThis("par") ;
+        PCalLocation beginLoc = GetLastLocationStart() ;
+        AST.Par result = new AST.Par() ;
+        result.col  = lastTokCol ;
+        result.line = lastTokLine ;
+        result.clauses = new Vector() ;
+        boolean done = false ;
+        boolean hasOr = false ;
+        while (! done)
+        { AST.Clause nextClause = new AST.Clause() ;
+            nextClause.labOr = new Vector() ;
+            if (pSyntax)
+            { nextClause.unlabOr = GetStmtSeq() ; }
+            else
+            { nextClause.unlabOr = GetCStmt() ; }
+            if (nextClause.unlabOr.size() == 0)
+            {throw new ParseAlgorithmException(
+                    "`par' statement with empty `and' clause", result) ; } ;
+            nextClause.setOrigin(new Region(
+                    ((AST) nextClause.unlabOr.elementAt(0)).getOrigin().getBegin(),
+                    ((AST) nextClause.unlabOr.elementAt(nextClause.unlabOr.size()-1))
+                            .getOrigin().getEnd())) ;
+            result.clauses.addElement(nextClause) ;
+            String nextTok = PeekAtAlgToken(1) ;
+            if (nextTok.equals("and"))
+            { MustGobbleThis("and") ;
+                hasOr = true ;
+            }
+            else
+            { done = true ; }
+        } ;
+        if (pSyntax)
+        { MustGobbleThis("end") ;
+            GobbleThis("par") ;
+            GobbleThis(";") ;
+        } ;
+        if (! hasOr)
+        { throw new ParseAlgorithmException("`par' statement has no `and'", result) ;
+        } ;
+        result.setOrigin(new Region(beginLoc,
+                ((AST) result.clauses.elementAt(result.clauses.size()-1))
+                        .getOrigin().getEnd())) ;
+        return result ;
+    }
+
+    /**
+     * Recurse into a process, expanding occurrences of par statements, which may generate more processes
+     */
+    private static List<AST.Process> expandParStatement(Map<String, Party> ownership,
+                                                        Map<String, Party> partyDecls,
+                                                        AST.Process proc) {
+        // TODO this is the same as expandAllStatement except for the function passed to map here
+        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
+                .map(s -> expandParStatement(ownership, partyDecls, s))
+                .collect(Collectors.toList());
+
+        List<AST> body1 = res.stream()
+                .map(wp -> wp.thing)
+                .collect(Collectors.toList());
+        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
+
+        List<AST.Process> newProcesses = res.stream()
+                .flatMap(wp -> wp.procs.stream())
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        newProcesses.add(proc1);
+
+        return newProcesses;
     }
 
     private static List<AST.Process> expandAllStatement(Map<String, Party> ownership,
@@ -115,7 +250,8 @@ public class PlusCalExtensions {
         return newProcesses;
     }
 
-    private static AST.Process createProcess(String name, boolean isEq, TLAExpr id, Vector<AST> body, Vector<AST.VarDecl> decls) {
+    private static AST.Process createProcess(String name, boolean isEq, TLAExpr id,
+                                             Vector<AST> body, Vector<AST.VarDecl> decls) {
         // TODO see what else GetProcess does
         AST.Process proc1 = new AST.Process();
         proc1.name = name;
@@ -147,6 +283,23 @@ public class PlusCalExtensions {
     private static int varI;
     static String fresh(String prefix) {
         return prefix + "_" + (varI++);
+    }
+
+    /**
+     * Turn a single par clause into its own process
+     */
+    private static AST.Process parStatementProcess(String pid, AST.Clause cl) {
+        TLAExpr processIdentSet = tlaExpr("{\"%s\"}", pid);
+        String processActionName = fresh("proc");
+        Vector<AST.VarDecl> decls = new Vector<>();
+        Vector<AST> body = new Vector<>();
+        // TODO rename variables?
+        if (cl.unlabOr != null) {
+            body.addAll(cl.unlabOr);
+        } else {
+            body.addAll(cl.labOr);
+        }
+        return createProcess(processActionName, false, processIdentSet, body, decls);
     }
 
     private static AST.Process allStatementProcess(String ig, TLAExpr ps) {
@@ -208,6 +361,33 @@ public class PlusCalExtensions {
         return proc;
     }
 
+    /**
+     * Called for each statement of a process, which may generate more processes
+     */
+    private static WithProc<AST> expandParStatement(Map<String, Party> ownership,
+                                                    Map<String, Party> partyDecls,
+                                                    AST stmt) {
+        if (stmt instanceof AST.Par) {
+            AST.Par par = (AST.Par) stmt;
+            AST.When wait = new AST.When();
+            wait.setOrigin(stmt.getOrigin());
+            Vector<AST.Clause> clauses = par.clauses;
+            var threads = clauses.stream().map(c -> {
+                var id = fresh("par");
+                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(id, c));
+            }).collect(Collectors.toList());
+
+            var var = fresh("v");
+            var s = threads.stream().map(AbstractMap.SimpleEntry::getKey).collect(Collectors.joining(", "));
+            var processes = threads.stream().map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
+            wait.exp = tlaExpr("\\A %s \\in {%s} : pc[%s] = \"Done\"", var, s, var);
+//           TODO recurse into proc?
+            return new WithProc<>(wait, processes);
+        } else {
+            return new WithProc<>(stmt, List.of());
+        }
+    }
+
     private static WithProc<AST> expandAllStatement(Map<String, Party> ownership,
                                                     Map<String, Party> partyDecls,
                                                     AST stmt) {
@@ -219,8 +399,8 @@ public class PlusCalExtensions {
             AST.Process proc = allStatementProcess(all.var, all.exp);
 //           TODO recurse into proc
             return new WithProc<>(wait, List.of(proc));
-        } else if (stmt instanceof AST.With) {
-            return new WithProc<>(stmt, List.of());
+//        } else if (stmt instanceof AST.With) {
+//            return new WithProc<>(stmt, List.of());
         } else {
             return new WithProc<>(stmt, List.of());
         }
@@ -302,6 +482,12 @@ public class PlusCalExtensions {
             e1.clauses = projectAll(ownership, party, e.clauses);
             e1.setOrigin(e.getOrigin());
             return e1;
+        } else if (stmt instanceof AST.Par) {
+            AST.Par e = (AST.Par) stmt;
+            AST.Par e1 = new AST.Par();
+            e1.clauses = projectAll(ownership, party, e.clauses);
+            e1.setOrigin(e.getOrigin());
+            return e1;
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
             AST.LabelIf e1 = new AST.LabelIf();
@@ -329,7 +515,10 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
             AST.Assign e1 = new AST.Assign();
-            e1.ass = projectAll(ownership, party, e.ass);
+            e1.ass = new Vector<>(((Vector<AST>) projectAll(ownership, party, e.ass)).stream()
+                    // projection may create skips here; in that case drop those nodes
+                    .filter(sa -> sa instanceof AST.SingleAssign)
+                    .collect(Collectors.toList()));
             e1.setOrigin(e.getOrigin());
             return e1;
         } else if (stmt instanceof AST.SingleAssign) {
