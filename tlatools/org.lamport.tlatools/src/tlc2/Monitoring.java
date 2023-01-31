@@ -5,25 +5,30 @@ import tlc2.value.IValue;
 import tlc2.value.impl.*;
 import util.UniqueString;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
+
+import static tla2sany.semantic.ASTConstants.*;
 
 public class Monitoring {
 
-    static class MAction {
-        List<SemanticNode> pre;
-        List<SemanticNode> effects;
-
-        public MAction(List<SemanticNode> pre, List<SemanticNode> effects) {
-            this.pre = pre;
-            this.effects = effects;
-        }
-    }
+//    static class MAction {
+//        List<SemanticNode> pre;
+//        List<SemanticNode> effects;
+//
+//        public MAction(List<SemanticNode> pre, List<SemanticNode> effects) {
+//            this.pre = pre;
+//            this.effects = effects;
+//        }
+//    }
 
     static int n = 0;
 
@@ -31,7 +36,25 @@ public class Monitoring {
         return "v" + n++;
     }
 
-    public static void convert(Map<UniqueString, IValue> initialState, ModuleNode rootModule) {
+    static String getResourceFileAsString(String fileName) throws IOException {
+        ClassLoader classLoader = ClassLoader.getSystemClassLoader();
+//        ClassLoader classLoader = Monitoring.class.getClassLoader();
+        try (InputStream is = classLoader.getResourceAsStream(fileName)) {
+            if (is == null) return null;
+            try (InputStreamReader isr = new InputStreamReader(is);
+                 BufferedReader reader = new BufferedReader(isr)) {
+                return reader.lines().collect(Collectors.joining(System.lineSeparator()));
+            }
+        }
+    }
+
+    public static void convert(Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
+
+        String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/MonitorTemplate.go"));
+//        String preTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/MonitorPreTemplate.go"));
+//        String postTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/MonitorPostTemplate.go"));
+//        String variableTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/MonitorVariableTemplate.go"));
+
         UniqueString moduleName = rootModule.getName();
         List<OpDeclNode> variables = Arrays.asList(rootModule.getVariableDecls());
 
@@ -39,7 +62,6 @@ public class Monitoring {
                 .filter(Monitoring::operatorWhitelist)
                 .map(d -> (OpDefNode) d)
                 .collect(Collectors.toList());
-
 
         String monitorFns = definitions.stream().flatMap(d -> {
             if (d.getBody() instanceof SubstInNode) {
@@ -49,28 +71,85 @@ public class Monitoring {
             if (!(d.getBody() instanceof OpApplNode)) {
                 throw fail("not op appl node?");
             }
-            MAction action = splitPreEff(d.getBody());
-            String body = translate(action);
-            String eq = "if !reflect.DeepEqual(m.state, c) {\npanic(\"state not equal\")\n}";
-            return Stream.of(String.format("func (m *Monitor) %s(c State, params map[string]interface{}, msg map[string]interface{}) {\n%s\n%s\n}", d.getName(), eq, body));
-        }).collect(Collectors.joining("\n"));
+            String params = translateParams(d, (i,p) -> String.format("%s any", p.getName().toString()));
+            GoBlock body = translateTopLevel(d.getBody());
+            String a = String.format("// Check%s\nfunc (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
+                    d.getName(),
+                    d.getName(),
+                    params,
+                    body
+            );
+            return Stream.of(a);
+        }).collect(Collectors.joining("\n\n"));
 
         String pkg = "monitoring";
-        String varDecls = variables.stream().map(v -> String.format("%s interface{}", v.getName())).collect(Collectors.joining("\n"));
-        String stateStruct = String.format("type State struct {\n%s\n}", varDecls);
-        String monitorStruct = "type Monitor struct {\nstate State\n}";
-        String initializers = initialState.entrySet().stream().map(e -> String.format("%s: %s,", e.getKey(), translateIValue(e.getValue()))).collect(Collectors.joining("\n"));
-        String initial = String.format("func New() {\ns := State{\n%s\n}\nreturn Monitor{state: s}\n}", initializers);
-        String packageDecl = String.format("package %s", pkg);
-        String module = String.join("\n\n", packageDecl, stateStruct, monitorStruct, initial, monitorFns);
+        String varDecls = variables.stream().map(v -> String.format("%s any", v.getName())).collect(Collectors.joining("\n"));
+
+        String actionNames = definitions.stream()
+                .map(d -> d.getName().toString())
+                .collect(Collectors.joining("\n"));
+
+        String stringSwitchCases =
+                definitions.stream()
+                        .map(d -> String.format("case %1$s:\nreturn \"%1$s\"", d.getName().toString()))
+                        .collect(Collectors.joining("\n"));
+
+        String checkSwitchCases =
+                definitions.stream()
+                        .map(d -> {
+                                    return String.format("case %1$s:\nif err := m.Check%1$s(%2$si, prev, this); err != nil {\nreturn err\n}",
+                                            d.getName().toString(),
+                                            translateParams(d, (i,p) -> String.format("this.params[%d]", i)));
+                                }
+                        )
+                        .collect(Collectors.joining("\n"));
+
+        String imports = Stream.of("reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
+                .collect(Collectors.joining("\n"));
+
+        String module = String.format(overallTemplate,
+                pkg, imports, varDecls, actionNames,
+                stringSwitchCases, checkSwitchCases, monitorFns);
+//        String module = monitorFns;
 
         Path filename = Paths.get(moduleName + ".go");
         try {
             Files.write(filename, module.getBytes());
+            System.out.println(filename.toAbsolutePath());
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            // this is the case in dune due to sandboxing
+            System.out.println("// MONITOR START");
+            System.out.println(module);
+            System.out.println("// MONITOR END");
         }
-        System.out.println(filename.toAbsolutePath());
+//        }
+
+//        System.out.println(filename.toAbsolutePath());
+//        System.out.println(Files.isWritable(filename));
+
+//        File file = new File(moduleName + "1.go");
+//        System.out.println(file.getAbsolutePath());
+//        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+//            writer.write(module);
+//        } catch (IOException e) {
+//            System.out.println(e.getMessage());
+//            System.out.println(e.getCause().getMessage());
+//            throw new RuntimeException(e);
+//        }
+//        System.out.println(file);
+    }
+
+    private static String translateParams(OpDefNode d, BiFunction<Integer, FormalParamNode, String> f) {
+        String params;
+        if (d.getArity() == 0) {
+            params = "";
+        } else {
+            params =
+                    IntStream.range(0, d.getArity())
+                            .mapToObj(i -> f.apply(i, d.getParams()[i]))
+                            .collect(Collectors.joining(", ")) + ", ";
+        }
+        return params;
     }
 
     private static boolean operatorWhitelist(SemanticNode d) {
@@ -98,17 +177,17 @@ public class Monitoring {
         }
     }
 
-    private static boolean isNotPrimed(SemanticNode body) {
-        if (isConstant(body)) {
-            return true;
-        } else if (body instanceof OpApplNode) {
-            if (isPrimedVar(body)) {
-                return false;
-            }
-            return operatorArgs(body).stream().allMatch(Monitoring::isNotPrimed);
-        }
-        return true;
-    }
+//    private static boolean isNotPrimed(SemanticNode body) {
+//        if (isConstant(body)) {
+//            return true;
+//        } else if (body instanceof OpApplNode) {
+//            if (isPrimedVar(body)) {
+//                return false;
+//            }
+//            return operatorArgs(body).stream().allMatch(Monitoring::isNotPrimed);
+//        }
+//        return true;
+//    }
 
     private static boolean isVar(SemanticNode body) {
         return body instanceof OpApplNode && ((OpApplNode) body).getArgs().length == 0;
@@ -119,7 +198,7 @@ public class Monitoring {
     }
 
     private static boolean isPrimedVar(SemanticNode body) {
-        return ((OpApplNode) body).getOperator().getName().equals("'");
+        return body instanceof OpApplNode && ((OpApplNode) body).getOperator().getName().equals("'");
     }
 
     private static boolean isConstant(SemanticNode body) {
@@ -136,88 +215,70 @@ public class Monitoring {
     /**
      * splits an operator body (represented as a $ConjList) into a list of preconditions and effects
      */
-    private static MAction splitPreEff(SemanticNode body) {
-        if (!(body instanceof OpApplNode)) {
+//    private static MAction splitPreEff(SemanticNode body) {
+//        if (!(body instanceof OpApplNode)) {
+//            throw fail("not op app node?");
+//        }
+//        UniqueString name = ((OpApplNode) body).getOperator().getName();
+//        List<ExprOrOpArgNode> args = operatorArgs((OpApplNode) body);
+//        if (name.equals("$ConjList")) {
+//            List<SemanticNode> pre = new ArrayList<>();
+//            List<SemanticNode> effects = new ArrayList<>();
+//            args.stream().map(Monitoring::splitPreEff).forEach(m -> {
+//                pre.addAll(m.pre);
+//                effects.addAll(m.effects);
+//            });
+//            return new MAction(pre, effects);
+//        }
+//        boolean unprimed = args.stream().allMatch(Monitoring::isNotPrimed);
+//        // check if it involves primed variables
+//        if (unprimed) {
+//            return new MAction(List.of(body), List.of());
+//        } else {
+//            return new MAction(List.of(), List.of(body));
+//        }
+//    }
+    private static GoBlock failure(GoExpr expr, String cond) {
+        return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; expected %s but got %%s (prev: %%+v, this: %%+v)\", trace_i, prev.state.x, prev, this)\n}",
+                expr,
+                cond,
+                expr);
+    }
+
+    /**
+     * we only try to split at the top level, for simple actions this produces better code.
+     * for complicated cases we don't do anything fancy and produce a single large expression.
+     */
+    private static GoBlock translateTopLevel(ExprOrOpArgNode op) {
+
+        if (!(op instanceof OpApplNode)) {
             throw fail("not op app node?");
         }
-        UniqueString name = ((OpApplNode) body).getOperator().getName();
-        List<ExprOrOpArgNode> args = operatorArgs((OpApplNode) body);
-        if (name.equals("$ConjList")) {
-            List<SemanticNode> pre = new ArrayList<>();
-            List<SemanticNode> effects = new ArrayList<>();
-            args.stream().map(Monitoring::splitPreEff).forEach(m -> {
-                pre.addAll(m.pre);
-                effects.addAll(m.effects);
-            });
-            return new MAction(pre, effects);
-        }
-        boolean unprimed = args.stream().allMatch(Monitoring::isNotPrimed);
-        // check if it involves primed variables
-        if (unprimed) {
-            return new MAction(List.of(body), List.of());
-        } else {
-            return new MAction(List.of(), List.of(body));
-        }
-    }
 
-    private static String translate(MAction action) {
-        return action.pre.stream().map(Monitoring::translatePre)
-                .map(b -> b.block)
-                .collect(Collectors.joining("\n")) + "\n\n" +
-                action.effects.stream().map(Monitoring::translateEffect)
-                        .map(b -> b.block)
-                        .collect(Collectors.joining("\n"));
-    }
 
-    private static GoBlock translateEffect(SemanticNode fml) {
-        if (!(fml instanceof OpApplNode)) {
-            throw fail("not app?");
+        UniqueString opName = ((OpApplNode) op).getOperator().getName();
+        List<ExprOrOpArgNode> args = operatorArgs(op);
+
+        boolean isPost = args.size() >= 2 && (isPrimedVar(args.get(0)) || isPrimedVar(args.get(1)));
+        String cond = isPost ? "postcondition" : "precondition";
+
+        if (opName.equals(OP_cl)) {
+            return args.stream().map(a -> translateTopLevel(a))
+                    .reduce(GoBlock::seq).get();
         }
-        String name = ((OpApplNode) fml).getOperator().getName().toString();
-        List<ExprOrOpArgNode> args = operatorArgs(fml);
-        if (name.equals("=")) {
-            // figure out which is the variable
-            SemanticNode var, val;
-            if (isPrimedVar(args.get(0))) {
-                var = args.get(0);
-                val = args.get(1);
-            } else {
-                var = args.get(1);
-                val = args.get(0);
+
+        if (opName.equals(OP_dl)) {
+            List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
+            GoBlock res = goBlock("");
+            for (int i = disjuncts.size() - 1; i >= 0; i--) {
+                GoBlock fail = i == disjuncts.size() - 1 ? failure(disjuncts.get(i), cond) : res;
+                res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
             }
-
-            if (val instanceof OpApplNode && ((OpApplNode) val).getOperator().getName().equals("$Except")) {
-                List<ExprOrOpArgNode> child = operatorArgs(val);
-                ExprOrOpArgNode unprimed = child.get(0);
-                List<ExprOrOpArgNode> pairArgs = operatorArgs(child.get(1));
-                ExprOrOpArgNode map = operatorArgs(pairArgs.get(0)).get(0);
-                ExprOrOpArgNode key = pairArgs.get(1);
-                return goBlock("%s[%s] = %s",
-                        translateExpr(unprimed),
-                        translateExpr(map),
-                        translateExpr(key));
-            }
-
-            GoExpr var1 = translateExpr(var);
-            GoExpr val1 = translateExpr(val);
-            // this does not check definitions, which is fine if both are variables.
-            // in other words we error on the side of generating a spurious assignment.
-            if (var1.expr.equals(val1.expr)) {
-                return goBlock("// UNCHANGED %s", var1);
-            } else {
-                return goBlock("%s = %s", var1, val1);
-            }
-        } else if (name.equals("$ConjList")) {
-            return goBlock(args.stream().map(Monitoring::translateEffect)
-                    .map(b -> b.block)
-                    .collect(Collectors.joining("\n")));
-        } else if (name.equals("$IfThenElse")) {
-            return goBlock("if %s {\n%s\n} else {\n%s\n}",
-                    translateExpr(args.get(0)),
-                    translateEffect(args.get(1)),
-                    translateEffect(args.get(2)));
+            return res;
         }
-        throw fail("unrecognised operator");
+
+        GoExpr expr = translateExpr(op);
+        return failure(expr, cond);
     }
 
     private static class GoExpr {
@@ -230,6 +291,15 @@ public class Monitoring {
 
         public GoBlock(String block) {
             this.block = block;
+        }
+
+        public GoBlock seq(GoBlock other) {
+            return new GoBlock(block + other.block);
+        }
+
+        @Override
+        public String toString() {
+            return block;
         }
     }
 
@@ -310,47 +380,6 @@ public class Monitoring {
         return new GoBlock(String.join("", defs) + "\n" + String.format(fmt, args1));
     }
 
-    private static GoBlock translatePre(SemanticNode fml) {
-        if (!(fml instanceof OpApplNode)) {
-            throw fail("not app?");
-        }
-        String name = ((OpApplNode) fml).getOperator().getName().toString();
-        List<ExprOrOpArgNode> args = operatorArgs(fml);
-        if (name.equals("UNCHANGED")) {
-            return goBlock("");
-        } else if (name.equals("Send") || name.equals("Receive")) {
-            return goBlock("if !reflect.DeepEqual(%s, msg) {\npanic(\"message different\")\n}",
-                    translateExpr(args.get(0)));
-        } else if (name.equals("=")) {
-            return goBlock("if !(%s == %s) {\npanic(\"precondition failed\")\n}",
-                    translateExpr(args.get(0)),
-                    translateExpr(args.get(1)));
-        } else if (name.equals("/=")) {
-            GoExpr a1 = translateExpr(args.get(0));
-            GoExpr a2 = translateExpr(args.get(1));
-            return goBlock("if %s == %s {\npanic(\"/= precondition violated\")\n}", a1, a2);
-        } else if (Set.of("<", "<=", ">", ">=").contains(name)){
-            GoExpr a1 = translateExpr(args.get(0));
-            GoExpr a2 = translateExpr(args.get(1));
-            return goBlock("if ! (%s %s %s) {\npanic(\"%s precondition violated\")\n}", a1, name, a2, name);
-        } else if (name.equals("\\in")) {
-            GoExpr thing = translateExpr(args.get(0));
-            GoExpr coll = translateExpr(args.get(1));
-            return goBlock("if _, ok := %s[%s]; ok {\npanic(\"inside\")\n}", coll, thing);
-        } else if (name.equals("\\notin")) {
-            GoExpr thing = translateExpr(args.get(0));
-            GoExpr coll = translateExpr(args.get(1));
-//            String v = fresh();
-//            return goBlock("%s := true\nfor _, v := range %s {\nif v == %s {\n%s = false\n}\n}\nif %s {\npanic(\"inside\")\n}",
-//                    v, coll, thing, v, v);
-//            if val, ok := dict["foo"]; ok {
-//                //do something here
-//            }
-            return goBlock("if _, ok := %s[%s]; !ok {\npanic(\"inside\")\n}", coll, thing);
-        }
-        throw fail("unrecognised operator " + name);
-    }
-
     /**
      * this produces an expression, but without defs
      */
@@ -361,10 +390,10 @@ public class Monitoring {
             return v.toString();
         } else if (v instanceof SetEnumValue) {
             // empty set
-            return "map[interface{}]bool{}";
+            return "map[any]bool{}";
         } else if (v instanceof TupleValue) {
             // empty seq
-            return "[]interface{}{}";
+            return "[]any{}";
         } else if (v instanceof FcnRcdValue) {
             // record literals, like [r1 |-> "working"]
             List<String> res = new ArrayList<>();
@@ -373,12 +402,29 @@ public class Monitoring {
                         translateIValue(((FcnRcdValue) v).domain[i]),
                         translateIValue(((FcnRcdValue) v).values[i])));
             }
-            return String.format("map[interface{}]interface{}{%s}", res.stream().collect(Collectors.joining(", ")));
+            return String.format("map[any]any{%s}", res.stream().collect(Collectors.joining(", ")));
         }
         throw fail("invalid type of value " + v.getClass().getSimpleName());
     }
 
-    private static GoExpr translateExpr(SemanticNode fml) {
+    enum Type {
+        INT
+    }
+
+    static String goTypeName(Type typ) {
+        switch (typ) {
+            case INT:
+                return "int";
+        }
+        fail("unhandled " + typ);
+        return null;
+    }
+
+    private static GoExpr translateExpr(ExprOrOpArgNode fml) {
+        return translateExpr(fml, null);
+    }
+
+    private static GoExpr translateExpr(ExprOrOpArgNode fml, Type typ) {
         if (isConstant(fml)) {
             if (fml instanceof StringNode) {
                 return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
@@ -386,19 +432,29 @@ public class Monitoring {
                 return goExpr(((NumeralNode) fml).val() + "");
             }
             throw fail("unknown");
-        } else if (isVar(fml)) {
-            String name = getVarName((OpApplNode) fml);
-            if (name.equals("$Tuple")) {
-                // somehow empty sequences land in here
-                return goExpr("[]interface{}{}");
+        } else if (isVar(fml) || isPrimedVar(fml)) {
+            if (getVarName((OpApplNode) fml).equals("TRUE")) {
+                return goExpr("true");
+            } else if (getVarName((OpApplNode) fml).equals("TRUE")) {
+                return goExpr("false");
             }
-            // primed variables are handled at a different level
-//            return String.format("state[\"%s\"]", name);
-            return goExpr("m.%s", name);
+            String v = isPrimedVar(fml) ? "this" : "prev";
+            String name = isPrimedVar(fml)
+                    ? getVarName((OpApplNode) operatorArgs(fml).get(0))
+                    : getVarName((OpApplNode) fml);
+//            if (name.equals("$Tuple")) {
+//                // somehow empty sequences land in here
+//                return goExpr("[]any{}");
+//            }
+            if (typ == null) {
+                return goExpr("%s.state.%s", v, name);
+            } else {
+                return goExpr("%s.state.%s.(%s)", v, name, goTypeName(typ));
+            }
 //            return name;
-        } else if (isPrimedVar(fml)) {
-            List<ExprOrOpArgNode> args = operatorArgs(fml);
-            return translateExpr(args.get(0));
+//        } else if (isPrimedVar(fml)) {
+//            List<ExprOrOpArgNode> args = operatorArgs(fml);
+//            return translateExpr(args.get(0));
         } else if (fml instanceof OpApplNode) {
             String name = ((OpApplNode) fml).getOperator().getName().toString();
             List<ExprOrOpArgNode> args = operatorArgs(fml);
@@ -411,7 +467,15 @@ public class Monitoring {
                 case "-":
                 case "*":
                 case "/":
-                    return goExpr("%s %s %s", translateExpr(args.get(0)), name, translateExpr(args.get(1)));
+                    return goExpr("%s %s %s",
+                            translateExpr(args.get(0), Type.INT),
+                            name, translateExpr(args.get(1), Type.INT));
+                case "=":
+                    return goExpr("reflect.DeepEqual(%s, %s)",
+                            translateExpr(args.get(0)), translateExpr(args.get(1)));
+                case "/=":
+                    return goExpr("!reflect.DeepEqual(%s, %s)",
+                            translateExpr(args.get(0)), translateExpr(args.get(1)));
                 case "Some":
                     return goExpr("[]interface{}{%s}", translateExpr(args.get(0)));
                 case "Append":
@@ -441,13 +505,44 @@ public class Monitoring {
                         }
                     }).collect(Collectors.toList());
                     return goExpr("map[string]interface{}{%s}", joinGoExpr(all, ", "));
+                case "$DisjList":
+                case "\\or":
+                    return args.stream().map(Monitoring::translateExpr)
+                            .reduce((a, b) -> goExpr("(%s || %s)", a, b))
+                            .get();
+                case "$ConjList":
+                case "\\land":
+                    return args.stream().map(Monitoring::translateExpr)
+                            .reduce((a, b) -> goExpr("(%s && %s)", a, b))
+                            .get();
                 case "$Except":
                     throw fail("handled at a higher level");
+                case "UNCHANGED":
+                    if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {
+                        return translateExpr(tla(OP_cl, args.stream().map(a -> tla("UNCHANGED", a)).toArray(ExprOrOpArgNode[]::new)));
+                    }
+                    ExprOrOpArgNode var = args.get(0);
+                    OpApplNode equal = tla("=", tla(OP_prime, var), var);
+                    return translateExpr(equal);
                 default:
-                    throw fail("unknown?" + name);
+                    throw fail("translateExpr: unknown? " + name);
             }
         }
-        throw fail("unknown?");
+        throw fail("translateExpr: unknown? " + fml);
+    }
+
+    /**
+     * Builds TLA+ expressions
+     */
+    private static OpApplNode tla(UniqueString op, ExprOrOpArgNode... args) {
+        OpDefNode def = new OpDefNode(op);
+        OpApplNode app = new OpApplNode(def);
+        app.setArgs(args);
+        return app;
+    }
+
+    private static OpApplNode tla(String op, ExprOrOpArgNode... args) {
+        return tla(UniqueString.uniqueStringOf(op), args);
     }
 
     private static RuntimeException fail(String s) {

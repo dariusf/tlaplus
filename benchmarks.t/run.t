@@ -154,54 +154,253 @@
   
   ==================================================================
 
-  $ tlc -monitor Counter.tla | make_det
-  TLC2 Version 2.18 of Day Month 20?? (rev: ${git.shortRevision})
-  Semantic processing of module Naturals
-  Semantic processing of module Sequences
-  Semantic processing of module FiniteSets
-  Semantic processing of module TLC
-  Semantic processing of module TLCExt
-  Semantic processing of module _TLCTrace
-  Semantic processing of module Counter
-  $TESTCASE_ROOT/Counter.go
+  $ tlc -monitor Counter.tla | make_det | sed -n "/MONITOR START/,/MONITOR END/p" > Counter.go
 
-  $ gofmt Counter.go
+  $ go build Counter.go && echo ok
+  ok
+
+  $ gofmt Counter.go || cat Counter.go
   package monitoring
   
+  import (
+  	"fmt"
+  	"path"
+  	"reflect"
+  	"runtime"
+  	"strings"
+  )
+  
+  // panic instead of returning error
+  var crash = true
+  
+  func thisFile() string {
+  	_, file, _, ok := runtime.Caller(1)
+  	if ok {
+  		return file
+  	}
+  	panic("could not get this file")
+  }
+  
+  func getFileLine() (string, int) {
+  	for i := 1; i < 10; i++ {
+  		_, f, l, _ := runtime.Caller(i)
+  		if !strings.Contains(f, thisFile()) {
+  			return f, l
+  		}
+  	}
+  	panic("could not get file and line")
+  }
+  
   type State struct {
-  	x interface{}
+  	x any
+  }
+  
+  type EventType int
+  
+  const (
+  	Initial = iota // special
+  	A
+  	Constr
+  	Inv
+  )
+  
+  func (e EventType) String() string {
+  	switch e {
+  	case A:
+  		return "A"
+  	case Constr:
+  		return "Constr"
+  	case Inv:
+  		return "Inv"
+  	default:
+  		panic(fmt.Sprintf("invalid %d", e))
+  	}
+  }
+  
+  type Event struct {
+  	typ    EventType
+  	params []any
+  	state  State
+  	file   string
+  	line   int
+  }
+  
+  func printParams(ps []any) string {
+  	res := []string{}
+  	for _, v := range ps {
+  		res = append(res, fmt.Sprintf("%+v", v))
+  	}
+  	return strings.Join(res, ", ")
+  }
+  
+  func (e Event) String() string {
+  	return fmt.Sprintf("%s(%s);%s:%d;%+v",
+  		e.typ, printParams(e.params), path.Base(e.file), e.line, e.state)
   }
   
   type Monitor struct {
-  	state State
+  	// the goal of extra is just to remove maintaining our own aux state,
+  	// which may be annoying and error-prone as it may be passed across several functions
+  	extra  []Event
+  	events []Event
   }
   
-  func New() {
-  	s := State{
-  		x: 1,
+  func New() Monitor {
+  	return Monitor{
+  		extra:  []Event{},
+  		events: []Event{},
   	}
-  	return Monitor{state: s}
   }
   
-  func (m *Monitor) Constr(c State, params map[string]interface{}, msg map[string]interface{}) {
-  	if !reflect.DeepEqual(m.state, c) {
-  		panic("state not equal")
-  	}
+  // TODO check initial
   
-  	if !(m.x < 2) {
-  		panic("< precondition violated")
+  func (m *Monitor) CheckTrace() error {
+  	var prev Event
+  	for i, this := range m.events {
+  		if i == 0 {
+  			prev = this
+  			continue
+  		}
+  		switch this.typ {
+  		case A:
+  			if err := m.CheckA(i, prev, this); err != nil {
+  				return err
+  			}
+  		case Constr:
+  			if err := m.CheckConstr(i, prev, this); err != nil {
+  				return err
+  			}
+  		case Inv:
+  			if err := m.CheckInv(i, prev, this); err != nil {
+  				return err
+  			}
+  		}
+  		prev = this
   	}
-  
+  	return nil
   }
-  func (m *Monitor) Inv(c State, params map[string]interface{}, msg map[string]interface{}) {
-  	if !reflect.DeepEqual(m.state, c) {
-  		panic("state not equal")
+  
+  func (m *Monitor) ShowTrace() {
+  	for i, v := range m.events {
+  		fmt.Printf("%d;%+v\n", i, v)
+  	}
+  }
+  
+  func fail(format string, a ...any) error {
+  	if crash {
+  		panic(fmt.Sprintf(format, a...))
+  	}
+  	return fmt.Errorf(format, a...)
+  }
+  
+  // CheckA
+  func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
+  
+  	if !(reflect.DeepEqual(this.state.x, prev.state.x.(int)+1)) {
+  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, prev.state.x.(int) + 1) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
+  
+  // CheckConstr
+  func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
+  
+  	if !(prev.state.x.(int) < 2) {
+  		return fail("precondition failed at %d; expected prev.state.x.(int) < 2 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
+  
+  // CheckInv
+  func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
+  
+  	if !(prev.state.x.(int) < 3) {
+  		return fail("precondition failed at %d; expected prev.state.x.(int) < 3 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
+  
+  // translated straightforwardly from TLA+ action.
+  // conjunctions become seq composition
+  // disjunctions are all checked and at least one branch has to be true
+  func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
+  
+  	if prev.state.x.(int) <= 0 {
+  		return fail("precondition failed at %d; expected x <= 0 but got %s (prev: %+v, this: %+v)", i, prev.state.x, prev, this)
+  	}
+  	// check that new values are allowed
+  	if this.state.x != prev.state.x.(int)+1 { // for each var
+  		return fail("postcondition violated for x at %d; should be %+v but got %+v (prev: %+v, this: %+v)", i,
+  			prev.state.x.(int)+1, this.state.x, prev, this)
   	}
   
-  	if !(m.x < 3) {
-  		panic("< precondition violated")
+  	// check unchanged
+  	if this.state.x != prev.state.x { // for each var
+  		return fail("unchanged violated for x at %d; expected x to remain as %+v but it is %+v (prev: %+v, this: %+v)", i, prev.state.x, this.state.x, prev, this)
   	}
   
+  	return nil
+  }
+  
+  // can output a monitoring trace to show what happened from the perspective of the impl
+  // this is also used to check certain things like post after pre
+  // contribution is a scheme for producing monitors. checks only safety but TLA very expressive, some unique challenges there, just like apalache, which is otherwise routine. practical contribution
+  // work on real raft
+  // how to identify what the actions are? annotations or an extra variable in the ast that we can look at
+  // types. or maybe cast on demand
+  // minimize amount of engineering work, as markus said
+  
+  // this state value can have nil fields
+  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+  
+  	e := Event{
+  		typ:    typ,
+  		params: args,
+  		state:  v,
+  		// no need to capture file and line here
+  	}
+  	m.extra = append(m.extra, e)
+  	return nil
+  }
+  
+  func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+  
+  	// override current values with extras
+  	// all have to pertain to this action
+  	for _, v := range m.extra {
+  		// sanity checks
+  		if v.typ != typ {
+  			return fmt.Errorf("type did not match")
+  		}
+  		for i, p := range v.params {
+  			if p != args[i] {
+  				return fmt.Errorf("arg %d did not match", i)
+  			}
+  		}
+  		// there is no null in TLA+, and also all the struct fields are any, which are reference types
+  
+  		// for each variable in state
+  		if v.state.x != nil {
+  			c.x = v.state.x
+  		}
+  	}
+  
+  	// reset
+  	m.extra = []Event{}
+  
+  	// record event
+  	file, line := getFileLine()
+  	e := Event{
+  		typ:    typ,
+  		params: args,
+  		state:  c,
+  		file:   file,
+  		line:   line,
+  	}
+  
+  	m.events = append(m.events, e)
+  
+  	return nil
   }
 
   $ tlc -monitor TwoPhaseCommitFull.tla | grep Exception
