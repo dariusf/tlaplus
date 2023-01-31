@@ -6,6 +6,8 @@ import util.UniqueString;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class Translate {
 
@@ -60,6 +62,25 @@ public class Translate {
         RuntimeException e = new RuntimeException(s);
         e.printStackTrace();
         return e;
+    }
+
+    public static OpApplNode substitute(OpApplNode body, Map<FormalParamNode, OpApplNode> subs) {
+        ExprOrOpArgNode[] args = Arrays.stream(body.getArgs())
+                .map(a -> {
+                    for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
+                        if (a.getAllParams().contains(e.getKey())) {
+                            return e.getValue();
+                        }
+                    }
+                    if (a instanceof OpApplNode) {
+                        return substitute((OpApplNode) a, subs);
+                    }
+                    return a;
+                })
+                .toArray(ExprOrOpArgNode[]::new);
+        OpApplNode res = new OpApplNode(body.getOperator());
+        res.setArgs(args);
+        return res;
     }
 
 }

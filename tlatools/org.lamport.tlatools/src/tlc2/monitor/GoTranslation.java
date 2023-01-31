@@ -4,9 +4,7 @@ import tla2sany.semantic.*;
 import tlc2.tool.Defns;
 import util.UniqueString;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -172,8 +170,7 @@ public class GoTranslation {
                 default:
                     OpDefNode userDefined = (OpDefNode) defns.get(name);
                     if (userDefined != null) {
-                        // TODO
-                        return null;
+                        return translateExpr(subst((OpApplNode) fml));
                     }
                     throw fail("translateExpr: unknown OpApplNode " + name);
             }
@@ -258,6 +255,15 @@ public class GoTranslation {
         }
         fail("unhandled " + typ);
         return null;
+    }
+
+    public OpApplNode subst(OpApplNode app) {
+        OpDefNode def = (OpDefNode) defns.get(app.getOperator().getName());
+        Map<FormalParamNode, OpApplNode> subs = new HashMap<>();
+        for (int i=0; i<def.getArity(); i++) {
+            subs.put(def.getParams()[i], (OpApplNode) app.getArgs()[i]);
+        }
+        return substitute((OpApplNode) def.getBody(), subs);
     }
 
 }
