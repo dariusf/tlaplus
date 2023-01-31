@@ -1,0 +1,187 @@
+package %s
+
+import (
+    %s
+)
+
+// panic instead of returning error
+var crash = true
+
+func thisFile() string {
+	_, file, _, ok := runtime.Caller(1)
+	if ok {
+		return file
+	}
+	panic("could not get this file")
+}
+
+func getFileLine() (string, int) {
+	for i := 1; i < 10; i++ {
+		_, f, l, _ := runtime.Caller(i)
+		if !strings.Contains(f, thisFile()) {
+			return f, l
+		}
+	}
+	panic("could not get file and line")
+}
+
+type State struct {
+	%s
+}
+
+type EventType int
+
+const (
+	Initial = iota // special
+	%s
+)
+
+func (e EventType) String() string {
+	switch e {
+	%s
+	default:
+		panic(fmt.Sprintf("invalid %%d", e))
+	}
+}
+
+type Event struct {
+	typ    EventType
+	params []any
+	state  State
+	file   string
+	line   int
+}
+
+func printParams(ps []any) string {
+	res := []string{}
+	for _, v := range ps {
+		res = append(res, fmt.Sprintf("%%+v", v))
+	}
+	return strings.Join(res, ", ")
+}
+
+func (e Event) String() string {
+	return fmt.Sprintf("%%s(%%s);%%s:%%d;%%+v",
+		e.typ, printParams(e.params), path.Base(e.file), e.line, e.state)
+}
+
+type Monitor struct {
+	// the goal of extra is just to remove maintaining our own aux state,
+	// which may be annoying and error-prone as it may be passed across several functions
+	extra  []Event
+	events []Event
+}
+
+func New() Monitor {
+	return Monitor{
+		extra:  []Event{},
+		events: []Event{},
+	}
+}
+
+// TODO check initial
+
+func (m *Monitor) CheckTrace() error {
+	var prev Event
+	for i, this := range m.events {
+		if i == 0 {
+			prev = this
+			continue
+		}
+		switch this.typ {
+		    %s
+		}
+		prev = this
+	}
+	return nil
+}
+
+func (m *Monitor) ShowTrace() {
+	for i, v := range m.events {
+		fmt.Printf("%%d;%%+v\n", i, v)
+	}
+}
+
+func fail(format string, a ...any) error {
+	if crash {
+		panic(fmt.Sprintf(format, a...))
+	}
+	return fmt.Errorf(format, a...)
+}
+
+%s
+
+// translated straightforwardly from TLA+ action.
+// conjunctions become seq composition
+// disjunctions are all checked and at least one branch has to be true
+func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
+
+	if prev.state.x.(int) <= 0 {
+		return fail("precondition failed at %%d; expected x <= 0 but got %%s (prev: %%+v, this: %%+v)", i, prev.state.x, prev, this)
+	}
+	// check that new values are allowed
+	if this.state.x != prev.state.x.(int)+1 { // for each var
+		return fail("postcondition violated for x at %%d; should be %%+v but got %%+v (prev: %%+v, this: %%+v)", i,
+			prev.state.x.(int)+1, this.state.x, prev, this)
+	}
+
+	// check unchanged
+	if this.state.x != prev.state.x { // for each var
+		return fail("unchanged violated for x at %%d; expected x to remain as %%+v but it is %%+v (prev: %%+v, this: %%+v)", i, prev.state.x, this.state.x, prev, this)
+	}
+
+	return nil
+}
+
+// this state value can have nil fields
+func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+
+	e := Event{
+		typ:    typ,
+		params: args,
+		state:  v,
+		// no need to capture file and line here
+	}
+	m.extra = append(m.extra, e)
+	return nil
+}
+
+func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+
+	// override current values with extras
+	// all have to pertain to this action
+	for _, v := range m.extra {
+		// sanity checks
+		if v.typ != typ {
+			return fmt.Errorf("type did not match")
+		}
+		for i, p := range v.params {
+			if p != args[i] {
+				return fmt.Errorf("arg %%d did not match", i)
+			}
+		}
+		// there is no null in TLA+, and also all the struct fields are any, which are reference types
+
+		// for each variable in state
+		if v.state.x != nil {
+			c.x = v.state.x
+		}
+	}
+
+	// reset
+	m.extra = []Event{}
+
+	// record event
+	file, line := getFileLine()
+	e := Event{
+		typ:    typ,
+		params: args,
+		state:  c,
+		file:   file,
+		line:   line,
+	}
+
+	m.events = append(m.events, e)
+
+	return nil
+}

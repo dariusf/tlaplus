@@ -46,6 +46,8 @@ E ==
 
 F(z) == TRUE
 
+G == [[ a |-> 1 ] EXCEPT !["a"] = 2]["a"] = 2
+
 Next ==
   \/ A
   \/ A1
@@ -54,6 +56,7 @@ Next ==
   \/ D
   \/ E
   \/ F(1)
+  \/ G
 
 Spec == Init /\ [][Next]_vars
 

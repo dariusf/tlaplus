@@ -13,6 +13,9 @@ test () {
   dune test
 }
 
+alias c=compile
+alias t=test
+
 tlatools() {
   name=$1
   shift

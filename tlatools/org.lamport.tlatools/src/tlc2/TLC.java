@@ -1186,7 +1186,7 @@ public class TLC {
                 Map<UniqueString, IValue> initialState = tool.getInitStates().elementAt(0).getVals();
                 ModuleNode rootModule = tool.getSpecProcessor().getSpecObj().getRootModule();
                 Defns defns = tool.getSpecProcessor().getDefns();
-                Monitoring.convert(defns, initialState, rootModule);
+                Monitoring.translate(defns, initialState, rootModule);
                 result = EC.NO_ERROR;
 			} else { // RunMode.MODEL_CHECK
 				if (noSeed) {

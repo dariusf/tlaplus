@@ -1,6 +1,7 @@
 package tlc2.monitor;
 
 import tla2sany.semantic.*;
+import tlc2.synth.Eval;
 import tlc2.tool.Defns;
 import util.UniqueString;
 
@@ -45,21 +46,23 @@ public class GoTranslation {
             List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
             GoBlock res = goBlock("");
             for (int i = disjuncts.size() - 1; i >= 0; i--) {
-                GoBlock fail = i == disjuncts.size() - 1 ? failure(disjuncts.get(i), cond) : res;
+                GoBlock fail = i == disjuncts.size() - 1 ? failure(op, disjuncts.get(i), cond) : res;
                 res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
             }
             return res;
         }
 
         GoExpr expr = translateExpr(op);
-        return failure(expr, cond);
+        return failure(op, expr, cond);
     }
 
-    public static GoBlock failure(GoExpr expr, String cond) {
+    public static GoBlock failure(ExprOrOpArgNode op, GoExpr expr, String cond) {
         return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; expected %s but got %%s (prev: %%+v, this: %%+v)\", trace_i, prev.state.x, prev, this)\n}",
                 expr,
                 cond,
-                expr);
+                Eval.prettyPrint(op)
+                        .replaceAll("\\\\", "\\\\\\\\")
+                        .replaceAll("\"", "\\\\\""));
     }
 
 
@@ -81,7 +84,7 @@ public class GoTranslation {
             } else if (getVarName((OpApplNode) fml).equals("FALSE")) {
                 return goExpr("false");
             }
-            String v = isPrimedVar(fml) ? "this" : "prev";
+            String eventVar = isPrimedVar(fml) ? "this" : "prev";
             String name = isPrimedVar(fml)
                     ? getVarName((OpApplNode) operatorArgs(fml).get(0))
                     : getVarName((OpApplNode) fml);
@@ -90,9 +93,9 @@ public class GoTranslation {
 //                return goExpr("[]any{}");
 //            }
             if (typ == null) {
-                return goExpr("%s.state.%s", v, name);
+                return goExpr("%s.state.%s", eventVar, name);
             } else {
-                return goExpr("%s.state.%s.(%s)", v, name, goTypeName(typ));
+                return goExpr("%s.state.%s.(%s)", eventVar, name, goTypeName(typ));
             }
 //            return name;
 //        } else if (isPrimedVar(fml)) {
@@ -113,28 +116,36 @@ public class GoTranslation {
                     return goExpr("(%s %s %s)",
                             translateExpr(args.get(0), Type.INT),
                             name, translateExpr(args.get(1), Type.INT));
-                case "=":
-                    return goExpr("reflect.DeepEqual(%s, %s)",
-                            translateExpr(args.get(0)), translateExpr(args.get(1)));
-                case "/=":
+                case "=": {
+                    GoExpr a1 = translateExpr(args.get(0));
+                    GoExpr a2 = translateExpr(args.get(1));
+                    return goExpr("reflect.DeepEqual(%s, %s)", a1, a2);
+                }
+                case "/=": {
+                    GoExpr a1 = translateExpr(args.get(0));
+                    GoExpr a2 = translateExpr(args.get(1));
                     return goExpr("!reflect.DeepEqual(%s, %s)",
-                            translateExpr(args.get(0)), translateExpr(args.get(1)));
+                            a1, a2);
+                }
                 case "Some":
                     return goExpr("[]any{%s}", translateExpr(args.get(0)));
                 case "Append":
                     return goExpr("append(%s, %s)", translateExpr(args.get(0)), translateExpr(args.get(1)));
-                case "ToSet":
+                case "ToSet": {
                     String v = fresh();
                     GoExpr a1 = translateExpr(args.get(0));
                     GoBlock def = goBlock("%s := map[any]bool{}\nfor _, v := range %s {\n%s[v] = true\n}", v, a1, v);
                     return goExpr(def, "%s", v);
-                case "$FcnApply":
+                }
+                case "$FcnApply": {
                     GoExpr map = translateExpr(args.get(0));
                     GoExpr key = translateExpr(args.get(1));
                     return goExpr("%s[%s]", map, key);
-                case "$SetEnumerate":
+                }
+                case "$SetEnumerate": {
                     List<GoExpr> exprs = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
                     return goExpr("map[any]bool{%s}", joinGoExpr(exprs, ", "));
+                }
                 case "$RcdConstructor":
                     List<GoExpr> all = args.stream().map(a -> {
                         OpApplNode op = (OpApplNode) a;
@@ -158,15 +169,49 @@ public class GoTranslation {
                     return args.stream().map(a -> translateExpr(a))
                             .reduce((a, b) -> goExpr("(%s && %s)", a, b))
                             .get();
-                case "$Except":
-                    throw fail("handled at a higher level");
-                case "UNCHANGED":
+                case "$Except": {
+                    // create a new map differing in one element
+                    List<ExprOrOpArgNode> child = operatorArgs(fml);
+                    ExprOrOpArgNode unprimed = child.get(0);
+                    List<ExprOrOpArgNode> pairArgs = operatorArgs(child.get(1));
+                    ExprOrOpArgNode map = operatorArgs(pairArgs.get(0)).get(0);
+                    ExprOrOpArgNode key = pairArgs.get(1);
+                    String v = fresh();
+                    String k1 = fresh();
+                    String v1 = fresh();
+                    GoExpr unprimed1 = translateExpr(unprimed);
+                    GoExpr map1 = translateExpr(map);
+                    GoExpr key1 = translateExpr(key);
+                    GoBlock copyMap = goBlock("%1$s := map[string]any{}\nfor %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %3$s\n}\n%1$s[%5$s] = %6$s",
+                            v, k1, v1, unprimed1, map1, key1);
+                    return goExpr(copyMap, "%s", v);
+                }
+                case "\\in": {
+                    String var = fresh();
+                    GoExpr thing = translateExpr(args.get(0));
+                    GoExpr coll = translateExpr(args.get(1));
+                    GoBlock def1 = goBlock("_, %s := %s[%s]", var, coll, thing);
+                    return goExpr(def1, "%s", var);
+                }
+                case "\\notin": {
+                    String var = fresh();
+                    GoExpr thing = translateExpr(args.get(0));
+                    GoExpr coll = translateExpr(args.get(1));
+                    GoBlock def1 = goBlock("_, %s := %s[%s]", var, coll, thing);
+                    return goExpr(def1, "!%s", var);
+                }
+                case "UNCHANGED": {
                     if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {
-                        return translateExpr(tla(OP_cl, args.stream().map(a -> tla("UNCHANGED", a)).toArray(ExprOrOpArgNode[]::new)));
+                        ExprOrOpArgNode[] tupleArgs = ((OpApplNode) args.get(0)).getArgs();
+                        return translateExpr(tla(OP_cl,
+                                Arrays.stream(tupleArgs)
+                                        .map(a -> tla("UNCHANGED", a))
+                                        .toArray(ExprOrOpArgNode[]::new)));
                     }
                     ExprOrOpArgNode var = args.get(0);
                     OpApplNode equal = tla("=", tla(OP_prime, var), var);
                     return translateExpr(equal);
+                }
                 default:
                     OpDefNode userDefined = (OpDefNode) defns.get(name);
                     if (userDefined != null) {
@@ -260,7 +305,7 @@ public class GoTranslation {
     public OpApplNode subst(OpApplNode app) {
         OpDefNode def = (OpDefNode) defns.get(app.getOperator().getName());
         Map<FormalParamNode, OpApplNode> subs = new HashMap<>();
-        for (int i=0; i<def.getArity(); i++) {
+        for (int i = 0; i < def.getArity(); i++) {
             subs.put(def.getParams()[i], (OpApplNode) app.getArgs()[i]);
         }
         return substitute((OpApplNode) def.getBody(), subs);

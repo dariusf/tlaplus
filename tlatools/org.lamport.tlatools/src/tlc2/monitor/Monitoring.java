@@ -36,9 +36,9 @@ public class Monitoring {
         }
     }
 
-    public static void convert(Defns defns, Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
+    public static void translate(Defns defns, Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
 
-        String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/monitor/MonitorTemplate.go"));
+        String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/monitor/Monitor.go.template"));
 
         UniqueString moduleName = rootModule.getName();
         List<OpDeclNode> variables = Arrays.asList(rootModule.getVariableDecls());
@@ -75,18 +75,17 @@ public class Monitoring {
                 .map(d -> d.getName().toString())
                 .collect(Collectors.joining("\n"));
 
-        String stringSwitchCases =
-                definitions.stream()
-                        .map(d -> String.format("case %1$s:\nreturn \"%1$s\"", d.getName().toString()))
-                        .collect(Collectors.joining("\n"));
+        String stringSwitchCases = definitions.stream()
+                .map(d -> String.format("case %1$s:\nreturn \"%1$s\"",
+                        d.getName().toString()))
+                .collect(Collectors.joining("\n"));
 
-        String checkSwitchCases =
-                definitions.stream()
-                        .map(d -> String.format("case %1$s:\nif err := m.Check%1$s(%2$si, prev, this); err != nil {\nreturn err\n}",
-                                d.getName().toString(),
-                                translateParams(d, (i, p) -> String.format("this.params[%d]", i)))
-                        )
-                        .collect(Collectors.joining("\n"));
+        String checkSwitchCases = definitions.stream()
+                .map(d -> String.format("case %1$s:\nif err := m.Check%1$s(%2$si, prev, this); err != nil {\nreturn err\n}",
+                        d.getName().toString(),
+                        translateParams(d, (i, p) -> String.format("this.params[%d]", i)))
+                )
+                .collect(Collectors.joining("\n"));
 
         String imports = Stream.of("reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
                 .collect(Collectors.joining("\n"));
