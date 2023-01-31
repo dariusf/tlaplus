@@ -1,0 +1,263 @@
+package tlc2.monitor;
+
+import tla2sany.semantic.*;
+import tlc2.tool.Defns;
+import util.UniqueString;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static tla2sany.semantic.ASTConstants.*;
+import static tlc2.monitor.Translate.*;
+
+public class GoTranslation {
+
+    private final Defns defns;
+
+    public GoTranslation(Defns defns) {
+        this.defns = defns;
+    }
+
+    /**
+     * we only try to split at the top level, for simple actions this produces better code.
+     * for complicated cases we don't do anything fancy and produce a single large expression.
+     */
+    public GoBlock translateTopLevel(Defns defns, ExprOrOpArgNode op) {
+
+        if (!(op instanceof OpApplNode)) {
+            throw fail("not op app node?");
+        }
+
+
+        UniqueString opName = ((OpApplNode) op).getOperator().getName();
+        List<ExprOrOpArgNode> args = operatorArgs(op);
+
+        boolean isPost = args.size() >= 2 && (isPrimedVar(args.get(0)) || isPrimedVar(args.get(1)));
+        String cond = isPost ? "postcondition" : "precondition";
+
+        if (opName.equals(OP_cl)) {
+            return args.stream().map(a -> translateTopLevel(defns, a))
+                    .reduce(GoBlock::seq).get();
+        }
+
+        if (opName.equals(OP_dl)) {
+            List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
+            GoBlock res = goBlock("");
+            for (int i = disjuncts.size() - 1; i >= 0; i--) {
+                GoBlock fail = i == disjuncts.size() - 1 ? failure(disjuncts.get(i), cond) : res;
+                res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
+            }
+            return res;
+        }
+
+        GoExpr expr = translateExpr(op);
+        return failure(expr, cond);
+    }
+
+    public static GoBlock failure(GoExpr expr, String cond) {
+        return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; expected %s but got %%s (prev: %%+v, this: %%+v)\", trace_i, prev.state.x, prev, this)\n}",
+                expr,
+                cond,
+                expr);
+    }
+
+
+    public GoExpr translateExpr(ExprOrOpArgNode fml) {
+        return translateExpr(fml, null);
+    }
+
+    public GoExpr translateExpr(ExprOrOpArgNode fml, Type typ) {
+        if (isConstant(fml)) {
+            if (fml instanceof StringNode) {
+                return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
+            } else if (fml instanceof NumeralNode) {
+                return goExpr(((NumeralNode) fml).val() + "");
+            }
+            throw fail("unknown");
+        } else if (isVar(fml) || isPrimedVar(fml)) {
+            if (getVarName((OpApplNode) fml).equals("TRUE")) {
+                return goExpr("true");
+            } else if (getVarName((OpApplNode) fml).equals("FALSE")) {
+                return goExpr("false");
+            }
+            String v = isPrimedVar(fml) ? "this" : "prev";
+            String name = isPrimedVar(fml)
+                    ? getVarName((OpApplNode) operatorArgs(fml).get(0))
+                    : getVarName((OpApplNode) fml);
+//            if (name.equals("$Tuple")) {
+//                // somehow empty sequences land in here
+//                return goExpr("[]any{}");
+//            }
+            if (typ == null) {
+                return goExpr("%s.state.%s", v, name);
+            } else {
+                return goExpr("%s.state.%s.(%s)", v, name, goTypeName(typ));
+            }
+//            return name;
+//        } else if (isPrimedVar(fml)) {
+//            List<ExprOrOpArgNode> args = operatorArgs(fml);
+//            return translateExpr(args.get(0));
+        } else if (fml instanceof OpApplNode) {
+            String name = ((OpApplNode) fml).getOperator().getName().toString();
+            List<ExprOrOpArgNode> args = operatorArgs(fml);
+            switch (name) {
+                case "<":
+                case "<=":
+                case ">":
+                case ">=":
+                case "+":
+                case "-":
+                case "*":
+                case "/":
+                    return goExpr("(%s %s %s)",
+                            translateExpr(args.get(0), Type.INT),
+                            name, translateExpr(args.get(1), Type.INT));
+                case "=":
+                    return goExpr("reflect.DeepEqual(%s, %s)",
+                            translateExpr(args.get(0)), translateExpr(args.get(1)));
+                case "/=":
+                    return goExpr("!reflect.DeepEqual(%s, %s)",
+                            translateExpr(args.get(0)), translateExpr(args.get(1)));
+                case "Some":
+                    return goExpr("[]any{%s}", translateExpr(args.get(0)));
+                case "Append":
+                    return goExpr("append(%s, %s)", translateExpr(args.get(0)), translateExpr(args.get(1)));
+                case "ToSet":
+                    String v = fresh();
+                    GoExpr a1 = translateExpr(args.get(0));
+                    GoBlock def = goBlock("%s := map[any]bool{}\nfor _, v := range %s {\n%s[v] = true\n}", v, a1, v);
+                    return goExpr(def, "%s", v);
+                case "$FcnApply":
+                    GoExpr map = translateExpr(args.get(0));
+                    GoExpr key = translateExpr(args.get(1));
+                    return goExpr("%s[%s]", map, key);
+                case "$SetEnumerate":
+                    List<GoExpr> exprs = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
+                    return goExpr("map[any]bool{%s}", joinGoExpr(exprs, ", "));
+                case "$RcdConstructor":
+                    List<GoExpr> all = args.stream().map(a -> {
+                        OpApplNode op = (OpApplNode) a;
+                        if (op.getOperator().getName().equals("$Pair")) {
+                            List<ExprOrOpArgNode> args1 = operatorArgs(op);
+                            return goExpr("%s: %s",
+                                    translateExpr(args1.get(0)),
+                                    translateExpr(args1.get(1)));
+                        } else {
+                            throw fail("unexpected");
+                        }
+                    }).collect(Collectors.toList());
+                    return goExpr("map[string]any{%s}", joinGoExpr(all, ", "));
+                case "$DisjList":
+                case "\\or":
+                    return args.stream().map(a -> translateExpr(a))
+                            .reduce((a, b) -> goExpr("(%s || %s)", a, b))
+                            .get();
+                case "$ConjList":
+                case "\\land":
+                    return args.stream().map(a -> translateExpr(a))
+                            .reduce((a, b) -> goExpr("(%s && %s)", a, b))
+                            .get();
+                case "$Except":
+                    throw fail("handled at a higher level");
+                case "UNCHANGED":
+                    if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {
+                        return translateExpr(tla(OP_cl, args.stream().map(a -> tla("UNCHANGED", a)).toArray(ExprOrOpArgNode[]::new)));
+                    }
+                    ExprOrOpArgNode var = args.get(0);
+                    OpApplNode equal = tla("=", tla(OP_prime, var), var);
+                    return translateExpr(equal);
+                default:
+                    OpDefNode userDefined = (OpDefNode) defns.get(name);
+                    if (userDefined != null) {
+                        // TODO
+                        return null;
+                    }
+                    throw fail("translateExpr: unknown OpApplNode " + name);
+            }
+        }
+        throw fail("translateExpr: unknown, non-OpApplNode " + fml);
+    }
+
+    private static GoExpr goExpr(GoBlock block, String fmt, Object... args) {
+        GoExpr res = new GoExpr();
+        res.defs.add(block.block);
+        GoExpr e = goExpr(fmt, args);
+        res.defs.addAll(e.defs);
+        res.expr = e.expr;
+        return res;
+    }
+
+    private static GoExpr joinGoExpr(List<GoExpr> exprs, String s) {
+        GoExpr res = new GoExpr();
+        res.expr = exprs.stream().map(e -> {
+            res.defs.addAll(e.defs);
+            return e.expr;
+        }).collect(Collectors.joining(s));
+        return res;
+    }
+
+    /**
+     * args may be strings or GoExprs.
+     * definitions are accumulated.
+     */
+    private static GoExpr goExpr(String fmt, Object... args) {
+        GoExpr res = new GoExpr();
+        Object[] args1 = Arrays.stream(args).flatMap(a -> {
+            if (a instanceof String) {
+                return Stream.of(a);
+            } else if (a instanceof List) {
+                throw fail("invalid");
+//                return ((List<?>) a).stream().peek(b -> {
+//                    // this only goes one level deep
+//                    if (b instanceof GoExpr) {
+//                        res.defs.addAll(((GoExpr) b).defs);
+//                    }
+//                });
+            } else if (a instanceof GoExpr) {
+                res.defs.addAll(((GoExpr) a).defs);
+                return Stream.of(((GoExpr) a).expr);
+            } else {
+                throw fail("invalid");
+            }
+        }).toArray();
+        res.expr = String.format(fmt, args1);
+        return res;
+    }
+
+    /**
+     * printf, but if the arguments are GoExprs, their definitions are taken
+     * out and placed at the top of the resulting block.
+     */
+    private static GoBlock goBlock(String fmt, Object... args) {
+        List<String> defs = new ArrayList<>();
+        Object[] args1 = Arrays.stream(args).flatMap(a -> {
+            if (a instanceof GoExpr) {
+                defs.addAll(((GoExpr) a).defs);
+                return Stream.of(((GoExpr) a).expr);
+            } else if (a instanceof List) {
+                throw fail("invalid");
+//                return ((List<?>) a).stream().peek(b -> {
+//                    // this only goes one level deep
+//                    if (b instanceof GoExpr) {
+//                        defs.addAll(((GoExpr) b).defs);
+//                    }
+//                });
+            }
+            return Stream.of(a);
+        }).toArray();
+        return new GoBlock(String.join("", defs) + "\n" + String.format(fmt, args1));
+    }
+
+    static String goTypeName(Type typ) {
+        switch (typ) {
+            case INT:
+                return "int";
+        }
+        fail("unhandled " + typ);
+        return null;
+    }
+
+}

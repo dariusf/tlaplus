@@ -19,9 +19,9 @@ A1 ==
 B ==
   /\ UNCHANGED x
 
-\* Send(y) == x = y
-\* C ==
-\*   /\ Send(x)
+Send(y) == x = y
+C ==
+  /\ Send(x)
 
 D ==
   \/
@@ -50,7 +50,7 @@ Next ==
   \/ A
   \/ A1
   \/ B
-  \* \/ C
+  \/ C
   \/ D
   \/ E
   \/ F(1)

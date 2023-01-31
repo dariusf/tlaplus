@@ -21,6 +21,7 @@ import model.InJarFilenameToStream;
 import model.ModelInJar;
 import tla2sany.semantic.*;
 import tlc2.debug.TLCDebugger;
+import tlc2.monitor.Monitoring;
 import tlc2.output.EC;
 import tlc2.output.ErrorTraceMessagePrinterRecorder;
 import tlc2.output.MP;
@@ -1179,7 +1180,8 @@ public class TLC {
                 tool = new FastTool(mainFile, configFile, resolver, Tool.Mode.Simulation, params);
                 Map<UniqueString, IValue> initialState = tool.getInitStates().elementAt(0).getVals();
                 ModuleNode rootModule = tool.getSpecProcessor().getSpecObj().getRootModule();
-                Monitoring.convert(initialState, rootModule);
+                Defns defns = tool.getSpecProcessor().getDefns();
+                Monitoring.convert(defns, initialState, rootModule);
                 result = EC.NO_ERROR;
 			} else { // RunMode.MODEL_CHECK
 				if (noSeed) {
