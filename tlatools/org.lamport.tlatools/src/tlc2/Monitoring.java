@@ -435,7 +435,7 @@ public class Monitoring {
         } else if (isVar(fml) || isPrimedVar(fml)) {
             if (getVarName((OpApplNode) fml).equals("TRUE")) {
                 return goExpr("true");
-            } else if (getVarName((OpApplNode) fml).equals("TRUE")) {
+            } else if (getVarName((OpApplNode) fml).equals("FALSE")) {
                 return goExpr("false");
             }
             String v = isPrimedVar(fml) ? "this" : "prev";
