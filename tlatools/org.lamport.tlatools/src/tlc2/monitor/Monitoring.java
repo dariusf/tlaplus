@@ -3,37 +3,30 @@ package tlc2.monitor;
 import tla2sany.semantic.*;
 import tlc2.tool.Defns;
 import tlc2.value.IValue;
-import tlc2.value.impl.*;
 import util.UniqueString;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static tla2sany.semantic.ASTConstants.*;
 import static tlc2.monitor.Translate.fail;
 
 public class Monitoring {
 
-//    static class MAction {
-//        List<SemanticNode> pre;
-//        List<SemanticNode> effects;
-//
-//        public MAction(List<SemanticNode> pre, List<SemanticNode> effects) {
-//            this.pre = pre;
-//            this.effects = effects;
-//        }
-//    }
-
     static String getResourceFileAsString(String fileName) throws IOException {
         ClassLoader classLoader = ClassLoader.getSystemClassLoader();
-//        ClassLoader classLoader = Monitoring.class.getClassLoader();
         try (InputStream is = classLoader.getResourceAsStream(fileName)) {
             if (is == null) return null;
             try (InputStreamReader isr = new InputStreamReader(is);
@@ -113,21 +106,6 @@ public class Monitoring {
             System.out.println(module);
             System.out.println("// MONITOR END");
         }
-//        }
-
-//        System.out.println(filename.toAbsolutePath());
-//        System.out.println(Files.isWritable(filename));
-
-//        File file = new File(moduleName + "1.go");
-//        System.out.println(file.getAbsolutePath());
-//        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-//            writer.write(module);
-//        } catch (IOException e) {
-//            System.out.println(e.getMessage());
-//            System.out.println(e.getCause().getMessage());
-//            throw new RuntimeException(e);
-//        }
-//        System.out.println(file);
     }
 
     private static String translateParams(OpDefNode d, BiFunction<Integer, FormalParamNode, String> f) {
@@ -167,136 +145,4 @@ public class Monitoring {
             throw fail("not an op def node?");
         }
     }
-
-//    private static boolean isNotPrimed(SemanticNode body) {
-//        if (isConstant(body)) {
-//            return true;
-//        } else if (body instanceof OpApplNode) {
-//            if (isPrimedVar(body)) {
-//                return false;
-//            }
-//            return operatorArgs(body).stream().allMatch(Monitoring::isNotPrimed);
-//        }
-//        return true;
-//    }
-    /**
-     * splits an operator body (represented as a $ConjList) into a list of preconditions and effects
-     */
-//    private static MAction splitPreEff(SemanticNode body) {
-//        if (!(body instanceof OpApplNode)) {
-//            throw fail("not op app node?");
-//        }
-//        UniqueString name = ((OpApplNode) body).getOperator().getName();
-//        List<ExprOrOpArgNode> args = operatorArgs((OpApplNode) body);
-//        if (name.equals("$ConjList")) {
-//            List<SemanticNode> pre = new ArrayList<>();
-//            List<SemanticNode> effects = new ArrayList<>();
-//            args.stream().map(Monitoring::splitPreEff).forEach(m -> {
-//                pre.addAll(m.pre);
-//                effects.addAll(m.effects);
-//            });
-//            return new MAction(pre, effects);
-//        }
-//        boolean unprimed = args.stream().allMatch(Monitoring::isNotPrimed);
-//        // check if it involves primed variables
-//        if (unprimed) {
-//            return new MAction(List.of(body), List.of());
-//        } else {
-//            return new MAction(List.of(), List.of(body));
-//        }
-//    }
-
-
-
-
-
-
-//    private static GoExpr goExprDef(String def, String ) {
-//        GoExpr res = new GoExpr();
-//        res.defs.add(def);
-//        res.expr = expr;
-//        return res;
-//    }
-
-    /**
-     * this produces an expression, but without defs
-     */
-    private static String translateIValue(IValue v) {
-        if (v instanceof StringValue) {
-            return "\"" + ((StringValue) v).getVal() + "\"";
-        } else if (v instanceof IntValue) {
-            return v.toString();
-        } else if (v instanceof SetEnumValue) {
-            // empty set
-            return "map[any]bool{}";
-        } else if (v instanceof TupleValue) {
-            // empty seq
-            return "[]any{}";
-        } else if (v instanceof FcnRcdValue) {
-            // record literals, like [r1 |-> "working"]
-            List<String> res = new ArrayList<>();
-            for (int i = 0; i < ((FcnRcdValue) v).domain.length; i++) {
-                res.add(String.format("%s: %s",
-                        translateIValue(((FcnRcdValue) v).domain[i]),
-                        translateIValue(((FcnRcdValue) v).values[i])));
-            }
-            return String.format("map[any]any{%s}", res.stream().collect(Collectors.joining(", ")));
-        }
-        throw fail("invalid type of value " + v.getClass().getSimpleName());
-    }
-
-//    // visitors are for applying a transformation uniformly across, not stuff where we decide whether or not to recurse
-//    final ExplorerVisitor visitor = new ExplorerVisitor() {
-//
-//        List<MAction> actions = new ArrayList<>();
-//        MAction current = null;
-//        @Override
-//        public void preVisit(ExploreNode exploreNode) {
-////                        super.preVisit(exploreNode);
-//            boolean skip = exploreNode instanceof ModuleNode
-//                    || exploreNode instanceof Context
-//                    || exploreNode instanceof FormalParamNode;
-////                                || (exploreNode instanceof OpDefNode && ((OpDefNode) exploreNode).getBody() == null)
-//
-//            if (exploreNode instanceof SemanticNode) {
-//                TreeNode stn = ((SemanticNode) exploreNode).stn;
-//                if (stn == null) {
-//                    skip = true;
-//                } else {
-//                    switch (stn.getFilename()) {
-//                        case "--TLA+ BUILTINS--":
-//                        case "Naturals":
-//                        case "TLC":
-//                            skip = true;
-//                    }
-//                }
-//            }
-//
-//            if (skip) {
-//                return;
-//            }
-//
-//            if (exploreNode instanceof OpDefNode) {
-//                current = new MAction();
-//                System.out.println("action " + ((OpDefNode) exploreNode).getName());
-//            } else if (exploreNode instanceof OpApplNode &&
-//                    ((OpApplNode) exploreNode).getOperator().getName().equals("$ConjList")) {
-//
-//
-//            } else {
-//                System.out.println(exploreNode.getClass());
-//            }
-//        }
-//
-//        @Override
-//        public void postVisit(ExploreNode exploreNode) {
-//            super.postVisit(exploreNode);
-//        }
-//    };
-//                rootModule.walkGraph(new Hashtable<>(), visitor);
-////                visitor.done();
-//
-//                Arrays.stream(tool.getActions()).forEach(a -> {
-//        int b = 1;
-//    });
 }
