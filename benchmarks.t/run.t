@@ -294,8 +294,8 @@
   // CheckA
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, prev.state.x.(int)+1)) {
-  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, prev.state.x.(int) + 1) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
+  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1)) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -304,7 +304,7 @@
   func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 2) {
-  		return fail("precondition failed at %d; expected prev.state.x.(int) < 2 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; expected (prev.state.x.(int) < 2) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -313,7 +313,7 @@
   func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 3) {
-  		return fail("precondition failed at %d; expected prev.state.x.(int) < 3 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; expected (prev.state.x.(int) < 3) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -445,6 +445,7 @@
   	A
   	A1
   	B
+  	C
   	D
   	E
   	F
@@ -458,6 +459,8 @@
   		return "A1"
   	case B:
   		return "B"
+  	case C:
+  		return "C"
   	case D:
   		return "D"
   	case E:
@@ -526,6 +529,10 @@
   			if err := m.CheckB(i, prev, this); err != nil {
   				return err
   			}
+  		case C:
+  			if err := m.CheckC(i, prev, this); err != nil {
+  				return err
+  			}
   		case D:
   			if err := m.CheckD(i, prev, this); err != nil {
   				return err
@@ -561,10 +568,10 @@
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 0) {
-  		return fail("precondition failed at %d; expected prev.state.x.(int) < 0 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; expected (prev.state.x.(int) < 0) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.x, prev.state.x.(int)+1)) {
-  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, prev.state.x.(int) + 1) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
+  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1)) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -573,10 +580,10 @@
   func (m *Monitor) CheckA1(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 0) {
-  		return fail("precondition failed at %d; expected prev.state.x.(int) < 0 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; expected (prev.state.x.(int) < 0) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.x, prev.state.x.(int)+1) && prev.state.x.(int) < 0) {
-  		return fail("precondition failed at %d; expected (reflect.DeepEqual(this.state.x, prev.state.x.(int) + 1) && prev.state.x.(int) < 0) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int)+1)) && (prev.state.x.(int) < 0)) {
+  		return fail("precondition failed at %d; expected (reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1)) && (prev.state.x.(int) < 0)) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -586,6 +593,15 @@
   
   	if !(reflect.DeepEqual(this.state.x, prev.state.x)) {
   		return fail("precondition failed at %d; expected reflect.DeepEqual(this.state.x, prev.state.x) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
+  
+  // CheckC
+  func (m *Monitor) CheckC(trace_i int, prev Event, this Event) error {
+  
+  	if !(reflect.DeepEqual(prev.state.x, prev.state.x)) {
+  		return fail("precondition failed at %d; expected reflect.DeepEqual(prev.state.x, prev.state.x) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -854,8 +870,8 @@
   // CheckA
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, prev.state.x.(int)+1)) {
-  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, prev.state.x.(int) + 1) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
+  		return fail("postcondition failed at %d; expected reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1)) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -864,7 +880,7 @@
   func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 2) {
-  		return fail("precondition failed at %d; expected prev.state.x.(int) < 2 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; expected (prev.state.x.(int) < 2) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -873,7 +889,7 @@
   func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 3) {
-  		return fail("precondition failed at %d; expected prev.state.x.(int) < 3 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; expected (prev.state.x.(int) < 3) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
   	}
   	return nil
   }

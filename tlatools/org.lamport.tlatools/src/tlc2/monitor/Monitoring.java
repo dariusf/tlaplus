@@ -38,7 +38,7 @@ public class Monitoring {
 
     public static void convert(Defns defns, Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
 
-        String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/MonitorTemplate.go"));
+        String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/monitor/MonitorTemplate.go"));
 
         UniqueString moduleName = rootModule.getName();
         List<OpDeclNode> variables = Arrays.asList(rootModule.getVariableDecls());

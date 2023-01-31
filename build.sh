@@ -7,6 +7,12 @@ compile() {
   ant -f $tlaroot/tlatools/org.lamport.tlatools/customBuild.xml -Dtest.skip=true compile dist
 }
 
+test () {
+  set -x
+  rm benchmarks.t/*.go
+  dune test
+}
+
 tlatools() {
   name=$1
   shift
