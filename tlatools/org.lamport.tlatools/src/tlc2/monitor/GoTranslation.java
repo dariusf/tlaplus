@@ -223,6 +223,7 @@ public class GoTranslation {
                     int l = ((OpApplNode) fml).getBdedQuantBounds().length;
                     for (int i = 0; i < l; i++) {
                         ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[i];
+                        GoExpr sset = translateExpr(set);
                         FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(i);
                         String set1 = Eval.prettyPrint(set);
                         String varName = var.getName().toString();

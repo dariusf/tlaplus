@@ -2,7 +2,6 @@ package tlc2.synth;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.aspectj.weaver.ast.Expr;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import tla2sany.semantic.*;
@@ -403,7 +402,7 @@ public class Eval {
                     List.of(binary(Eval.this::append)));
             top:
             for (int i = 0; i < rules.size(); i++) {
-                for (var p : (Iterable<List<OpApplNode>>) product(i + 1)::iterator) {
+                for (List<OpApplNode> p : (Iterable<List<OpApplNode>>) product(i + 1)::iterator) {
                     List<ExprOrOpArgNode> p1 = p.stream()
                             .map(p2 -> (ExprOrOpArgNode) p2)
                             .collect(Collectors.toList());

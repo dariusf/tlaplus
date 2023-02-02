@@ -53,8 +53,8 @@ public class PrettyPrintVisitor extends Visitor<String> {
             return String.format("[%s]",
                     Arrays.stream(node.getArgs())
                             .map(a -> {
-                                var key = ((OpApplNode) a).getArgs()[0];
-                                var val = ((OpApplNode) a).getArgs()[1];
+                                ExprOrOpArgNode key = ((OpApplNode) a).getArgs()[0];
+                                ExprOrOpArgNode val = ((OpApplNode) a).getArgs()[1];
                                 return String.format("%s |-> %s", key.accept(this), val.accept(this));
                             })
                             .collect(Collectors.joining(", ")));

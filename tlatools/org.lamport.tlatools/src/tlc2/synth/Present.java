@@ -1,7 +1,5 @@
 package tlc2.synth;
 
-import com.github.difflib.algorithm.myers.MeyersDiff;
-import com.github.difflib.patch.Patch;
 import com.google.gson.*;
 import tlc2.module.Json;
 import tlc2.value.IValue;
@@ -190,7 +188,7 @@ public class Present {
 //        System.out.println("* frontiers");
 
         // pick the state in the frontier with the smallest diff from what happened
-        var ranked = mbtc.frontier.stream()
+        List<RankedState> ranked = mbtc.frontier.stream()
 //                .filter(s ->
 //                // subset of frontier relevant to the current actor
 //                s.data.get("who").equals(actor) || s.data.get("who").equals(network)
@@ -372,7 +370,7 @@ public class Present {
             List<Value> original = Arrays.asList(IntValue.ValOne, IntValue.ValZero);
             List<Value> revised = Arrays.asList(IntValue.ValOne, BoolValue.ValFalse);
 
-            Patch<Value> patch = Patch.generate(original, revised, MeyersDiff.factory().create(Present::valueEqual).computeDiff(original, revised, null), false);
+//            Patch<Value> patch = Patch.generate(original, revised, MeyersDiff.factory().create(Present::valueEqual).computeDiff(original, revised, null), false);
         }
 
 //        static DiffAlgorithmFactory DEFAULT_DIFF =
