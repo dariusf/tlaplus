@@ -1,6 +1,6 @@
 ---- MODULE Stress ----
 
-EXTENDS Naturals
+EXTENDS Naturals, TLCExt
 
 VARIABLE x
 CONSTANT RM
@@ -53,6 +53,8 @@ G == [[ a |-> 1 ] EXCEPT !["a"] = 2]["a"] = 2
 H == \A r \in {1, 2} : r = 1
 H1 == \A s \in {1, 2} : \A r \in {1, 2} : r = s
 H2 == [ r \in RM |-> "a" ]
+
+I == ToTrace(CounterExample)
 
 Next ==
   \/ A

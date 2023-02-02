@@ -35,12 +35,11 @@ public class GoTranslation {
      * we only try to split at the top level, for simple actions this produces better code.
      * for complicated cases we don't do anything fancy and produce a single large expression.
      */
-    public GoBlock translateTopLevel(Defns defns, ExprOrOpArgNode op) {
+    public GoBlock translateTopLevel(ExprOrOpArgNode op) {
 
         if (!(op instanceof OpApplNode)) {
-            throw fail("not op app node?");
+            throw fail("not op app node? " + Eval.prettyPrint(op));
         }
-
 
         UniqueString opName = ((OpApplNode) op).getOperator().getName();
         List<ExprOrOpArgNode> args = operatorArgs(op);
@@ -49,7 +48,7 @@ public class GoTranslation {
         String cond = isPost ? "postcondition" : "precondition";
 
         if (opName.equals(OP_cl)) {
-            return args.stream().map(a -> translateTopLevel(defns, a))
+            return args.stream().map(a -> translateTopLevel(a))
                     .reduce(GoBlock::seq).get();
         }
 
@@ -281,8 +280,11 @@ public class GoTranslation {
                 default:
                     Object userDefined = defns.get(name);
                     if (userDefined instanceof MethodValue) {
-                        System.out.println("warning: cannot be translated: " + Eval.prettyPrint(fml));
-                        return goExpr("");
+                        String s = Eval.prettyPrint(fml);
+                        System.out.println("warning: cannot be translated: " + s);
+                        // there's no expression which works in all contexts and lets code compile
+                        // return goExpr("/* cannot be translated: %s */", s);
+                        throw new CannotBeTranslatedException(s);
                     }
                     if (userDefined != null) {
                         return translateExpr(subst((OpApplNode) fml));

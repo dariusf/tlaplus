@@ -56,27 +56,32 @@ public class Monitoring {
                 .collect(Collectors.toList());
 
         String monitorFns = definitions.stream().flatMap(d -> {
-            if (d.getBody() instanceof SubstInNode) {
-                // INSTANCE declarations are one instance of this
-                return Stream.of();
+            try {
+                if (d.getBody() instanceof SubstInNode) {
+                    // INSTANCE declarations are one instance of this
+                    return Stream.of();
+                }
+                if (d.getBody() instanceof LetInNode) {
+                    // TODO
+                    return Stream.of();
+                }
+                if (!(d.getBody() instanceof OpApplNode)) {
+                    throw fail("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
+                }
+                String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
+                GoTranslation translation = new GoTranslation(defns, constants);
+                GoBlock body = translation.translateTopLevel(d.getBody());
+                String fnName = "Check" + d.getName();
+                String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
+                        fnName,
+                        params,
+                        body
+                );
+                return Stream.of(a);
+            } catch (CannotBeTranslatedException e) {
+                return Stream.of(String.format("/* Action %s cannot be translated because of: %s */",
+                        d.getName(), e.getMessage()));
             }
-            if (d.getBody() instanceof LetInNode) {
-                // TODO
-                return Stream.of();
-            }
-            if (!(d.getBody() instanceof OpApplNode)) {
-                throw fail("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
-            }
-            String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
-            GoTranslation translation = new GoTranslation(defns, constants);
-            GoBlock body = translation.translateTopLevel(defns, d.getBody());
-            String a = String.format("// Check%s\nfunc (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
-                    d.getName(),
-                    d.getName(),
-                    params,
-                    body
-            );
-            return Stream.of(a);
         }).collect(Collectors.joining("\n\n"));
 
         String pkg = "monitoring";
