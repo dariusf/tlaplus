@@ -1,9 +1,7 @@
 package tlc2.synth;
 
-import tla2sany.semantic.ExprOrOpArgNode;
-import tla2sany.semantic.NumeralNode;
-import tla2sany.semantic.OpApplNode;
-import tla2sany.semantic.StringNode;
+import tla2sany.semantic.*;
+import tlc2.monitor.GoExpr;
 
 import java.util.Arrays;
 import java.util.stream.Collectors;
@@ -67,7 +65,11 @@ public class PrettyPrintVisitor extends Visitor<String> {
                     node.getArgs()[0].accept(this),
                     node.getArgs()[1].accept(this));
         } else if (op.equals(OP_bf.toString())) {
-            return "";
+            // TODO assumes one bound variable
+            String set = node.getBdedQuantBounds()[0].accept(this);
+            String var = node.getQuantSymbolLists().get(0).getName().toString();
+            String cond = node.getArgs()[0].accept(this);
+            return String.format("\\A %s \\in %s : %s", var, set, cond);
         } else if (op.equals(OP_fc.toString())) {
             return "";
         } else if (op.equals(OP_exc.toString())) {

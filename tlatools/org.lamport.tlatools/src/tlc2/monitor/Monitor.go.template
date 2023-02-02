@@ -67,7 +67,7 @@ func (e Event) String() string {
 
 /*
 type Constants struct {
-    %s
+    %%s
 }
 */
 

@@ -21,6 +21,10 @@ public class GoTranslation {
     private final Defns defns;
     private final Map<String, IValue> constants;
 
+    // These two fields should be parameters of translateExpr but are here to reduce boilerplate
+    private final Set<String> boundVarNames = new HashSet<>();
+    private final Stack<Type> typ = new Stack<>();
+
     public GoTranslation(Defns defns, Map<String, IValue> constants) {
         this.defns = defns;
         this.constants = constants;
@@ -73,10 +77,6 @@ public class GoTranslation {
 
 
     public GoExpr translateExpr(ExprOrOpArgNode fml) {
-        return translateExpr(fml, null);
-    }
-
-    public GoExpr translateExpr(ExprOrOpArgNode fml, Type typ) {
         if (isConstant(fml)) {
             if (fml instanceof StringNode) {
                 return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
@@ -95,6 +95,8 @@ public class GoTranslation {
                 // this gets the values from the config file, then compiles and inlines them.
                 // an alternative is to look them up from what is provided in the monitor?
                 return translateValue(constants.get(varName));
+            } else if (boundVarNames.contains(varName)) {
+                return goExpr(varName);
             }
 
             String eventVar = isPrimedVar(fml) ? "this" : "prev";
@@ -105,10 +107,10 @@ public class GoTranslation {
 //                // somehow empty sequences land in here
 //                return goExpr("[]any{}");
 //            }
-            if (typ == null) {
+            if (typ.empty()) {
                 return goExpr("%s.state.%s", eventVar, name);
             } else {
-                return goExpr("%s.state.%s.(%s)", eventVar, name, goTypeName(typ));
+                return goExpr("%s.state.%s.(%s)", eventVar, name, goTypeName(typ.peek()));
             }
 //            return name;
 //        } else if (isPrimedVar(fml)) {
@@ -125,10 +127,13 @@ public class GoTranslation {
                 case "+":
                 case "-":
                 case "*":
-                case "/":
-                    return goExpr("(%s %s %s)",
-                            translateExpr(args.get(0), Type.INT),
-                            name, translateExpr(args.get(1), Type.INT));
+                case "/": {
+                    this.typ.push(Type.INT);
+                    GoExpr a1 = translateExpr(args.get(0));
+                    GoExpr a2 = translateExpr(args.get(1));
+                    this.typ.pop();
+                    return goExpr("(%s %s %s)", a1, name, a2);
+                }
                 case "=": {
                     GoExpr a1 = translateExpr(args.get(0));
                     GoExpr a2 = translateExpr(args.get(1));
@@ -220,16 +225,23 @@ public class GoTranslation {
                 }
                 case "$BoundedForall": {
                     OpApplNode cond = (OpApplNode) args.get(0);
-                    int l = ((OpApplNode) fml).getBdedQuantBounds().length;
-                    for (int i = 0; i < l; i++) {
-                        ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[i];
-                        GoExpr sset = translateExpr(set);
-                        FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(i);
-                        String set1 = Eval.prettyPrint(set);
-                        String varName = var.getName().toString();
-                        int c = 1;
-                    }
-                    return goExpr("");
+                    // int l = ((OpApplNode) fml).getBdedQuantBounds().length;
+                    // TODO this translation assumes l = 1 for simplicity
+                    // for (int i = 0; i < l; i++) {
+                    ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[0];
+                    GoExpr sset = translateExpr(set);
+                    FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(0);
+
+                    String v = fresh();
+                    String k1 = fresh();
+
+                    boundVarNames.add(k1);
+                    GoExpr body = translateExpr(substitute(cond, Map.of(var, tla(k1))));
+                    boundVarNames.remove(k1);
+
+                    GoBlock b = goBlock("%1$s := true\nfor %2$s, _ := range %3$s {", v, k1, sset)
+                            .seq(goBlock("%1$s = %1$s && %4$s\n}", v, k1, sset, body));
+                    return goExpr(b, "%s", v);
                 }
                 case "UNCHANGED": {
                     if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {

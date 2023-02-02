@@ -49,6 +49,8 @@ public class Monitoring {
 //                ).collect(Collectors.joining("\n"));
 
         List<OpDefNode> definitions = rootModule.getDefinitions().stream()
+                // exclude definitions pulled in by an INSTANCE
+                .filter(d -> ((OpDefNode) d).getSource().getOriginallyDefinedInModuleNode() == rootModule)
                 .filter(Monitoring::operatorWhitelist)
                 .map(d -> (OpDefNode) d)
                 .collect(Collectors.toList());

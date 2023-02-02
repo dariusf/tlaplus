@@ -241,6 +241,10 @@ public class OpApplNode extends ExprNode implements ExploreNode {
     other.ranges = this.ranges;
     other.tupleOrs = this.tupleOrs;
     other.subExpressionOf = this.subExpressionOf;
+
+    other.level = this.level;
+    other.levelChecked = this.levelChecked;
+    other.allParams = new HashSet<>(this.allParams);
     return other;
   }
 

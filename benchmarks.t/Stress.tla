@@ -50,6 +50,9 @@ F(z) == TRUE
 
 G == [[ a |-> 1 ] EXCEPT !["a"] = 2]["a"] = 2
 
+H == \A r \in {1, 2} : r = 1
+H1 == \A s \in {1, 2} : \A r \in {1, 2} : r = s
+
 Next ==
   \/ A
   \/ A1
@@ -59,6 +62,7 @@ Next ==
   \/ E
   \/ F(1)
   \/ G
+  \/ H
 
 Spec == Init /\ [][Next]_vars
 

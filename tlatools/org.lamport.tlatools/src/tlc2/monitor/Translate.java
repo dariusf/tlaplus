@@ -1,6 +1,7 @@
 package tlc2.monitor;
 
 import tla2sany.semantic.*;
+import tlc2.synth.Eval;
 import util.UniqueString;
 
 import java.util.ArrayList;
@@ -27,6 +28,10 @@ public class Translate {
     static OpApplNode tla(UniqueString op, ExprOrOpArgNode... args) {
         OpDefNode def = new OpDefNode(op);
         OpApplNode app = new OpApplNode(def);
+        // TODO level checking
+        app.levelChecked = 1; // disable some errors on new expressions
+        // TODO forall params
+        // TODO binder params
         app.setArgs(args);
         return app;
     }
@@ -68,7 +73,7 @@ public class Translate {
         ExprOrOpArgNode[] args = Arrays.stream(body.getArgs())
                 .map(a -> {
                     for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
-                        if (a.getAllParams().contains(e.getKey())) {
+                        if (a.getAllParams().contains(e.getKey()) && a.getAllParams().size() == 1) {
                             return e.getValue();
                         }
                     }
@@ -78,8 +83,9 @@ public class Translate {
                     return a;
                 })
                 .toArray(ExprOrOpArgNode[]::new);
-        OpApplNode res = new OpApplNode(body.getOperator());
+        OpApplNode res = body.astCopy();
         res.setArgs(args);
+        // System.out.printf("sub %s => %s%n", Eval.prettyPrint(body), Eval.prettyPrint(res));
         return res;
     }
 
