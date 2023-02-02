@@ -12,16 +12,15 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static tlc2.monitor.GoTranslation.goBlock;
 import static tlc2.monitor.Translate.fail;
+import static tlc2.monitor.Translate.substitute;
 
 public class Monitoring {
 
@@ -61,19 +60,35 @@ public class Monitoring {
                     // INSTANCE declarations are one instance of this
                     return Stream.of();
                 }
-                if (d.getBody() instanceof LetInNode) {
-                    // TODO
-                    return Stream.of();
+//                Set<String> letBoundNames = new HashSet<>();
+                // TODO move this into GoTranslation
+                GoTranslation translation = new GoTranslation(defns, constants);
+
+                // inline all the let bindings
+                GoBlock letBindings = goBlock("");
+                ExprNode defBody = d.getBody();
+                while (defBody instanceof LetInNode) {
+                    LetInNode let = (LetInNode) defBody;
+                    for (OpDefNode letLet : let.getLets()) {
+                        // TODO assume there are no local operator definitions
+                        String letVar = letLet.getName().toString();
+                        translation.boundVarNames.add(letVar);
+                        letBindings = letBindings.seq(goBlock("%s := %s", letVar, translation.translateExpr(letLet.getBody())));
+                    }
+                    defBody = let.getBody();
                 }
-                if (!(d.getBody() instanceof OpApplNode)) {
-                    throw fail("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
+
+                if (!(defBody instanceof OpApplNode)) {
+                    // TODO let bindings show up BOTH as top-level operator definitions and as LetInNodes.
+                    //  From a quick glance at their state, there doesn't seem to be a way to filter them out.
+                    //  We ignore them as there is code above for inlining them.
+                    String m = String.format("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
+                    throw new CannotBeTranslatedException(m);
                 }
                 String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
-                GoTranslation translation = new GoTranslation(defns, constants);
-                GoBlock body = translation.translateTopLevel(d.getBody());
-                String fnName = "Check" + d.getName();
+                GoBlock body = translation.translateTopLevel(defBody);
                 String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
-                        fnName,
+                        d.getName(),
                         params,
                         body
                 );

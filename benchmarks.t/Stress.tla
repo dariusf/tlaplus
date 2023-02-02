@@ -55,6 +55,11 @@ H1 == \A s \in {1, 2} : \A r \in {1, 2} : r = s
 H2 == [ r \in RM |-> "a" ]
 
 I == ToTrace(CounterExample)
+I1 ==
+  LET a == 1
+      b == 1 IN
+  LET c == 1 IN
+  (a + b + c) = 1
 
 Next ==
   \/ A

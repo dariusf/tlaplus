@@ -1,6 +1,5 @@
 package tlc2.monitor;
 
-import org.javers.common.collections.Maps;
 import tla2sany.semantic.*;
 import tlc2.synth.Eval;
 import tlc2.tool.Defns;
@@ -23,7 +22,7 @@ public class GoTranslation {
     private final Map<String, IValue> constants;
 
     // These two fields should be parameters of translateExpr but are here to reduce boilerplate
-    private final Set<String> boundVarNames = new HashSet<>();
+    public final Set<String> boundVarNames = new HashSet<>();
     private final Stack<Type> typ = new Stack<>();
 
     public GoTranslation(Defns defns, Map<String, IValue> constants) {
@@ -242,7 +241,7 @@ public class GoTranslation {
                     String v1 = fresh();
                     GoBlock unionMaps = goBlock("%1$s := map[any]bool{}\n" +
                                     "for %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %5$s\n}\n",
-                            v, k1, v1, translateExpr(set), translateExpr(substitute(rhs, Maps.of(var, tla(v1)))));
+                            v, k1, v1, translateExpr(set), translateExpr(substitute(rhs, Collections.singletonMap(var, tla(v1)))));
                     return goExpr(unionMaps, "%s", v);
                 }
                 case "$BoundedForall": {
@@ -281,7 +280,9 @@ public class GoTranslation {
                     Object userDefined = defns.get(name);
                     if (userDefined instanceof MethodValue) {
                         String s = Eval.prettyPrint(fml);
-                        System.out.println("warning: cannot be translated: " + s);
+                        // we used to print a warning, but if the user never discovers the missing operator,
+                        // it probably doesn't matter
+                        // System.out.println("warning: cannot be translated: " + s);
                         // there's no expression which works in all contexts and lets code compile
                         // return goExpr("/* cannot be translated: %s */", s);
                         throw new CannotBeTranslatedException(s);
@@ -372,7 +373,7 @@ public class GoTranslation {
      * printf, but if the arguments are GoExprs, their definitions are taken
      * out and placed at the top of the resulting block.
      */
-    private static GoBlock goBlock(String fmt, Object... args) {
+    static GoBlock goBlock(String fmt, Object... args) {
         List<String> defs = new ArrayList<>();
         Object[] args1 = Arrays.stream(args).flatMap(a -> {
             if (a instanceof GoExpr) {
