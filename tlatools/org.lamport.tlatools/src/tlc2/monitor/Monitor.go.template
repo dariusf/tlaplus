@@ -65,17 +65,25 @@ func (e Event) String() string {
 		e.typ, printParams(e.params), path.Base(e.file), e.line, e.state)
 }
 
+/*
+type Constants struct {
+    %s
+}
+*/
+
 type Monitor struct {
 	// the goal of extra is just to remove maintaining our own aux state,
 	// which may be annoying and error-prone as it may be passed across several functions
 	extra  []Event
 	events []Event
+	//constants Constants
 }
 
-func New() Monitor {
+func New(/* constants Constants */) Monitor {
 	return Monitor{
 		extra:  []Event{},
 		events: []Event{},
+		//constants: constants,
 	}
 }
 

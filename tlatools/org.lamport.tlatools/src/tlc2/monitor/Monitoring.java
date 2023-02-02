@@ -36,12 +36,17 @@ public class Monitoring {
         }
     }
 
-    public static void translate(Defns defns, Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
+    public static void translate(Defns defns, Map<String, IValue> constants, Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
 
         String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/monitor/Monitor.go.template"));
 
         UniqueString moduleName = rootModule.getName();
         List<OpDeclNode> variables = Arrays.asList(rootModule.getVariableDecls());
+
+//        String constantsFields = constants.entrySet().stream()
+//                .map(e ->
+//                        String.format("%s %s", e.getKey(), "any") // TODO?
+//                ).collect(Collectors.joining("\n"));
 
         List<OpDefNode> definitions = rootModule.getDefinitions().stream()
                 .filter(Monitoring::operatorWhitelist)
@@ -53,11 +58,15 @@ public class Monitoring {
                 // INSTANCE declarations are one instance of this
                 return Stream.of();
             }
+            if (d.getBody() instanceof LetInNode) {
+                // TODO
+                return Stream.of();
+            }
             if (!(d.getBody() instanceof OpApplNode)) {
-                throw fail("not op appl node?");
+                throw fail("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
             }
             String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
-            GoTranslation translation = new GoTranslation(defns);
+            GoTranslation translation = new GoTranslation(defns, constants);
             GoBlock body = translation.translateTopLevel(defns, d.getBody());
             String a = String.format("// Check%s\nfunc (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
                     d.getName(),
@@ -92,7 +101,9 @@ public class Monitoring {
 
         String module = String.format(overallTemplate,
                 pkg, imports, varDecls, actionNames,
-                stringSwitchCases, checkSwitchCases, monitorFns);
+                stringSwitchCases,
+//                constantsFields,
+                checkSwitchCases, monitorFns);
 //        String module = monitorFns;
 
         Path filename = Paths.get(moduleName + ".go");

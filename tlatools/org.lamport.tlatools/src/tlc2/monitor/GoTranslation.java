@@ -3,6 +3,10 @@ package tlc2.monitor;
 import tla2sany.semantic.*;
 import tlc2.synth.Eval;
 import tlc2.tool.Defns;
+import tlc2.value.IValue;
+import tlc2.value.impl.MethodValue;
+import tlc2.value.impl.StringValue;
+import tlc2.value.impl.*;
 import util.UniqueString;
 
 import java.util.*;
@@ -15,9 +19,11 @@ import static tlc2.monitor.Translate.*;
 public class GoTranslation {
 
     private final Defns defns;
+    private final Map<String, IValue> constants;
 
-    public GoTranslation(Defns defns) {
+    public GoTranslation(Defns defns, Map<String, IValue> constants) {
         this.defns = defns;
+        this.constants = constants;
     }
 
     /**
@@ -79,15 +85,22 @@ public class GoTranslation {
             }
             throw fail("unknown");
         } else if (isVar(fml) || isPrimedVar(fml)) {
-            if (getVarName((OpApplNode) fml).equals("TRUE")) {
+            String varName = getVarName((OpApplNode) fml);
+
+            if (varName.equals("TRUE")) {
                 return goExpr("true");
-            } else if (getVarName((OpApplNode) fml).equals("FALSE")) {
+            } else if (varName.equals("FALSE")) {
                 return goExpr("false");
+            } else if (constants.containsKey(varName)) {
+                // this gets the values from the config file, then compiles and inlines them.
+                // an alternative is to look them up from what is provided in the monitor?
+                return translateValue(constants.get(varName));
             }
+
             String eventVar = isPrimedVar(fml) ? "this" : "prev";
             String name = isPrimedVar(fml)
                     ? getVarName((OpApplNode) operatorArgs(fml).get(0))
-                    : getVarName((OpApplNode) fml);
+                    : varName;
 //            if (name.equals("$Tuple")) {
 //                // somehow empty sequences land in here
 //                return goExpr("[]any{}");
@@ -200,6 +213,23 @@ public class GoTranslation {
                     GoBlock def1 = goBlock("_, %s := %s[%s]", var, coll, thing);
                     return goExpr(def1, "!%s", var);
                 }
+                case "$FcnConstructor": {
+                    String s = Eval.prettyPrint(fml);
+                    int a = 1;
+                    return goExpr("");
+                }
+                case "$BoundedForall": {
+                    OpApplNode cond = (OpApplNode) args.get(0);
+                    int l = ((OpApplNode) fml).getBdedQuantBounds().length;
+                    for (int i = 0; i < l; i++) {
+                        ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[i];
+                        FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(i);
+                        String set1 = Eval.prettyPrint(set);
+                        String varName = var.getName().toString();
+                        int c = 1;
+                    }
+                    return goExpr("");
+                }
                 case "UNCHANGED": {
                     if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {
                         ExprOrOpArgNode[] tupleArgs = ((OpApplNode) args.get(0)).getArgs();
@@ -213,7 +243,11 @@ public class GoTranslation {
                     return translateExpr(equal);
                 }
                 default:
-                    OpDefNode userDefined = (OpDefNode) defns.get(name);
+                    Object userDefined = defns.get(name);
+                    if (userDefined instanceof MethodValue) {
+                        System.out.println("warning: cannot be translated: " + Eval.prettyPrint(fml));
+                        return goExpr("");
+                    }
                     if (userDefined != null) {
                         return translateExpr(subst((OpApplNode) fml));
                     }
@@ -239,6 +273,33 @@ public class GoTranslation {
             return e.expr;
         }).collect(Collectors.joining(s));
         return res;
+    }
+
+    /**
+     * this produces an expression, but without defs
+     */
+    private static GoExpr translateValue(IValue v) {
+        if (v instanceof StringValue) {
+            return goExpr("\"" + ((StringValue) v).getVal() + "\"");
+        } else if (v instanceof IntValue) {
+            return goExpr(v.toString());
+        } else if (v instanceof SetEnumValue) {
+            // empty set
+            return goExpr("map[any]bool{}");
+        } else if (v instanceof TupleValue) {
+            // empty seq
+            return goExpr("[]any{}");
+        } else if (v instanceof FcnRcdValue) {
+            // record literals, like [r1 |-> "working"]
+            List<String> res = new ArrayList<>();
+            for (int i = 0; i < ((FcnRcdValue) v).domain.length; i++) {
+                res.add(String.format("%s: %s",
+                        translateValue(((FcnRcdValue) v).domain[i]),
+                        translateValue(((FcnRcdValue) v).values[i])));
+            }
+            return goExpr("map[interface{}]interface{}{%s}", String.join(", ", res));
+        }
+        throw fail("invalid type of value " + v.getClass().getSimpleName());
     }
 
     /**

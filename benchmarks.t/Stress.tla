@@ -3,6 +3,8 @@
 EXTENDS Naturals
 
 VARIABLE x
+CONSTANT RM
+
 vars == <<x>>
 
 Init == x = 1

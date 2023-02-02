@@ -58,8 +58,8 @@ public class Translate {
         return new ArrayList<>(Arrays.asList(((OpApplNode) body).getArgs()));
     }
 
-    public static RuntimeException fail(String s) {
-        RuntimeException e = new RuntimeException(s);
+    public static RuntimeException fail(String s, Object... args) {
+        RuntimeException e = new RuntimeException(String.format(s, args));
         e.printStackTrace();
         return e;
     }

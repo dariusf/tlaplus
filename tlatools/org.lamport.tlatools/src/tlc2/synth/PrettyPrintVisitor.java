@@ -66,6 +66,10 @@ public class PrettyPrintVisitor extends Visitor<String> {
             return String.format("(%s \\/ %s)",
                     node.getArgs()[0].accept(this),
                     node.getArgs()[1].accept(this));
+        } else if (op.equals(OP_bf.toString())) {
+            return "";
+        } else if (op.equals(OP_fc.toString())) {
+            return "";
         } else if (op.equals(OP_exc.toString())) {
             // an $Except has two args, a variable, and a $Pair, whose args are the key and value to assign
             OpApplNode pair = (OpApplNode) node.getArgs()[1];

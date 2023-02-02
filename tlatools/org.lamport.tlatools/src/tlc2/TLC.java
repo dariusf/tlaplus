@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import model.InJarFilenameToStream;
 import model.ModelInJar;
@@ -1186,7 +1187,9 @@ public class TLC {
                 Map<UniqueString, IValue> initialState = tool.getInitStates().elementAt(0).getVals();
                 ModuleNode rootModule = tool.getSpecProcessor().getSpecObj().getRootModule();
                 Defns defns = tool.getSpecProcessor().getDefns();
-                Monitoring.translate(defns, initialState, rootModule);
+                Map<OpDefOrDeclNode, Object> moduleConstantValues = tool.getSpecProcessor().getConstantDefns().get(rootModule);
+                Map<String, IValue> constants = Arrays.stream(rootModule.getConstantDecls()).collect(Collectors.toMap(c -> c.getName().toString(), c -> (IValue) moduleConstantValues.get(c)));
+                Monitoring.translate(defns, constants, initialState, rootModule);
                 result = EC.NO_ERROR;
 			} else { // RunMode.MODEL_CHECK
 				if (noSeed) {
