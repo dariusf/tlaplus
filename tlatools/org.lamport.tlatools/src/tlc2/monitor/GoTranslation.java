@@ -1,5 +1,6 @@
 package tlc2.monitor;
 
+import org.javers.common.collections.Maps;
 import tla2sany.semantic.*;
 import tlc2.synth.Eval;
 import tlc2.tool.Defns;
@@ -189,9 +190,8 @@ public class GoTranslation {
                             .get();
                 case "$Except": {
                     // create a new map differing in one element
-                    List<ExprOrOpArgNode> child = operatorArgs(fml);
-                    ExprOrOpArgNode unprimed = child.get(0);
-                    List<ExprOrOpArgNode> pairArgs = operatorArgs(child.get(1));
+                    ExprOrOpArgNode unprimed = args.get(0);
+                    List<ExprOrOpArgNode> pairArgs = operatorArgs(args.get(1));
                     ExprOrOpArgNode map = operatorArgs(pairArgs.get(0)).get(0);
                     ExprOrOpArgNode key = pairArgs.get(1);
                     String v = fresh();
@@ -203,6 +203,21 @@ public class GoTranslation {
                     GoBlock copyMap = goBlock("%1$s := map[string]any{}\nfor %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %3$s\n}\n%1$s[%5$s] = %6$s",
                             v, k1, v1, unprimed1, map1, key1);
                     return goExpr(copyMap, "%s", v);
+                }
+                case "\\union": {
+                    // create a new map with the elements of both
+                    ExprOrOpArgNode left = args.get(0);
+                    ExprOrOpArgNode right = args.get(1);
+                    String v = fresh();
+                    String k1 = fresh();
+                    String v1 = fresh();
+                    String k2 = fresh();
+                    String v2 = fresh();
+                    GoBlock unionMaps = goBlock("%1$s := map[any]bool{}\n" +
+                                    "for %2$s, %3$s := range %6$s {\n%1$s[%2$s] = %3$s\n}\n" +
+                                    "for %4$s, %5$s := range %7$s {\n%1$s[%4$s] = %5$s\n}",
+                            v, k1, v1, k2, v2, translateExpr(left), translateExpr(right));
+                    return goExpr(unionMaps, "%s", v);
                 }
                 case "\\in": {
                     String var = fresh();
@@ -219,9 +234,17 @@ public class GoTranslation {
                     return goExpr(def1, "!%s", var);
                 }
                 case "$FcnConstructor": {
-                    String s = Eval.prettyPrint(fml);
-                    int a = 1;
-                    return goExpr("");
+                    // create a map and fill it with values from an existing set
+                    ExprOrOpArgNode rhs = args.get(0);
+                    ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[0];
+                    FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(0);
+                    String v = fresh();
+                    String k1 = fresh();
+                    String v1 = fresh();
+                    GoBlock unionMaps = goBlock("%1$s := map[any]bool{}\n" +
+                                    "for %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %5$s\n}\n",
+                            v, k1, v1, translateExpr(set), translateExpr(substitute(rhs, Maps.of(var, tla(v1)))));
+                    return goExpr(unionMaps, "%s", v);
                 }
                 case "$BoundedForall": {
                     OpApplNode cond = (OpApplNode) args.get(0);

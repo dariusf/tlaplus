@@ -69,7 +69,11 @@ public class Translate {
         return e;
     }
 
-    public static OpApplNode substitute(OpApplNode body, Map<FormalParamNode, OpApplNode> subs) {
+    public static <T extends SemanticNode> T substitute(T node, Map<FormalParamNode, OpApplNode> subs) {
+        if (!(node instanceof OpApplNode)) {
+            return node;
+        }
+        OpApplNode body = (OpApplNode) node;
         ExprOrOpArgNode[] args = Arrays.stream(body.getArgs())
                 .map(a -> {
                     for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
@@ -86,7 +90,7 @@ public class Translate {
         OpApplNode res = body.astCopy();
         res.setArgs(args);
         // System.out.printf("sub %s => %s%n", Eval.prettyPrint(body), Eval.prettyPrint(res));
-        return res;
+        return (T) res;
     }
 
 }

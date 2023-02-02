@@ -71,7 +71,10 @@ public class PrettyPrintVisitor extends Visitor<String> {
             String cond = node.getArgs()[0].accept(this);
             return String.format("\\A %s \\in %s : %s", var, set, cond);
         } else if (op.equals(OP_fc.toString())) {
-            return "";
+            String set = node.getBdedQuantBounds()[0].accept(this);
+            String var = node.getQuantSymbolLists().get(0).getName().toString();
+            String cond = node.getArgs()[0].accept(this);
+            return String.format("[ %s \\in %s |-> %s ]", var, set, cond);
         } else if (op.equals(OP_exc.toString())) {
             // an $Except has two args, a variable, and a $Pair, whose args are the key and value to assign
             OpApplNode pair = (OpApplNode) node.getArgs()[1];
