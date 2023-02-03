@@ -160,7 +160,9 @@ public class GoTranslation {
                     return goExpr("%s[%s]", map, key);
                 }
                 case "$SetEnumerate": {
-                    List<GoExpr> exprs = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
+                    List<GoExpr> exprs = args.stream()
+                            .map(a -> translateExpr(a))
+                            .map(a -> goExpr("%s: true", a)).collect(Collectors.toList());
                     return goExpr("map[any]bool{%s}", joinGoExpr(exprs, ", "));
                 }
                 case "$RcdConstructor":
@@ -232,6 +234,7 @@ public class GoTranslation {
                     return goExpr(def1, "!%s", var);
                 }
                 case "$FcnConstructor": {
+                    // [r \in RM |-> "expr using r"]
                     // create a map and fill it with values from an existing set
                     ExprOrOpArgNode rhs = args.get(0);
                     ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[0];
@@ -239,9 +242,15 @@ public class GoTranslation {
                     String v = fresh();
                     String k1 = fresh();
                     String v1 = fresh();
-                    GoBlock unionMaps = goBlock("%1$s := map[any]bool{}\n" +
+                    ExprOrOpArgNode rhs1 = substitute(rhs, Collections.singletonMap(var, tla(v1)));
+                    if (rhs == rhs1) {
+                        v1 = "_";
+                    }
+                    boundVarNames.add(v1);
+                    GoBlock unionMaps = goBlock("%1$s := map[any]any{}\n" +
                                     "for %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %5$s\n}\n",
-                            v, k1, v1, translateExpr(set), translateExpr(substitute(rhs, Collections.singletonMap(var, tla(v1)))));
+                            v, k1, v1, translateExpr(set), translateExpr(rhs1));
+                    boundVarNames.remove(v1);
                     return goExpr(unionMaps, "%s", v);
                 }
                 case "$BoundedForall": {

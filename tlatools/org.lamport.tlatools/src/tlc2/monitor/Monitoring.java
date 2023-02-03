@@ -54,6 +54,8 @@ public class Monitoring {
                 .map(d -> (OpDefNode) d)
                 .collect(Collectors.toList());
 
+        Set<String> translatedDefs = new HashSet<>();
+
         String monitorFns = definitions.stream().flatMap(d -> {
             try {
                 if (d.getBody() instanceof SubstInNode) {
@@ -88,10 +90,11 @@ public class Monitoring {
                 String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
                 GoBlock body = translation.translateTopLevel(defBody);
                 String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
-                        d.getName(),
+                        d.getName().toString(),
                         params,
-                        body
+                        letBindings.seq(body)
                 );
+                translatedDefs.add(d.getName().toString());
                 return Stream.of(a);
             } catch (CannotBeTranslatedException e) {
                 return Stream.of(String.format("/* Action %s cannot be translated because of: %s */",
@@ -103,15 +106,18 @@ public class Monitoring {
         String varDecls = variables.stream().map(v -> String.format("%s any", v.getName())).collect(Collectors.joining("\n"));
 
         String actionNames = definitions.stream()
+                .filter(d -> translatedDefs.contains(d.getName().toString()))
                 .map(d -> d.getName().toString())
                 .collect(Collectors.joining("\n"));
 
         String stringSwitchCases = definitions.stream()
+                .filter(d -> translatedDefs.contains(d.getName().toString()))
                 .map(d -> String.format("case %1$s:\nreturn \"%1$s\"",
                         d.getName().toString()))
                 .collect(Collectors.joining("\n"));
 
         String checkSwitchCases = definitions.stream()
+                .filter(d -> translatedDefs.contains(d.getName().toString()))
                 .map(d -> String.format("case %1$s:\nif err := m.Check%1$s(%2$si, prev, this); err != nil {\nreturn err\n}",
                         d.getName().toString(),
                         translateParams(d, (i, p) -> String.format("this.params[%d]", i)))

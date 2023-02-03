@@ -51,8 +51,9 @@ F(z) == TRUE
 G == [[ a |-> 1 ] EXCEPT !["a"] = 2]["a"] = 2
 
 H == \A r \in {1, 2} : r = 1
-H1 == \A s \in {1, 2} : \A r \in {1, 2} : r = s
-H2 == [ r \in RM |-> "a" ]
+H1 == \A s \in {1, 2} : \A r \in {3, 4} : r = s
+H2 == [ r \in RM |-> "a" ]["a"] = 1
+H3 == [ r \in RM |-> r ]["a"] = 1
 
 I == ToTrace(CounterExample)
 I1 ==

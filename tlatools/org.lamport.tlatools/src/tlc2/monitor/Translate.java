@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class Translate {
 
@@ -69,27 +70,54 @@ public class Translate {
         return e;
     }
 
+    /**
+     * If no substitution is performed, guarantees substitute(n, subs) == n
+     */
     public static <T extends SemanticNode> T substitute(T node, Map<FormalParamNode, OpApplNode> subs) {
         if (!(node instanceof OpApplNode)) {
             return node;
         }
+
         OpApplNode body = (OpApplNode) node;
+
+        boolean isVar = body.getArgs().length == 0 && body.getAllParams().size() == 1;
+        if (isVar) {
+        for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
+            // checking size = 1 makes this not "containingBoundVar"
+            boolean isBound = body.getAllParams().contains(e.getKey());
+            if (isBound) {
+                return (T) e.getValue();
+            }
+        }
+        }
+
+        // not a bound variable. try to substitute inside it
         ExprOrOpArgNode[] args = Arrays.stream(body.getArgs())
                 .map(a -> {
-                    for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
-                        if (a.getAllParams().contains(e.getKey()) && a.getAllParams().size() == 1) {
-                            return e.getValue();
-                        }
-                    }
+//                    for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
+//                        // checking size = 1 makes this not "containingBoundVar"
+//                        boolean isBoundVar = a.getAllParams().contains(e.getKey()) && a.getAllParams().size() == 1;
+//                        if (isBoundVar) {
+//                            return e.getValue();
+//                        }
+//                    }
                     if (a instanceof OpApplNode) {
                         return substitute((OpApplNode) a, subs);
                     }
                     return a;
                 })
                 .toArray(ExprOrOpArgNode[]::new);
+
+        boolean unchanged = IntStream.range(0, args.length).allMatch(i -> args[i] == body.getArgs()[i]);
+        if (unchanged) {
+            return node;
+        }
+
         OpApplNode res = body.astCopy();
         res.setArgs(args);
         // System.out.printf("sub %s => %s%n", Eval.prettyPrint(body), Eval.prettyPrint(res));
+
+        // this is essentially (OpApplNode) res and is safe due to the checks above
         return (T) res;
     }
 
