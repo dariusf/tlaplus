@@ -244,7 +244,7 @@
   
   type Monitor struct {
   	// the goal of extra is just to remove maintaining our own aux state,
-  	// which may be annoying and error-prone as it may be passed across several functions
+  	// which is annoying and error-prone as it may have to be passed across several functions
   	extra  []Event
   	events []Event
   	//constants Constants
@@ -302,7 +302,7 @@
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
-  		return fail("postcondition failed at %d; expected '(x) = x + 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("postcondition failed at %d; '(x) = x + 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -310,7 +310,7 @@
   func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 2) {
-  		return fail("precondition failed at %d; expected x < 2 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; x < 2 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -318,7 +318,7 @@
   func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 3) {
-  		return fail("precondition failed at %d; expected x < 3 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; x < 3 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -326,6 +326,8 @@
   // translated straightforwardly from TLA+ action.
   // conjunctions become seq composition
   // disjunctions are all checked and at least one branch has to be true
+  
+  /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
   
   	if prev.state.x.(int) <= 0 {
@@ -344,14 +346,7 @@
   
   	return nil
   }
-  
-  // can output a monitoring trace to show what happened from the perspective of the impl
-  // this is also used to check certain things like post after pre
-  // contribution is a scheme for producing monitors. checks only safety but TLA very expressive, some unique challenges there, just like apalache, which is otherwise routine. practical contribution
-  // work on real raft
-  // how to identify what the actions are? annotations or an extra variable in the ast that we can look at
-  // types. or maybe cast on demand
-  // minimize amount of engineering work, as markus said
+  */
   
   // this state value can have nil fields
   func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
@@ -524,7 +519,7 @@
   
   type Monitor struct {
   	// the goal of extra is just to remove maintaining our own aux state,
-  	// which may be annoying and error-prone as it may be passed across several functions
+  	// which is annoying and error-prone as it may have to be passed across several functions
   	extra  []Event
   	events []Event
   	//constants Constants
@@ -622,10 +617,10 @@
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 0) {
-  		return fail("precondition failed at %d; expected x < 0 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; x < 0 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
-  		return fail("postcondition failed at %d; expected '(x) = x + 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("postcondition failed at %d; '(x) = x + 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -633,10 +628,10 @@
   func (m *Monitor) CheckA1(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 0) {
-  		return fail("precondition failed at %d; expected x < 0 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; x < 0 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int)+1)) && (prev.state.x.(int) < 0)) {
-  		return fail("precondition failed at %d; expected '(x) = x + 1 \\land x < 0 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; '(x) = x + 1 \\land x < 0 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -644,7 +639,7 @@
   func (m *Monitor) CheckB(trace_i int, prev Event, this Event) error {
   
   	if !(reflect.DeepEqual(this.state.x, prev.state.x)) {
-  		return fail("precondition failed at %d; expected UNCHANGED(x) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; UNCHANGED(x) (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -652,7 +647,7 @@
   func (m *Monitor) CheckC(trace_i int, prev Event, this Event) error {
   
   	if !(reflect.DeepEqual(prev.state.x, prev.state.x)) {
-  		return fail("precondition failed at %d; expected Send(x) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; Send(x) (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -664,7 +659,7 @@
   		if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
   
   			if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
-  				return fail("precondition failed at %d; expected ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3)) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  				return fail("precondition failed at %d; ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3)) (prev: %+v, this: %+v)", trace_i, prev, this)
   			}
   		}
   
@@ -680,7 +675,7 @@
   		if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
   
   			if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
-  				return fail("precondition failed at %d; expected ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3)) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  				return fail("precondition failed at %d; ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3)) (prev: %+v, this: %+v)", trace_i, prev, this)
   			}
   		}
   
@@ -692,20 +687,20 @@
   func (m *Monitor) CheckF(z any, trace_i int, prev Event, this Event) error {
   
   	if !(true) {
-  		return fail("precondition failed at %d; expected TRUE but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; TRUE (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckG(trace_i int, prev Event, this Event) error {
   
-  	v0 := map[string]any{}
+  	v0 := map[any]any{}
   	for v1, v2 := range map[string]any{"a": 1} {
   		v0[v1] = v2
   	}
   	v0["a"] = 2
   	if !(reflect.DeepEqual(v0["a"], 2)) {
-  		return fail("precondition failed at %d; expected [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -717,7 +712,7 @@
   		v3 = v3 && reflect.DeepEqual(v4, 1)
   	}
   	if !(v3) {
-  		return fail("precondition failed at %d; expected \\A r \\in {1, 2} : r = 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; \\A r \\in {1, 2} : r = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -733,7 +728,7 @@
   		v5 = v5 && v7
   	}
   	if !(v5) {
-  		return fail("precondition failed at %d; expected \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -746,7 +741,7 @@
   	}
   
   	if !(reflect.DeepEqual(v9["a"], 1)) {
-  		return fail("precondition failed at %d; expected [ r \\in RM |-> \"a\" ][\"a\"] = 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; [ r \\in RM |-> \"a\" ][\"a\"] = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -759,7 +754,7 @@
   	}
   
   	if !(reflect.DeepEqual(v12["a"], 1)) {
-  		return fail("precondition failed at %d; expected [ r \\in RM |-> r ][\"a\"] = 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; [ r \\in RM |-> r ][\"a\"] = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -778,7 +773,7 @@
   	b := 1
   	c := 1
   	if !(reflect.DeepEqual(((a + b) + c), 1)) {
-  		return fail("precondition failed at %d; expected a + b + c = 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; a + b + c = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -786,6 +781,8 @@
   // translated straightforwardly from TLA+ action.
   // conjunctions become seq composition
   // disjunctions are all checked and at least one branch has to be true
+  
+  /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
   
   	if prev.state.x.(int) <= 0 {
@@ -804,14 +801,7 @@
   
   	return nil
   }
-  
-  // can output a monitoring trace to show what happened from the perspective of the impl
-  // this is also used to check certain things like post after pre
-  // contribution is a scheme for producing monitors. checks only safety but TLA very expressive, some unique challenges there, just like apalache, which is otherwise routine. practical contribution
-  // work on real raft
-  // how to identify what the actions are? annotations or an extra variable in the ast that we can look at
-  // types. or maybe cast on demand
-  // minimize amount of engineering work, as markus said
+  */
   
   // this state value can have nil fields
   func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
@@ -954,7 +944,7 @@
   
   type Monitor struct {
   	// the goal of extra is just to remove maintaining our own aux state,
-  	// which may be annoying and error-prone as it may be passed across several functions
+  	// which is annoying and error-prone as it may have to be passed across several functions
   	extra  []Event
   	events []Event
   	//constants Constants
@@ -1012,7 +1002,7 @@
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
-  		return fail("postcondition failed at %d; expected '(x) = x + 1 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("postcondition failed at %d; '(x) = x + 1 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -1020,7 +1010,7 @@
   func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 2) {
-  		return fail("precondition failed at %d; expected x < 2 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; x < 2 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -1028,7 +1018,7 @@
   func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
   
   	if !(prev.state.x.(int) < 3) {
-  		return fail("precondition failed at %d; expected x < 3 but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
+  		return fail("precondition failed at %d; x < 3 (prev: %+v, this: %+v)", trace_i, prev, this)
   	}
   	return nil
   }
@@ -1036,6 +1026,8 @@
   // translated straightforwardly from TLA+ action.
   // conjunctions become seq composition
   // disjunctions are all checked and at least one branch has to be true
+  
+  /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
   
   	if prev.state.x.(int) <= 0 {
@@ -1054,14 +1046,7 @@
   
   	return nil
   }
-  
-  // can output a monitoring trace to show what happened from the perspective of the impl
-  // this is also used to check certain things like post after pre
-  // contribution is a scheme for producing monitors. checks only safety but TLA very expressive, some unique challenges there, just like apalache, which is otherwise routine. practical contribution
-  // work on real raft
-  // how to identify what the actions are? annotations or an extra variable in the ast that we can look at
-  // types. or maybe cast on demand
-  // minimize amount of engineering work, as markus said
+  */
   
   // this state value can have nil fields
   func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
@@ -1118,30 +1103,17 @@
 
   $ monitor_check TwoPhaseCommitFull
   # command-line-arguments
-  ./TwoPhaseCommitFull.go:215:25: invalid operation: cannot index prev.state.msgs (variable of type any)
-  ./TwoPhaseCommitFull.go:217:157: prev.state.x undefined (type State has no field or method x)
-  ./TwoPhaseCommitFull.go:220:19: cannot range over prev.state.tmPrepared (variable of type any)
-  ./TwoPhaseCommitFull.go:223:24: prev.state.r undefined (type State has no field or method r)
-  ./TwoPhaseCommitFull.go:225:134: prev.state.x undefined (type State has no field or method x)
-  ./TwoPhaseCommitFull.go:332:58: invalid character U+0024 '$'
-  ./TwoPhaseCommitFull.go:633:58: invalid character U+0024 '$'
-  ./TwoPhaseCommitFull.go:636:59: invalid character U+0024 '$'
-  ./TwoPhaseCommitFull.go:639:57: invalid character U+0024 '$'
-  ./TwoPhaseCommitFull.go:642:52: invalid character U+0024 '$'
-  ./TwoPhaseCommitFull.go:225:134: too many errors
-  TwoPhaseCommitFull.go:332:58: illegal character U+0024 '$'
-  TwoPhaseCommitFull.go:633:58: illegal character U+0024 '$'
-  TwoPhaseCommitFull.go:636:59: illegal character U+0024 '$'
-  TwoPhaseCommitFull.go:639:57: illegal character U+0024 '$'
-  TwoPhaseCommitFull.go:642:52: illegal character U+0024 '$'
+  ./TwoPhaseCommitFull.go:759:14: v.state.x undefined (type State has no field or method x)
+  ./TwoPhaseCommitFull.go:760:6: c.x undefined (type State has no field or method x)
+  ./TwoPhaseCommitFull.go:760:18: v.state.x undefined (type State has no field or method x)
   package monitoring
   
   import (
-      "reflect"
-  "fmt"
-  "path"
-  "runtime"
-  "strings"
+  	"fmt"
+  	"path"
+  	"reflect"
+  	"runtime"
+  	"strings"
   )
   
   // panic instead of returning error
@@ -1166,14 +1138,14 @@
   }
   
   type State struct {
-  	who any
-  lastMsgReceived any
-  tmCommitted any
-  lastMsgSent any
-  tmPrepared any
-  msgs any
-  tmAborted any
-  rmState any
+  	who             any
+  	lastMsgReceived any
+  	tmCommitted     any
+  	lastMsgSent     any
+  	tmPrepared      any
+  	msgs            any
+  	tmAborted       any
+  	rmState         any
   }
   
   type EventType int
@@ -1181,45 +1153,45 @@
   const (
   	Initial = iota // special
   	CReceivePrepare
-  CSendPrepare
-  CSendCommit
-  CSendAbort
-  CReceiveCommit
-  CReceiveAbort
-  PHandlePrepare
-  PHandleCommit
-  PHandleAbort
-  PSpontaneouslyAbort
-  CReset
-  PReset
+  	CSendPrepare
+  	CSendCommit
+  	CSendAbort
+  	CReceiveCommit
+  	CReceiveAbort
+  	PHandlePrepare
+  	PHandleCommit
+  	PHandleAbort
+  	PSpontaneouslyAbort
+  	CReset
+  	PReset
   )
   
   func (e EventType) String() string {
   	switch e {
   	case CReceivePrepare:
-  return "CReceivePrepare"
-  case CSendPrepare:
-  return "CSendPrepare"
-  case CSendCommit:
-  return "CSendCommit"
-  case CSendAbort:
-  return "CSendAbort"
-  case CReceiveCommit:
-  return "CReceiveCommit"
-  case CReceiveAbort:
-  return "CReceiveAbort"
-  case PHandlePrepare:
-  return "PHandlePrepare"
-  case PHandleCommit:
-  return "PHandleCommit"
-  case PHandleAbort:
-  return "PHandleAbort"
-  case PSpontaneouslyAbort:
-  return "PSpontaneouslyAbort"
-  case CReset:
-  return "CReset"
-  case PReset:
-  return "PReset"
+  		return "CReceivePrepare"
+  	case CSendPrepare:
+  		return "CSendPrepare"
+  	case CSendCommit:
+  		return "CSendCommit"
+  	case CSendAbort:
+  		return "CSendAbort"
+  	case CReceiveCommit:
+  		return "CReceiveCommit"
+  	case CReceiveAbort:
+  		return "CReceiveAbort"
+  	case PHandlePrepare:
+  		return "PHandlePrepare"
+  	case PHandleCommit:
+  		return "PHandleCommit"
+  	case PHandleAbort:
+  		return "PHandleAbort"
+  	case PSpontaneouslyAbort:
+  		return "PSpontaneouslyAbort"
+  	case CReset:
+  		return "CReset"
+  	case PReset:
+  		return "PReset"
   	default:
   		panic(fmt.Sprintf("invalid %d", e))
   	}
@@ -1254,13 +1226,13 @@
   
   type Monitor struct {
   	// the goal of extra is just to remove maintaining our own aux state,
-  	// which may be annoying and error-prone as it may be passed across several functions
+  	// which is annoying and error-prone as it may have to be passed across several functions
   	extra  []Event
   	events []Event
   	//constants Constants
   }
   
-  func New(/* constants Constants */) Monitor {
+  func New( /* constants Constants */ ) Monitor {
   	return Monitor{
   		extra:  []Event{},
   		events: []Event{},
@@ -1278,54 +1250,54 @@
   			continue
   		}
   		switch this.typ {
-  		    case CReceivePrepare:
-  if err := m.CheckCReceivePrepare(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case CSendPrepare:
-  if err := m.CheckCSendPrepare(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case CSendCommit:
-  if err := m.CheckCSendCommit(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case CSendAbort:
-  if err := m.CheckCSendAbort(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case CReceiveCommit:
-  if err := m.CheckCReceiveCommit(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case CReceiveAbort:
-  if err := m.CheckCReceiveAbort(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case PHandlePrepare:
-  if err := m.CheckPHandlePrepare(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case PHandleCommit:
-  if err := m.CheckPHandleCommit(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case PHandleAbort:
-  if err := m.CheckPHandleAbort(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case PSpontaneouslyAbort:
-  if err := m.CheckPSpontaneouslyAbort(this.params[0], i, prev, this); err != nil {
-  return err
-  }
-  case CReset:
-  if err := m.CheckCReset(i, prev, this); err != nil {
-  return err
-  }
-  case PReset:
-  if err := m.CheckPReset(i, prev, this); err != nil {
-  return err
-  }
+  		case CReceivePrepare:
+  			if err := m.CheckCReceivePrepare(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case CSendPrepare:
+  			if err := m.CheckCSendPrepare(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case CSendCommit:
+  			if err := m.CheckCSendCommit(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case CSendAbort:
+  			if err := m.CheckCSendAbort(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case CReceiveCommit:
+  			if err := m.CheckCReceiveCommit(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case CReceiveAbort:
+  			if err := m.CheckCReceiveAbort(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case PHandlePrepare:
+  			if err := m.CheckPHandlePrepare(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case PHandleCommit:
+  			if err := m.CheckPHandleCommit(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case PHandleAbort:
+  			if err := m.CheckPHandleAbort(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case PSpontaneouslyAbort:
+  			if err := m.CheckPSpontaneouslyAbort(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case CReset:
+  			if err := m.CheckCReset(i, prev, this); err != nil {
+  				return err
+  			}
+  		case PReset:
+  			if err := m.CheckPReset(i, prev, this); err != nil {
+  				return err
+  			}
   		}
   		prev = this
   	}
@@ -1347,490 +1319,478 @@
   
   func (m *Monitor) CheckCReceivePrepare(r any, trace_i int, prev Event, this Event) error {
   
-  
-  _, v0 := prev.state.msgs[map[string]any{"type": "Prepared", "rm": prev.state.r}]
-  if !(v0) {
-  return fail("precondition failed at %d; expected Receive([\"type\" |-> \"Prepared\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v2 := map[any]bool{}
-  for _, v := range prev.state.tmPrepared {
-  v2[v] = true
-  }
-  _, v1 := v2[prev.state.r]
-  if !(!v1) {
-  return fail("precondition failed at %d; expected r \\notin ToSet(tmPrepared) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.tmPrepared, append(prev.state.tmPrepared, prev.state.r))) {
-  return fail("postcondition failed at %d; expected '(tmPrepared) = Append(tmPrepared, r) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  return fail("postcondition failed at %d; expected '(who) = \"coordinator\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[string]any{"type": "Prepared", "rm": prev.state.r}})) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = Some([\"type\" |-> \"Prepared\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.msgs, prev.state.msgs)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<msgs>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !((reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	_, v0 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Prepared", "rm": r}]
+  	if !(v0) {
+  		return fail("precondition failed at %d; Receive([\"type\" |-> \"Prepared\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v2 := map[any]bool{}
+  	for _, v := range prev.state.tmPrepared.([]any) {
+  		v2[v] = true
+  	}
+  	_, v1 := v2[r]
+  	if !(!v1) {
+  		return fail("precondition failed at %d; r \\notin ToSet(tmPrepared) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmPrepared, append(prev.state.tmPrepared.([]any), r))) {
+  		return fail("postcondition failed at %d; '(tmPrepared) = Append(tmPrepared, r) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
+  		return fail("postcondition failed at %d; '(who) = \"coordinator\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[string]any{"type": "Prepared", "rm": r}})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Prepared\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.msgs, prev.state.msgs)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<msgs>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCSendPrepare(r any, trace_i int, prev Event, this Event) error {
   
-  
-  v3 := map[any]bool{}
-  for _, v := range prev.state.tmPrepared {
-  v3[v] = true
-  }
-  if !(!reflect.DeepEqual(v3, map[any]bool{})) {
-  return fail("precondition failed at %d; expected ToSet(tmPrepared) /= RM but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v4 := prev.state.msgs[map[string]any{"type": "Prepare", "rm": prev.state.r}]
-  v5 := map[any]bool{}
-  for v6, v7 := range prev.state.msgs {
-  v5[v6] = v7
-  }
-  for v8, v9 := range map[any]bool{map[string]any{"type": "Prepare", "rm": prev.state.r}: true} {
-  v5[v8] = v9
-  }
-  if !((!v4 && reflect.DeepEqual(this.state.msgs, v5))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Prepare\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  return fail("postcondition failed at %d; expected '(who) = \"coordinator\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[string]any{"type": "Prepare", "rm": prev.state.r}})) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = Some([\"type\" |-> \"Prepare\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	v3 := map[any]bool{}
+  	for _, v := range prev.state.tmPrepared.([]any) {
+  		v3[v] = true
+  	}
+  	if !(!reflect.DeepEqual(v3, map[any]bool{})) {
+  		return fail("precondition failed at %d; ToSet(tmPrepared) /= RM (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v4 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Prepare", "rm": r}]
+  	v5 := map[any]bool{}
+  	for v6, v7 := range prev.state.msgs.(map[any]bool) {
+  		v5[v6] = v7
+  	}
+  	for v8, v9 := range map[any]bool{map[string]any{"type": "Prepare", "rm": r}: true} {
+  		v5[v8] = v9
+  	}
+  	if !(!v4 && reflect.DeepEqual(this.state.msgs, v5)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Prepare\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
+  		return fail("postcondition failed at %d; '(who) = \"coordinator\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[string]any{"type": "Prepare", "rm": r}})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = Some([\"type\" |-> \"Prepare\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCSendCommit(r any, trace_i int, prev Event, this Event) error {
   
-  
-  v10 := map[any]bool{}
-  for _, v := range prev.state.tmPrepared {
-  v10[v] = true
-  }
-  if !(reflect.DeepEqual(v10, map[any]bool{})) {
-  return fail("precondition failed at %d; expected ToSet(tmPrepared) = RM but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v11 := prev.state.msgs[map[string]any{"type": "Commit", "rm": prev.state.r}]
-  v12 := map[any]bool{}
-  for v13, v14 := range prev.state.msgs {
-  v12[v13] = v14
-  }
-  for v15, v16 := range map[any]bool{map[string]any{"type": "Commit", "rm": prev.state.r}: true} {
-  v12[v15] = v16
-  }
-  if !((!v11 && reflect.DeepEqual(this.state.msgs, v12))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Commit\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  return fail("postcondition failed at %d; expected '(who) = \"coordinator\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[string]any{"type": "Commit", "rm": prev.state.r}})) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = Some([\"type\" |-> \"Commit\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	v10 := map[any]bool{}
+  	for _, v := range prev.state.tmPrepared.([]any) {
+  		v10[v] = true
+  	}
+  	if !(reflect.DeepEqual(v10, map[any]bool{})) {
+  		return fail("precondition failed at %d; ToSet(tmPrepared) = RM (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v11 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Commit", "rm": r}]
+  	v12 := map[any]bool{}
+  	for v13, v14 := range prev.state.msgs.(map[any]bool) {
+  		v12[v13] = v14
+  	}
+  	for v15, v16 := range map[any]bool{map[string]any{"type": "Commit", "rm": r}: true} {
+  		v12[v15] = v16
+  	}
+  	if !(!v11 && reflect.DeepEqual(this.state.msgs, v12)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Commit\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
+  		return fail("postcondition failed at %d; '(who) = \"coordinator\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[string]any{"type": "Commit", "rm": r}})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = Some([\"type\" |-> \"Commit\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCSendAbort(r any, trace_i int, prev Event, this Event) error {
   
-  
-  if !(!reflect.DeepEqual(prev.state.tmAborted, prev.state.$Tuple)) {
-  return fail("precondition failed at %d; expected tmAborted /= <<>> but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v17 := prev.state.msgs[map[string]any{"type": "Abort", "rm": prev.state.r}]
-  v18 := map[any]bool{}
-  for v19, v20 := range prev.state.msgs {
-  v18[v19] = v20
-  }
-  for v21, v22 := range map[any]bool{map[string]any{"type": "Abort", "rm": prev.state.r}: true} {
-  v18[v21] = v22
-  }
-  if !((!v17 && reflect.DeepEqual(this.state.msgs, v18))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Abort\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  return fail("postcondition failed at %d; expected '(who) = \"coordinator\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[string]any{"type": "Abort", "rm": prev.state.r}})) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = Some([\"type\" |-> \"Abort\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	if !(!reflect.DeepEqual(prev.state.tmAborted, []any{})) {
+  		return fail("precondition failed at %d; tmAborted /= <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v17 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Abort", "rm": r}]
+  	v18 := map[any]bool{}
+  	for v19, v20 := range prev.state.msgs.(map[any]bool) {
+  		v18[v19] = v20
+  	}
+  	for v21, v22 := range map[any]bool{map[string]any{"type": "Abort", "rm": r}: true} {
+  		v18[v21] = v22
+  	}
+  	if !(!v17 && reflect.DeepEqual(this.state.msgs, v18)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Abort\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
+  		return fail("postcondition failed at %d; '(who) = \"coordinator\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[string]any{"type": "Abort", "rm": r}})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = Some([\"type\" |-> \"Abort\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCReceiveCommit(r any, trace_i int, prev Event, this Event) error {
   
-  
-  _, v23 := prev.state.msgs[map[string]any{"type": "Committed", "rm": prev.state.r}]
-  if !(v23) {
-  return fail("precondition failed at %d; expected Receive([\"type\" |-> \"Committed\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v25 := map[any]bool{}
-  for _, v := range prev.state.tmCommitted {
-  v25[v] = true
-  }
-  _, v24 := v25[prev.state.r]
-  if !(!v24) {
-  return fail("precondition failed at %d; expected r \\notin ToSet(tmCommitted) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  return fail("postcondition failed at %d; expected '(who) = \"coordinator\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.tmCommitted, append(prev.state.tmCommitted, prev.state.r))) {
-  return fail("postcondition failed at %d; expected '(tmCommitted) = Append(tmCommitted, r) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[string]any{"type": "Committed", "rm": prev.state.r}})) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = Some([\"type\" |-> \"Committed\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, msgs, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	_, v23 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Committed", "rm": r}]
+  	if !(v23) {
+  		return fail("precondition failed at %d; Receive([\"type\" |-> \"Committed\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v25 := map[any]bool{}
+  	for _, v := range prev.state.tmCommitted.([]any) {
+  		v25[v] = true
+  	}
+  	_, v24 := v25[r]
+  	if !(!v24) {
+  		return fail("precondition failed at %d; r \\notin ToSet(tmCommitted) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
+  		return fail("postcondition failed at %d; '(who) = \"coordinator\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmCommitted, append(prev.state.tmCommitted.([]any), r))) {
+  		return fail("postcondition failed at %d; '(tmCommitted) = Append(tmCommitted, r) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[string]any{"type": "Committed", "rm": r}})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Committed\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, msgs, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCReceiveAbort(r any, trace_i int, prev Event, this Event) error {
   
-  
-  _, v26 := prev.state.msgs[map[string]any{"type": "Aborted", "rm": prev.state.r}]
-  if !(v26) {
-  return fail("precondition failed at %d; expected Receive([\"type\" |-> \"Aborted\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v28 := map[any]bool{}
-  for _, v := range prev.state.tmAborted {
-  v28[v] = true
-  }
-  _, v27 := v28[prev.state.r]
-  if !(!v27) {
-  return fail("precondition failed at %d; expected r \\notin ToSet(tmAborted) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  return fail("postcondition failed at %d; expected '(who) = \"coordinator\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.tmAborted, append(prev.state.tmAborted, prev.state.r))) {
-  return fail("postcondition failed at %d; expected '(tmAborted) = Append(tmAborted, r) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[string]any{"type": "Aborted", "rm": prev.state.r}})) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = Some([\"type\" |-> \"Aborted\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, msgs, tmCommitted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	_, v26 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Aborted", "rm": r}]
+  	if !(v26) {
+  		return fail("precondition failed at %d; Receive([\"type\" |-> \"Aborted\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v28 := map[any]bool{}
+  	for _, v := range prev.state.tmAborted.([]any) {
+  		v28[v] = true
+  	}
+  	_, v27 := v28[r]
+  	if !(!v27) {
+  		return fail("precondition failed at %d; r \\notin ToSet(tmAborted) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
+  		return fail("postcondition failed at %d; '(who) = \"coordinator\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmAborted, append(prev.state.tmAborted.([]any), r))) {
+  		return fail("postcondition failed at %d; '(tmAborted) = Append(tmAborted, r) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[string]any{"type": "Aborted", "rm": r}})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Aborted\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, msgs, tmCommitted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckPHandlePrepare(r any, trace_i int, prev Event, this Event) error {
   
-  
-  if !(reflect.DeepEqual(prev.state.rmState[prev.state.r], "working")) {
-  return fail("precondition failed at %d; expected rmState[r] = \"working\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v29 := prev.state.msgs[map[string]any{"type": "Prepare", "rm": prev.state.r}]
-  if !(v29) {
-  return fail("precondition failed at %d; expected Receive([\"type\" |-> \"Prepare\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v30 := map[string]any{}
-  for v31, v32 := range prev.state.rmState {
-  v30[v31] = v32
-  }
-  v30[prev.state.r] = "prepared"
-  if !(reflect.DeepEqual(this.state.rmState, v30)) {
-  return fail("postcondition failed at %d; expected '(rmState) = [rmState EXCEPT ![r] = \"prepared\"] but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v33 := prev.state.msgs[map[string]any{"type": "Prepared", "rm": prev.state.r}]
-  v34 := map[any]bool{}
-  for v35, v36 := range prev.state.msgs {
-  v34[v35] = v36
-  }
-  for v37, v38 := range map[any]bool{map[string]any{"type": "Prepared", "rm": prev.state.r}: true} {
-  v34[v37] = v38
-  }
-  if !((!v33 && reflect.DeepEqual(this.state.msgs, v34))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Prepared\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, prev.state.r)) {
-  return fail("postcondition failed at %d; expected '(who) = r but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !((reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<lastMsgReceived, lastMsgSent>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	if !(reflect.DeepEqual(prev.state.rmState.(map[any]any)[r], "working")) {
+  		return fail("precondition failed at %d; rmState[r] = \"working\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v29 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Prepare", "rm": r}]
+  	if !(v29) {
+  		return fail("precondition failed at %d; Receive([\"type\" |-> \"Prepare\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v30 := map[any]any{}
+  	for v31, v32 := range prev.state.rmState.(map[any]any) {
+  		v30[v31] = v32
+  	}
+  	v30[r] = "prepared"
+  	if !(reflect.DeepEqual(this.state.rmState, v30)) {
+  		return fail("postcondition failed at %d; '(rmState) = [rmState EXCEPT ![r] = \"prepared\"] (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v33 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Prepared", "rm": r}]
+  	v34 := map[any]bool{}
+  	for v35, v36 := range prev.state.msgs.(map[any]bool) {
+  		v34[v35] = v36
+  	}
+  	for v37, v38 := range map[any]bool{map[string]any{"type": "Prepared", "rm": r}: true} {
+  		v34[v37] = v38
+  	}
+  	if !(!v33 && reflect.DeepEqual(this.state.msgs, v34)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Prepared\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, r)) {
+  		return fail("postcondition failed at %d; '(who) = r (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckPHandleCommit(r any, trace_i int, prev Event, this Event) error {
   
-  
-  if !(reflect.DeepEqual(prev.state.rmState[prev.state.r], "prepared")) {
-  return fail("precondition failed at %d; expected rmState[r] = \"prepared\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v39 := prev.state.msgs[map[string]any{"type": "Commit", "rm": prev.state.r}]
-  if !(v39) {
-  return fail("precondition failed at %d; expected Receive([\"type\" |-> \"Commit\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v40 := map[string]any{}
-  for v41, v42 := range prev.state.rmState {
-  v40[v41] = v42
-  }
-  v40[prev.state.r] = "committed"
-  if !(reflect.DeepEqual(this.state.rmState, v40)) {
-  return fail("postcondition failed at %d; expected '(rmState) = [rmState EXCEPT ![r] = \"committed\"] but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v43 := prev.state.msgs[map[string]any{"type": "Committed", "rm": prev.state.r}]
-  v44 := map[any]bool{}
-  for v45, v46 := range prev.state.msgs {
-  v44[v45] = v46
-  }
-  for v47, v48 := range map[any]bool{map[string]any{"type": "Committed", "rm": prev.state.r}: true} {
-  v44[v47] = v48
-  }
-  if !((!v43 && reflect.DeepEqual(this.state.msgs, v44))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Committed\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, prev.state.r)) {
-  return fail("postcondition failed at %d; expected '(who) = r but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !((reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<lastMsgReceived, lastMsgSent>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	if !(reflect.DeepEqual(prev.state.rmState.(map[any]any)[r], "prepared")) {
+  		return fail("precondition failed at %d; rmState[r] = \"prepared\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v39 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Commit", "rm": r}]
+  	if !(v39) {
+  		return fail("precondition failed at %d; Receive([\"type\" |-> \"Commit\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v40 := map[any]any{}
+  	for v41, v42 := range prev.state.rmState.(map[any]any) {
+  		v40[v41] = v42
+  	}
+  	v40[r] = "committed"
+  	if !(reflect.DeepEqual(this.state.rmState, v40)) {
+  		return fail("postcondition failed at %d; '(rmState) = [rmState EXCEPT ![r] = \"committed\"] (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v43 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Committed", "rm": r}]
+  	v44 := map[any]bool{}
+  	for v45, v46 := range prev.state.msgs.(map[any]bool) {
+  		v44[v45] = v46
+  	}
+  	for v47, v48 := range map[any]bool{map[string]any{"type": "Committed", "rm": r}: true} {
+  		v44[v47] = v48
+  	}
+  	if !(!v43 && reflect.DeepEqual(this.state.msgs, v44)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Committed\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, r)) {
+  		return fail("postcondition failed at %d; '(who) = r (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckPHandleAbort(r any, trace_i int, prev Event, this Event) error {
   
-  
-  _, v49 := map[any]bool{"working": true, "prepared": true}[prev.state.rmState[prev.state.r]]
-  if !(v49) {
-  return fail("precondition failed at %d; expected rmState[r] \\in {\"working\", \"prepared\"} but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v50 := prev.state.msgs[map[string]any{"type": "Abort", "rm": prev.state.r}]
-  if !(v50) {
-  return fail("precondition failed at %d; expected Receive([\"type\" |-> \"Abort\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v51 := map[string]any{}
-  for v52, v53 := range prev.state.rmState {
-  v51[v52] = v53
-  }
-  v51[prev.state.r] = "aborted"
-  if !(reflect.DeepEqual(this.state.rmState, v51)) {
-  return fail("postcondition failed at %d; expected '(rmState) = [rmState EXCEPT ![r] = \"aborted\"] but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, prev.state.r)) {
-  return fail("postcondition failed at %d; expected '(who) = r but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v54 := prev.state.msgs[map[string]any{"type": "Aborted", "rm": prev.state.r}]
-  v55 := map[any]bool{}
-  for v56, v57 := range prev.state.msgs {
-  v55[v56] = v57
-  }
-  for v58, v59 := range map[any]bool{map[string]any{"type": "Aborted", "rm": prev.state.r}: true} {
-  v55[v58] = v59
-  }
-  if !((!v54 && reflect.DeepEqual(this.state.msgs, v55))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Aborted\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !((reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<lastMsgReceived, lastMsgSent>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	_, v49 := map[any]bool{"working": true, "prepared": true}[prev.state.rmState.(map[any]any)[r]]
+  	if !(v49) {
+  		return fail("precondition failed at %d; rmState[r] \\in {\"working\", \"prepared\"} (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v50 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Abort", "rm": r}]
+  	if !(v50) {
+  		return fail("precondition failed at %d; Receive([\"type\" |-> \"Abort\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v51 := map[any]any{}
+  	for v52, v53 := range prev.state.rmState.(map[any]any) {
+  		v51[v52] = v53
+  	}
+  	v51[r] = "aborted"
+  	if !(reflect.DeepEqual(this.state.rmState, v51)) {
+  		return fail("postcondition failed at %d; '(rmState) = [rmState EXCEPT ![r] = \"aborted\"] (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, r)) {
+  		return fail("postcondition failed at %d; '(who) = r (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v54 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Aborted", "rm": r}]
+  	v55 := map[any]bool{}
+  	for v56, v57 := range prev.state.msgs.(map[any]bool) {
+  		v55[v56] = v57
+  	}
+  	for v58, v59 := range map[any]bool{map[string]any{"type": "Aborted", "rm": r}: true} {
+  		v55[v58] = v59
+  	}
+  	if !(!v54 && reflect.DeepEqual(this.state.msgs, v55)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Aborted\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckPSpontaneouslyAbort(r any, trace_i int, prev Event, this Event) error {
   
-  
-  _, v60 := map[any]bool{"working": true, "prepared": true}[prev.state.rmState[prev.state.r]]
-  if !(v60) {
-  return fail("precondition failed at %d; expected rmState[r] \\in {\"working\", \"prepared\"} but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  v61 := map[string]any{}
-  for v62, v63 := range prev.state.rmState {
-  v61[v62] = v63
-  }
-  v61[prev.state.r] = "aborted"
-  if !(reflect.DeepEqual(this.state.rmState, v61)) {
-  return fail("postcondition failed at %d; expected '(rmState) = [rmState EXCEPT ![r] = \"aborted\"] but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, prev.state.r)) {
-  return fail("postcondition failed at %d; expected '(who) = r but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  _, v64 := prev.state.msgs[map[string]any{"type": "Aborted", "rm": prev.state.r}]
-  v65 := map[any]bool{}
-  for v66, v67 := range prev.state.msgs {
-  v65[v66] = v67
-  }
-  for v68, v69 := range map[any]bool{map[string]any{"type": "Aborted", "rm": prev.state.r}: true} {
-  v65[v68] = v69
-  }
-  if !((!v64 && reflect.DeepEqual(this.state.msgs, v65))) {
-  return fail("precondition failed at %d; expected Send([\"type\" |-> \"Aborted\", \"rm\" |-> r]) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !((reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<lastMsgReceived, lastMsgSent>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	_, v60 := map[any]bool{"working": true, "prepared": true}[prev.state.rmState.(map[any]any)[r]]
+  	if !(v60) {
+  		return fail("precondition failed at %d; rmState[r] \\in {\"working\", \"prepared\"} (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	v61 := map[any]any{}
+  	for v62, v63 := range prev.state.rmState.(map[any]any) {
+  		v61[v62] = v63
+  	}
+  	v61[r] = "aborted"
+  	if !(reflect.DeepEqual(this.state.rmState, v61)) {
+  		return fail("postcondition failed at %d; '(rmState) = [rmState EXCEPT ![r] = \"aborted\"] (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, r)) {
+  		return fail("postcondition failed at %d; '(who) = r (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	_, v64 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Aborted", "rm": r}]
+  	v65 := map[any]bool{}
+  	for v66, v67 := range prev.state.msgs.(map[any]bool) {
+  		v65[v66] = v67
+  	}
+  	for v68, v69 := range map[any]bool{map[string]any{"type": "Aborted", "rm": r}: true} {
+  		v65[v68] = v69
+  	}
+  	if !(!v64 && reflect.DeepEqual(this.state.msgs, v65)) {
+  		return fail("precondition failed at %d; Send([\"type\" |-> \"Aborted\", \"rm\" |-> r]) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCReset(trace_i int, prev Event, this Event) error {
   
+  	v70 := true
+  	for v71, _ := range map[any]bool{} {
+  		_, v72 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Committed", "rm": v71}]
+  		v70 = v70 && v72
+  	}
+  	if !(v70) {
   
-  v70 := true
-  for v71, _ := range map[any]bool{} {
-  _, v72 := prev.state.msgs[map[string]any{"type": "Committed", "rm": v71}]
-  v70 = v70 && v72
-  }
-  if !(v70) {
+  		v73 := true
+  		for v74, _ := range map[any]bool{} {
+  			_, v75 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Aborted", "rm": v74}]
+  			v73 = v73 && v75
+  		}
+  		if !(v73) {
   
-  v73 := true
-  for v74, _ := range map[any]bool{} {
-  _, v75 := prev.state.msgs[map[string]any{"type": "Aborted", "rm": v74}]
-  v73 = v73 && v75
-  }
-  if !(v73) {
+  			v73 := true
+  			for v74, _ := range map[any]bool{} {
+  				_, v75 := prev.state.msgs.(map[any]bool)[map[string]any{"type": "Aborted", "rm": v74}]
+  				v73 = v73 && v75
+  			}
+  			if !(v73) {
+  				return fail("precondition failed at %d; (\\A r \\in RM : [\"type\" |-> \"Committed\", \"rm\" |-> r] \\in msgs \\/ \\A r \\in RM : [\"type\" |-> \"Aborted\", \"rm\" |-> r] \\in msgs) (prev: %+v, this: %+v)", trace_i, prev, this)
+  			}
+  		}
   
-  v73 := true
-  for v74, _ := range map[any]bool{} {
-  _, v75 := prev.state.msgs[map[string]any{"type": "Aborted", "rm": v74}]
-  v73 = v73 && v75
-  }
-  if !(v73) {
-  return fail("precondition failed at %d; expected (\\A r \\in RM : [\"type\" |-> \"Committed\", \"rm\" |-> r] \\in msgs \\/ \\A r \\in RM : [\"type\" |-> \"Aborted\", \"rm\" |-> r] \\in msgs) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  }
+  	}
   
-  }
-  
-  if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgReceived) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.lastMsgSent, prev.state.None)) {
-  return fail("postcondition failed at %d; expected '(lastMsgSent) = None but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.tmPrepared, prev.state.$Tuple)) {
-  return fail("postcondition failed at %d; expected '(tmPrepared) = <<>> but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.tmCommitted, prev.state.$Tuple)) {
-  return fail("postcondition failed at %d; expected '(tmCommitted) = <<>> but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.tmAborted, prev.state.$Tuple)) {
-  return fail("postcondition failed at %d; expected '(tmAborted) = <<>> but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.msgs, prev.state.$SetEnumerate)) {
-  return fail("postcondition failed at %d; expected '(msgs) = {} but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<rmState>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgReceived) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
+  		return fail("postcondition failed at %d; '(lastMsgSent) = None (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmPrepared, []any{})) {
+  		return fail("postcondition failed at %d; '(tmPrepared) = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmCommitted, []any{})) {
+  		return fail("postcondition failed at %d; '(tmCommitted) = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.tmAborted, []any{})) {
+  		return fail("postcondition failed at %d; '(tmAborted) = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.msgs, map[any]bool{})) {
+  		return fail("postcondition failed at %d; '(msgs) = {} (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<rmState>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckPReset(trace_i int, prev Event, this Event) error {
   
+  	v76 := true
+  	for v77, _ := range map[any]bool{} {
+  		v76 = v76 && reflect.DeepEqual(prev.state.rmState.(map[any]any)[v77], "aborted")
+  	}
+  	if !(v76) {
   
-  v76 := true
-  for v77, _ := range map[any]bool{} {
-  v76 = v76 && reflect.DeepEqual(prev.state.rmState[v77], "aborted")
-  }
-  if !(v76) {
+  		v78 := true
+  		for v79, _ := range map[any]bool{} {
+  			v78 = v78 && reflect.DeepEqual(prev.state.rmState.(map[any]any)[v79], "committed")
+  		}
+  		if !(v78) {
   
-  v78 := true
-  for v79, _ := range map[any]bool{} {
-  v78 = v78 && reflect.DeepEqual(prev.state.rmState[v79], "committed")
-  }
-  if !(v78) {
+  			v78 := true
+  			for v79, _ := range map[any]bool{} {
+  				v78 = v78 && reflect.DeepEqual(prev.state.rmState.(map[any]any)[v79], "committed")
+  			}
+  			if !(v78) {
+  				return fail("precondition failed at %d; (\\A r \\in RM : rmState[r] = \"aborted\" \\/ \\A r \\in RM : rmState[r] = \"committed\") (prev: %+v, this: %+v)", trace_i, prev, this)
+  			}
+  		}
   
-  v78 := true
-  for v79, _ := range map[any]bool{} {
-  v78 = v78 && reflect.DeepEqual(prev.state.rmState[v79], "committed")
-  }
-  if !(v78) {
-  return fail("precondition failed at %d; expected (\\A r \\in RM : rmState[r] = \"aborted\" \\/ \\A r \\in RM : rmState[r] = \"committed\") but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  }
+  	}
   
-  }
+  	v80 := map[any]any{}
+  	for v81, _ := range map[any]bool{} {
+  		v80[v81] = "working"
+  	}
   
-  v80 := map[any]any{}
-  for v81, _ := range map[any]bool{} {
-  v80[v81] = "working"
-  }
-  
-  if !(reflect.DeepEqual(this.state.rmState, v80)) {
-  return fail("postcondition failed at %d; expected '(rmState) = [ r \\in RM |-> \"working\" ] but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.who, "none")) {
-  return fail("postcondition failed at %d; expected '(who) = \"none\" but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !((reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<lastMsgReceived, lastMsgSent>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted))) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  if !(reflect.DeepEqual(this.state.msgs, prev.state.msgs)) {
-  return fail("precondition failed at %d; expected UNCHANGED(<<msgs>>) but got %s (prev: %+v, this: %+v)", trace_i, prev.state.x, prev, this)
-  }
-  return nil
+  	if !(reflect.DeepEqual(this.state.rmState, v80)) {
+  		return fail("postcondition failed at %d; '(rmState) = [ r \\in RM |-> \"working\" ] (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.who, "none")) {
+  		return fail("postcondition failed at %d; '(who) = \"none\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(reflect.DeepEqual(this.state.msgs, prev.state.msgs)) {
+  		return fail("precondition failed at %d; UNCHANGED(<<msgs>>) (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   /* Action t1 cannot be translated because of: ToTrace(CounterExample) */
@@ -1840,6 +1800,8 @@
   // translated straightforwardly from TLA+ action.
   // conjunctions become seq composition
   // disjunctions are all checked and at least one branch has to be true
+  
+  /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
   
   	if prev.state.x.(int) <= 0 {
@@ -1858,14 +1820,7 @@
   
   	return nil
   }
-  
-  // can output a monitoring trace to show what happened from the perspective of the impl
-  // this is also used to check certain things like post after pre
-  // contribution is a scheme for producing monitors. checks only safety but TLA very expressive, some unique challenges there, just like apalache, which is otherwise routine. practical contribution
-  // work on real raft
-  // how to identify what the actions are? annotations or an extra variable in the ast that we can look at
-  // types. or maybe cast on demand
-  // minimize amount of engineering work, as markus said
+  */
   
   // this state value can have nil fields
   func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {

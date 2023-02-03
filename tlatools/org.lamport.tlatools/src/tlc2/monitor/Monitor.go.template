@@ -73,7 +73,7 @@ type Constants struct {
 
 type Monitor struct {
 	// the goal of extra is just to remove maintaining our own aux state,
-	// which may be annoying and error-prone as it may be passed across several functions
+	// which is annoying and error-prone as it may have to be passed across several functions
 	extra  []Event
 	events []Event
 	//constants Constants

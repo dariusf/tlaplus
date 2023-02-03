@@ -41,7 +41,7 @@ public class GoTranslation {
         UniqueString opName = ((OpApplNode) op).getOperator().getName();
         List<ExprOrOpArgNode> args = operatorArgs(op);
 
-        boolean isPost = args.size() >= 2 && (isPrimedVar(args.get(0)) || isPrimedVar(args.get(1)));
+        boolean isPost = args.size() >= 2 && (isPrimed(args.get(0)) || isPrimed(args.get(1)));
         String cond = isPost ? "postcondition" : "precondition";
 
         if (opName.equals(OP_cl)) {
@@ -81,42 +81,14 @@ public class GoTranslation {
                 return goExpr(((NumeralNode) fml).val() + "");
             }
             throw fail("unknown");
-        } else if (isVar(fml) || isPrimedVar(fml)) {
-            String varName = getVarName((OpApplNode) fml);
-
-            if (varName.equals("TRUE")) {
-                return goExpr("true");
-            } else if (varName.equals("FALSE")) {
-                return goExpr("false");
-            } else if (constants.containsKey(varName)) {
-                // this gets the values from the config file, then compiles and inlines them.
-                // an alternative is to look them up from what is provided in the monitor?
-                return translateValue(constants.get(varName));
-            } else if (boundVarNames.contains(varName)) {
-                return goExpr(varName);
-            }
-
-            String eventVar = isPrimedVar(fml) ? "this" : "prev";
-            String name = isPrimedVar(fml)
-                    ? getVarName((OpApplNode) operatorArgs(fml).get(0))
-                    : varName;
-//            if (name.equals("$Tuple")) {
-//                // somehow empty sequences land in here
-//                return goExpr("[]any{}");
-//            }
-            if (typ.empty()) {
-                return goExpr("%s.state.%s", eventVar, name);
-            } else {
-                return goExpr("%s.state.%s.(%s)", eventVar, name, goTypeName(typ.peek()));
-            }
-//            return name;
-//        } else if (isPrimedVar(fml)) {
-//            List<ExprOrOpArgNode> args = operatorArgs(fml);
-//            return translateExpr(args.get(0));
         } else if (fml instanceof OpApplNode) {
             String name = ((OpApplNode) fml).getOperator().getName().toString();
             List<ExprOrOpArgNode> args = operatorArgs(fml);
             switch (name) {
+                case "TRUE":
+                    return goExpr("true");
+                case "FALSE":
+                    return goExpr("false");
                 case "<":
                 case "<=":
                 case ">":
@@ -144,6 +116,8 @@ public class GoTranslation {
                 }
                 case "Some":
                     return goExpr("[]any{%s}", translateExpr(args.get(0)));
+                case "None":
+                    return goExpr("[]any{}");
                 case "Append": {
                     typ.push(Type.SEQ);
                     GoExpr a1 = translateExpr(args.get(0));
@@ -325,6 +299,18 @@ public class GoTranslation {
                     return translateExpr(equal);
                 }
                 default:
+
+                    if (boundVarNames.contains(name)) {
+                        return goExpr(name);
+                    }
+
+                    if (constants.containsKey(name)) {
+                        // this gets the values from the config file, then compiles and inlines them.
+                        // an alternative is to look them up from what is provided in the monitor?
+                        return translateValue(constants.get(name));
+                    }
+
+                    // user-defined operator
                     Object userDefined = defns.get(name);
                     if (userDefined instanceof MethodValue) {
                         String s = Eval.prettyPrint(fml);
@@ -338,7 +324,17 @@ public class GoTranslation {
                     if (userDefined != null) {
                         return translateExpr(subst((OpApplNode) fml));
                     }
-                    throw fail("translateExpr: unknown OpApplNode " + name);
+
+                    // treat as variable
+                    String eventVar = isPrimed(fml) ? "this" : "prev";
+                    if (isPrimed(fml)) {
+                        name = ((OpApplNode) operatorArgs(fml).get(0)).getOperator().getName().toString();
+                    }
+                    if (typ.empty()) {
+                        return goExpr("%s.state.%s", eventVar, name);
+                    } else {
+                        return goExpr("%s.state.%s.(%s)", eventVar, name, goTypeName(typ.peek()));
+                    }
             }
         }
         throw fail("translateExpr: unknown, non-OpApplNode " + fml);

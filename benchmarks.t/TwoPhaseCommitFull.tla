@@ -33,12 +33,12 @@ vars == <<tmPrepared, tmCommitted, tmAborted, lastMsgSent, lastMsgReceived, rmSt
 
 Messages ==
   \* sent by coordinator
-  [type : {"Prepare"}, rm : RM] \cup
-  [type : {"Commit"}, rm : RM] \cup
-  [type : {"Abort"}, rm : RM] \cup
+  [type : {"Prepare"}, rm : RM] \union
+  [type : {"Commit"}, rm : RM] \union
+  [type : {"Abort"}, rm : RM] \union
   \* sent by participant
-  [type : {"Prepared"}, rm : RM] \cup
-  [type : {"Committed"}, rm : RM] \cup
+  [type : {"Prepared"}, rm : RM] \union
+  [type : {"Committed"}, rm : RM] \union
   [type : {"Aborted"}, rm : RM]
 
 TPTypeOK ==
@@ -68,7 +68,7 @@ TPInit ==
 
 Send(m) ==
   /\ m \notin msgs \* not already sent
-  /\ msgs' = msgs \cup {m}
+  /\ msgs' = msgs \union {m}
 
 \* think of as an enabling condition, and also as an assertion that this message is present
 Receive(m) ==
@@ -78,7 +78,7 @@ Receive(m) ==
 CReceivePrepare(r) ==
   /\ Receive([type |-> "Prepared", rm |-> r])
   \* /\ r \notin tmPrepared
-  \* /\ tmPrepared' = tmPrepared \cup {r}
+  \* /\ tmPrepared' = tmPrepared \union {r}
   /\ r \notin ToSet(tmPrepared)
   /\ tmPrepared' = Append(tmPrepared, r)
   /\ who' = "coordinator"
@@ -121,7 +121,7 @@ CReceiveCommit(r) ==
   /\ Receive([type |-> "Committed", rm |-> r])
   /\ r \notin ToSet(tmCommitted)
   /\ who' = "coordinator"
-  \* /\ tmCommitted' = tmCommitted \cup {r}
+  \* /\ tmCommitted' = tmCommitted \union {r}
   /\ tmCommitted' = Append(tmCommitted, r)
   /\ lastMsgReceived' = Some([type |-> "Committed", rm |-> r])
   /\ lastMsgSent' = None
@@ -132,7 +132,7 @@ CReceiveAbort(r) ==
   /\ Receive([type |-> "Aborted", rm |-> r])
   /\ r \notin ToSet(tmAborted)
   /\ who' = "coordinator"
-  \* /\ tmAborted' = tmAborted \cup {r}
+  \* /\ tmAborted' = tmAborted \union {r}
   /\ tmAborted' = Append(tmAborted, r)
   /\ lastMsgReceived' = Some([type |-> "Aborted", rm |-> r])
   /\ lastMsgSent' = None
@@ -219,7 +219,7 @@ PReset ==
 \*   /\ rmState[r] = "working"
 \*   /\ [type |-> "Prepare", rm |-> r] \in msgs
 \*   /\ rmState' = [rmState EXCEPT ![r] = "aborted"]
-\*   /\ msgs' = msgs \cup {[type |-> "Aborted", rm |-> r]}
+\*   /\ msgs' = msgs \union {[type |-> "Aborted", rm |-> r]}
 \*   /\ who' = r
 \*   /\ UNCHANGED <<tmPrepared, msgs, tmCommitted, tmAborted>>
 \*   \* Question: why this is okay for consistency?
@@ -253,7 +253,7 @@ TCConsistent == TC!TCConsistent
 TCSpec == TC!TCSpec
 
 \* SuccessMessages == {"Prepare", "Prepared", "Commit", "Committed"}
-\* AllMessages == SuccessMessages \cup {"Abort", "Aborted"}
+\* AllMessages == SuccessMessages \union {"Abort", "Aborted"}
 
 \* tractable model checking
 SoupSize ==

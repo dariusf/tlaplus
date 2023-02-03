@@ -1,14 +1,12 @@
 package tlc2.monitor;
 
 import tla2sany.semantic.*;
-import tlc2.synth.Eval;
 import util.UniqueString;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Translate {
@@ -46,17 +44,7 @@ public class Translate {
         return tla(UniqueString.uniqueStringOf(op), args);
     }
 
-    public static boolean isVar(SemanticNode body) {
-        return body instanceof OpApplNode &&
-                ((OpApplNode) body).getArgs().length == 0 &&
-                !((OpApplNode) body).getOperator().getName().toString().contains("$");
-    }
-
-    public static String getVarName(OpApplNode fml) {
-        return fml.getOperator().getName().toString();
-    }
-
-    public static boolean isPrimedVar(SemanticNode body) {
+    public static boolean isPrimed(SemanticNode body) {
         return body instanceof OpApplNode && ((OpApplNode) body).getOperator().getName().equals("'");
     }
 
