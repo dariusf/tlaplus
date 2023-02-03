@@ -204,6 +204,8 @@
   
   func (e EventType) String() string {
   	switch e {
+  	case Initial:
+  		return "Initial"
   	case A:
   		return "A"
   	case Constr:
@@ -265,9 +267,12 @@
   	for i, this := range m.events {
   		if i == 0 {
   			prev = this
-  			continue
   		}
   		switch this.typ {
+  		case Initial:
+  			if err := m.CheckInitial(i, Event{}, this); err != nil {
+  				return err
+  			}
   		case A:
   			if err := m.CheckA(i, prev, this); err != nil {
   				return err
@@ -299,6 +304,14 @@
   	return fmt.Errorf(format, a...)
   }
   
+  func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
+  
+  	if !(!reflect.DeepEqual(this.state.x, 1)) {
+  		return fail("initial state precondition failed at %d; x = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
+  }
+  
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
@@ -322,10 +335,6 @@
   	}
   	return nil
   }
-  
-  // translated straightforwardly from TLA+ action.
-  // conjunctions become seq composition
-  // disjunctions are all checked and at least one branch has to be true
   
   /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
@@ -459,6 +468,8 @@
   
   func (e EventType) String() string {
   	switch e {
+  	case Initial:
+  		return "Initial"
   	case A:
   		return "A"
   	case A1:
@@ -540,9 +551,12 @@
   	for i, this := range m.events {
   		if i == 0 {
   			prev = this
-  			continue
   		}
   		switch this.typ {
+  		case Initial:
+  			if err := m.CheckInitial(i, Event{}, this); err != nil {
+  				return err
+  			}
   		case A:
   			if err := m.CheckA(i, prev, this); err != nil {
   				return err
@@ -612,6 +626,14 @@
   		panic(fmt.Sprintf(format, a...))
   	}
   	return fmt.Errorf(format, a...)
+  }
+  
+  func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
+  
+  	if !(!reflect.DeepEqual(this.state.x, 1)) {
+  		return fail("initial state precondition failed at %d; x = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
@@ -778,10 +800,6 @@
   	return nil
   }
   
-  // translated straightforwardly from TLA+ action.
-  // conjunctions become seq composition
-  // disjunctions are all checked and at least one branch has to be true
-  
   /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
   
@@ -904,6 +922,8 @@
   
   func (e EventType) String() string {
   	switch e {
+  	case Initial:
+  		return "Initial"
   	case A:
   		return "A"
   	case Constr:
@@ -965,9 +985,12 @@
   	for i, this := range m.events {
   		if i == 0 {
   			prev = this
-  			continue
   		}
   		switch this.typ {
+  		case Initial:
+  			if err := m.CheckInitial(i, Event{}, this); err != nil {
+  				return err
+  			}
   		case A:
   			if err := m.CheckA(i, prev, this); err != nil {
   				return err
@@ -999,6 +1022,14 @@
   	return fmt.Errorf(format, a...)
   }
   
+  func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
+  
+  	if !(!reflect.DeepEqual(this.state.x, 1)) {
+  		return fail("initial state precondition failed at %d; x = 1 (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
+  }
+  
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	if !(reflect.DeepEqual(this.state.x, (prev.state.x.(int) + 1))) {
@@ -1022,10 +1053,6 @@
   	}
   	return nil
   }
-  
-  // translated straightforwardly from TLA+ action.
-  // conjunctions become seq composition
-  // disjunctions are all checked and at least one branch has to be true
   
   /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
@@ -1102,10 +1129,7 @@
   }
 
   $ monitor_check TwoPhaseCommitFull
-  # command-line-arguments
-  ./TwoPhaseCommitFull.go:759:14: v.state.x undefined (type State has no field or method x)
-  ./TwoPhaseCommitFull.go:760:6: c.x undefined (type State has no field or method x)
-  ./TwoPhaseCommitFull.go:760:18: v.state.x undefined (type State has no field or method x)
+  compile ok
   package monitoring
   
   import (
@@ -1168,6 +1192,8 @@
   
   func (e EventType) String() string {
   	switch e {
+  	case Initial:
+  		return "Initial"
   	case CReceivePrepare:
   		return "CReceivePrepare"
   	case CSendPrepare:
@@ -1247,9 +1273,12 @@
   	for i, this := range m.events {
   		if i == 0 {
   			prev = this
-  			continue
   		}
   		switch this.typ {
+  		case Initial:
+  			if err := m.CheckInitial(i, Event{}, this); err != nil {
+  				return err
+  			}
   		case CReceivePrepare:
   			if err := m.CheckCReceivePrepare(this.params[0], i, prev, this); err != nil {
   				return err
@@ -1315,6 +1344,35 @@
   		panic(fmt.Sprintf(format, a...))
   	}
   	return fmt.Errorf(format, a...)
+  }
+  
+  func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
+  
+  	if !(!reflect.DeepEqual(this.state.msgs, map[any]bool{})) {
+  		return fail("initial state precondition failed at %d; msgs = {} (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.tmAborted, []any{})) {
+  		return fail("initial state precondition failed at %d; tmAborted = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.tmCommitted, []any{})) {
+  		return fail("initial state precondition failed at %d; tmCommitted = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
+  		return fail("initial state precondition failed at %d; lastMsgSent = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.tmPrepared, []any{})) {
+  		return fail("initial state precondition failed at %d; tmPrepared = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
+  		return fail("initial state precondition failed at %d; lastMsgReceived = <<>> (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.rmState, map[any]any{"r1": "working", "r2": "working"})) {
+  		return fail("initial state precondition failed at %d; rmState = [r1 |-> \"working\", r2 |-> \"working\"] (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	if !(!reflect.DeepEqual(this.state.who, "none")) {
+  		return fail("initial state precondition failed at %d; who = \"none\" (prev: %+v, this: %+v)", trace_i, prev, this)
+  	}
+  	return nil
   }
   
   func (m *Monitor) CheckCReceivePrepare(r any, trace_i int, prev Event, this Event) error {
@@ -1797,10 +1855,6 @@
   
   /* Action Post cannot be translated because of: ToTrace(CounterExample) */
   
-  // translated straightforwardly from TLA+ action.
-  // conjunctions become seq composition
-  // disjunctions are all checked and at least one branch has to be true
-  
   /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
   
@@ -1852,8 +1906,29 @@
   		// there is no null in TLA+, and also all the struct fields are any, which are reference types
   
   		// for each variable in state
-  		if v.state.x != nil {
-  			c.x = v.state.x
+  		if v.state.who != nil {
+  			c.who = v.state.who
+  		}
+  		if v.state.lastMsgReceived != nil {
+  			c.lastMsgReceived = v.state.lastMsgReceived
+  		}
+  		if v.state.tmCommitted != nil {
+  			c.tmCommitted = v.state.tmCommitted
+  		}
+  		if v.state.lastMsgSent != nil {
+  			c.lastMsgSent = v.state.lastMsgSent
+  		}
+  		if v.state.tmPrepared != nil {
+  			c.tmPrepared = v.state.tmPrepared
+  		}
+  		if v.state.msgs != nil {
+  			c.msgs = v.state.msgs
+  		}
+  		if v.state.tmAborted != nil {
+  			c.tmAborted = v.state.tmAborted
+  		}
+  		if v.state.rmState != nil {
+  			c.rmState = v.state.rmState
   		}
   	}
   

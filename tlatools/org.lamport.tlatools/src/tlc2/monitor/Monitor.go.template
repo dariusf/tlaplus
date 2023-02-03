@@ -38,6 +38,8 @@ const (
 
 func (e EventType) String() string {
 	switch e {
+	case Initial:
+        return "Initial"
 	%s
 	default:
 		panic(fmt.Sprintf("invalid %%d", e))
@@ -94,9 +96,12 @@ func (m *Monitor) CheckTrace() error {
 	for i, this := range m.events {
 		if i == 0 {
 			prev = this
-			continue
 		}
 		switch this.typ {
+		    case Initial:
+                if err := m.CheckInitial(i, Event{}, this); err != nil {
+                    return err
+                }
 		    %s
 		}
 		prev = this
@@ -115,6 +120,11 @@ func fail(format string, a ...any) error {
 		panic(fmt.Sprintf(format, a...))
 	}
 	return fmt.Errorf(format, a...)
+}
+
+func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
+    %s
+    return nil
 }
 
 %s

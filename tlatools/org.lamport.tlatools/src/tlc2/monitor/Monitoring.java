@@ -20,6 +20,7 @@ import java.util.stream.Stream;
 
 import static tlc2.monitor.GoTranslation.goBlock;
 import static tlc2.monitor.Translate.fail;
+import static tlc2.monitor.Translate.tla;
 
 public class Monitoring {
 
@@ -92,7 +93,10 @@ public class Monitoring {
                         .collect(Collectors.toList()));
                 GoBlock body = translation.translateTopLevel(defBody);
 
-                String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
+                String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
+                                "%s\n" +
+                                "return nil\n" +
+                                "}",
                         d.getName().toString(),
                         params,
                         letBindings.seq(body)
@@ -105,26 +109,33 @@ public class Monitoring {
             }
         }).collect(Collectors.joining("\n\n"));
 
+        GoBlock initialBody; {
+            GoTranslation translation = new GoTranslation(defns, constants);
+            initialBody = translation.translateInitial(initialState);
+        }
+
         String pkg = "monitoring";
         String varDecls = variables.stream().map(v -> String.format("%s any", v.getName())).collect(Collectors.joining("\n"));
 
         String actionNames = definitions.stream()
-                .filter(d -> translatedDefs.contains(d.getName().toString()))
-                .map(d -> d.getName().toString())
+                        .filter(d -> translatedDefs.contains(d.getName().toString()))
+                        .map(d -> d.getName().toString())
                 .collect(Collectors.joining("\n"));
 
         String stringSwitchCases = definitions.stream()
-                .filter(d -> translatedDefs.contains(d.getName().toString()))
-                .map(d -> String.format("case %1$s:\nreturn \"%1$s\"",
-                        d.getName().toString()))
+                        .filter(d -> translatedDefs.contains(d.getName().toString()))
+                        .map(d -> d.getName().toString())
+                .map(d -> String.format("case %1$s:\nreturn \"%1$s\"", d))
                 .collect(Collectors.joining("\n"));
 
         String checkSwitchCases = definitions.stream()
-                .filter(d -> translatedDefs.contains(d.getName().toString()))
-                .map(d -> String.format("case %1$s:\nif err := m.Check%1$s(%2$si, prev, this); err != nil {\nreturn err\n}",
-                        d.getName().toString(),
-                        translateParams(d, (i, p) -> String.format("this.params[%d]", i)))
-                )
+                        .filter(d -> translatedDefs.contains(d.getName().toString()))
+                        .map(d -> String.format("case %1$s:\n" +
+                                        "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
+                                        "return err\n" +
+                                        "}",
+                                d.getName().toString(),
+                                translateParams(d, (i, p) -> String.format("this.params[%d]", i))))
                 .collect(Collectors.joining("\n"));
 
         String imports = Stream.of("reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
@@ -140,7 +151,7 @@ public class Monitoring {
                 pkg, imports, varDecls, actionNames,
                 stringSwitchCases,
 //                constantsFields,
-                checkSwitchCases, monitorFns, varAssignments);
+                checkSwitchCases, initialBody, monitorFns, varAssignments);
 //        String module = monitorFns;
 
         Path filename = Paths.get(moduleName + ".go");

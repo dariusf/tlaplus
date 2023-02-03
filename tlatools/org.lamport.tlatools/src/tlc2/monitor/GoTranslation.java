@@ -32,6 +32,15 @@ public class GoTranslation {
         this.constants = constants;
     }
 
+    public GoBlock translateInitial(Map<UniqueString, IValue> initial) {
+        // this assumes the initial state contains all equalities
+        return initial.entrySet().stream().map(e -> {
+            GoExpr expr = goExpr("!reflect.DeepEqual(this.state.%s, %s)",
+                    e.getKey().toString(), translateValue(e.getValue()));
+            return failureMessage(String.format("%s = %s", e.getKey(), Eval.prettyPrint(e.getValue())), expr, "initial state precondition");
+        }).reduce(GoBlock::seq).get();
+    }
+
     /**
      * We only try to split actions at the top level. For simple actions
      * (a single conj or disj) this produces more granular assertions.
@@ -71,13 +80,18 @@ public class GoTranslation {
         return failureMessage(op, expr, cond);
     }
 
+    public static String escape(String s) {
+        return s.replaceAll("\\\\", "\\\\\\\\").replaceAll("\"", "\\\\\"");
+    }
     public static GoBlock failureMessage(ExprOrOpArgNode op, GoExpr expr, String cond) {
+        return failureMessage(Eval.prettyPrint(op), expr, cond);
+    }
+
+    public static GoBlock failureMessage(String op, GoExpr expr, String cond) {
         return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; %s (prev: %%+v, this: %%+v)\", trace_i, prev, this)\n}",
                 expr,
                 cond,
-                Eval.prettyPrint(op)
-                        .replaceAll("\\\\", "\\\\\\\\")
-                        .replaceAll("\"", "\\\\\""));
+                escape(op));
     }
 
 
@@ -371,7 +385,7 @@ public class GoTranslation {
     /**
      * this produces an expression, but without defs
      */
-    private static GoExpr translateValue(IValue v) {
+    public static GoExpr translateValue(IValue v) {
         if (v instanceof StringValue) {
             return goExpr("\"" + ((StringValue) v).getVal() + "\"");
         } else if (v instanceof IntValue) {
@@ -384,15 +398,31 @@ public class GoTranslation {
             return goExpr("[]any{}");
         } else if (v instanceof FcnRcdValue) {
             // record literals, like [r1 |-> "working"]
-            List<String> res = new ArrayList<>();
+            List<GoExpr> res = new ArrayList<>();
             for (int i = 0; i < ((FcnRcdValue) v).domain.length; i++) {
-                res.add(String.format("%s: %s",
+                res.add(goExpr("%s: %s",
                         translateValue(((FcnRcdValue) v).domain[i]),
                         translateValue(((FcnRcdValue) v).values[i])));
             }
-            return goExpr("map[interface{}]interface{}{%s}", String.join(", ", res));
+            return goExpr("map[any]any{%s}", goExprJoin(", ", res));
         }
         throw fail("invalid type of value " + v.getClass().getSimpleName());
+    }
+
+    private static GoExpr goExprJoin(String delimiter, List<GoExpr> goExprs) {
+        GoExpr res = null;
+        boolean first = true;
+        for (GoExpr g : goExprs) {
+            if (first) {
+                res = g;
+                first = false;
+            } else {
+                res.expr += delimiter;
+                res.defs.addAll(g.defs);
+                res.expr += g.expr;
+            }
+        }
+        return res;
     }
 
     /**
