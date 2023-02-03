@@ -122,6 +122,8 @@ func fail(format string, a ...any) error {
 // translated straightforwardly from TLA+ action.
 // conjunctions become seq composition
 // disjunctions are all checked and at least one branch has to be true
+
+/*
 func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
 
 	if prev.state.x.(int) <= 0 {
@@ -140,6 +142,7 @@ func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
 
 	return nil
 }
+*/
 
 // this state value can have nil fields
 func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {

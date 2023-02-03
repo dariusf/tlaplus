@@ -14,7 +14,12 @@ import java.util.stream.IntStream;
 public class Translate {
 
     enum Type {
-        INT
+        INT,
+        RECORD,
+        SEQ,
+        SET,
+        STRING,
+        BOOL,
     }
 
     static int n = 0;
@@ -42,7 +47,9 @@ public class Translate {
     }
 
     public static boolean isVar(SemanticNode body) {
-        return body instanceof OpApplNode && ((OpApplNode) body).getArgs().length == 0;
+        return body instanceof OpApplNode &&
+                ((OpApplNode) body).getArgs().length == 0 &&
+                !((OpApplNode) body).getOperator().getName().toString().contains("$");
     }
 
     public static String getVarName(OpApplNode fml) {

@@ -4,8 +4,6 @@ import tla2sany.semantic.*;
 import tlc2.synth.Eval;
 import tlc2.tool.Defns;
 import tlc2.value.IValue;
-import tlc2.value.impl.MethodValue;
-import tlc2.value.impl.StringValue;
 import tlc2.value.impl.*;
 import util.UniqueString;
 
@@ -66,7 +64,7 @@ public class GoTranslation {
     }
 
     public static GoBlock failure(ExprOrOpArgNode op, GoExpr expr, String cond) {
-        return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; expected %s but got %%s (prev: %%+v, this: %%+v)\", trace_i, prev.state.x, prev, this)\n}",
+        return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; %s (prev: %%+v, this: %%+v)\", trace_i, prev, this)\n}",
                 expr,
                 cond,
                 Eval.prettyPrint(op)
@@ -146,26 +144,49 @@ public class GoTranslation {
                 }
                 case "Some":
                     return goExpr("[]any{%s}", translateExpr(args.get(0)));
-                case "Append":
-                    return goExpr("append(%s, %s)", translateExpr(args.get(0)), translateExpr(args.get(1)));
+                case "Append": {
+                    typ.push(Type.SEQ);
+                    GoExpr a1 = translateExpr(args.get(0));
+                    GoExpr a2 = translateExpr(args.get(1));
+                    typ.pop();
+                    return goExpr("append(%s, %s)", a1, a2);
+                }
                 case "ToSet": {
                     String v = fresh();
+                    typ.push(Type.SEQ);
                     GoExpr a1 = translateExpr(args.get(0));
-                    GoBlock def = goBlock("%s := map[any]bool{}\nfor _, v := range %s {\n%s[v] = true\n}", v, a1, v);
+                    typ.pop();
+                    GoBlock def = goBlock("%s := map[any]bool{}\n" +
+                            "for _, v := range %s {\n" +
+                            "%s[v] = true\n" +
+                            "}", v, a1, v);
                     return goExpr(def, "%s", v);
                 }
                 case "$FcnApply": {
+                    typ.push(Type.RECORD);
                     GoExpr map = translateExpr(args.get(0));
+                    typ.pop();
+                    typ.push(Type.STRING);
                     GoExpr key = translateExpr(args.get(1));
+                    typ.pop();
                     return goExpr("%s[%s]", map, key);
                 }
                 case "$SetEnumerate": {
+                    // {1, 2}
                     List<GoExpr> exprs = args.stream()
                             .map(a -> translateExpr(a))
                             .map(a -> goExpr("%s: true", a)).collect(Collectors.toList());
                     return goExpr("map[any]bool{%s}", joinGoExpr(exprs, ", "));
                 }
+                case "$Tuple": {
+                    // <<>>
+                    List<GoExpr> exprs = args.stream()
+                            .map(a -> translateExpr(a))
+                            .map(a -> goExpr("%s", a)).collect(Collectors.toList());
+                    return goExpr("[]any{%s}", joinGoExpr(exprs, ", "));
+                }
                 case "$RcdConstructor":
+                    // [a |-> 1, b |-> 2]
                     List<GoExpr> all = args.stream().map(a -> {
                         OpApplNode op = (OpApplNode) a;
                         if (op.getOperator().getName().equals("$Pair")) {
@@ -197,10 +218,16 @@ public class GoTranslation {
                     String v = fresh();
                     String k1 = fresh();
                     String v1 = fresh();
+                    typ.push(Type.RECORD);
                     GoExpr unprimed1 = translateExpr(unprimed);
+                    typ.pop();
                     GoExpr map1 = translateExpr(map);
                     GoExpr key1 = translateExpr(key);
-                    GoBlock copyMap = goBlock("%1$s := map[string]any{}\nfor %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %3$s\n}\n%1$s[%5$s] = %6$s",
+                    GoBlock copyMap = goBlock("%1$s := map[any]any{}\n" +
+                                    "for %2$s, %3$s := range %4$s {\n" +
+                                    "%1$s[%2$s] = %3$s\n" +
+                                    "}\n" +
+                                    "%1$s[%5$s] = %6$s",
                             v, k1, v1, unprimed1, map1, key1);
                     return goExpr(copyMap, "%s", v);
                 }
@@ -213,23 +240,31 @@ public class GoTranslation {
                     String v1 = fresh();
                     String k2 = fresh();
                     String v2 = fresh();
+                    typ.push(Type.SET);
+                    GoExpr a1 = translateExpr(left);
+                    GoExpr a2 = translateExpr(right);
+                    typ.pop();
                     GoBlock unionMaps = goBlock("%1$s := map[any]bool{}\n" +
                                     "for %2$s, %3$s := range %6$s {\n%1$s[%2$s] = %3$s\n}\n" +
                                     "for %4$s, %5$s := range %7$s {\n%1$s[%4$s] = %5$s\n}",
-                            v, k1, v1, k2, v2, translateExpr(left), translateExpr(right));
+                            v, k1, v1, k2, v2, a1, a2);
                     return goExpr(unionMaps, "%s", v);
                 }
                 case "\\in": {
                     String var = fresh();
                     GoExpr thing = translateExpr(args.get(0));
+                    typ.push(Type.SET);
                     GoExpr coll = translateExpr(args.get(1));
+                    typ.pop();
                     GoBlock def1 = goBlock("_, %s := %s[%s]", var, coll, thing);
                     return goExpr(def1, "%s", var);
                 }
                 case "\\notin": {
                     String var = fresh();
                     GoExpr thing = translateExpr(args.get(0));
+                    typ.push(Type.SET);
                     GoExpr coll = translateExpr(args.get(1));
+                    typ.pop();
                     GoBlock def1 = goBlock("_, %s := %s[%s]", var, coll, thing);
                     return goExpr(def1, "!%s", var);
                 }
@@ -247,9 +282,13 @@ public class GoTranslation {
                         v1 = "_";
                     }
                     boundVarNames.add(v1);
+                    GoExpr a1 = translateExpr(set);
+                    typ.push(Type.SET);
+                    GoExpr a2 = translateExpr(rhs1);
+                    typ.pop();
                     GoBlock unionMaps = goBlock("%1$s := map[any]any{}\n" +
                                     "for %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %5$s\n}\n",
-                            v, k1, v1, translateExpr(set), translateExpr(rhs1));
+                            v, k1, v1, a1, a2);
                     boundVarNames.remove(v1);
                     return goExpr(unionMaps, "%s", v);
                 }
@@ -406,9 +445,18 @@ public class GoTranslation {
         switch (typ) {
             case INT:
                 return "int";
+            case STRING:
+                return "string";
+            case BOOL:
+                return "bool";
+            case RECORD:
+                return "map[any]any";
+            case SEQ:
+                return "[]any";
+            case SET:
+                return "map[any]bool";
         }
-        fail("unhandled " + typ);
-        return null;
+        throw fail("goTypeName: unhandled " + typ);
     }
 
     public OpApplNode subst(OpApplNode app) {

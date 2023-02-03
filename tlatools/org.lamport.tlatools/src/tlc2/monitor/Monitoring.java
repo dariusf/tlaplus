@@ -88,6 +88,9 @@ public class Monitoring {
                     throw new CannotBeTranslatedException(m);
                 }
                 String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
+                translation.boundVarNames.addAll(Arrays.stream(d.getParams())
+                        .map(p -> p.getName().toString())
+                        .collect(Collectors.toList()));
                 GoBlock body = translation.translateTopLevel(defBody);
                 String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
                         d.getName().toString(),
