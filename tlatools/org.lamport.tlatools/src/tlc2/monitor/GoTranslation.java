@@ -16,10 +16,14 @@ import static tlc2.monitor.Translate.*;
 
 public class GoTranslation {
 
+    // User-defined operators
     private final Defns defns;
+
+    // CONSTANTs overridden in config file
     private final Map<String, IValue> constants;
 
     // These two fields should be parameters of translateExpr but are here to reduce boilerplate
+    // TODO boundVarNames being a mutable set could be problematic if there is shadowing
     public final Set<String> boundVarNames = new HashSet<>();
     private final Stack<Type> typ = new Stack<>();
 
@@ -29,13 +33,15 @@ public class GoTranslation {
     }
 
     /**
-     * we only try to split at the top level, for simple actions this produces better code.
-     * for complicated cases we don't do anything fancy and produce a single large expression.
+     * We only try to split actions at the top level. For simple actions
+     * (a single conj or disj) this produces more granular assertions.
+     * We don't do anything special for more complicated cases
+     * and produce a single large assertion.
      */
     public GoBlock translateTopLevel(ExprOrOpArgNode op) {
 
         if (!(op instanceof OpApplNode)) {
-            throw fail("not op app node? " + Eval.prettyPrint(op));
+            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
         }
 
         UniqueString opName = ((OpApplNode) op).getOperator().getName();
@@ -50,20 +56,22 @@ public class GoTranslation {
         }
 
         if (opName.equals(OP_dl)) {
+            // once we go through a disjunction, we give up on splitting any subexpressions.
+            // the disjunction itself still becomes a series of nested ifs.
             List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a)).collect(Collectors.toList());
             GoBlock res = goBlock("");
             for (int i = disjuncts.size() - 1; i >= 0; i--) {
-                GoBlock fail = i == disjuncts.size() - 1 ? failure(op, disjuncts.get(i), cond) : res;
+                GoBlock fail = i == disjuncts.size() - 1 ? failureMessage(op, disjuncts.get(i), cond) : res;
                 res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
             }
             return res;
         }
 
         GoExpr expr = translateExpr(op);
-        return failure(op, expr, cond);
+        return failureMessage(op, expr, cond);
     }
 
-    public static GoBlock failure(ExprOrOpArgNode op, GoExpr expr, String cond) {
+    public static GoBlock failureMessage(ExprOrOpArgNode op, GoExpr expr, String cond) {
         return goBlock("if !(%s) {\nreturn fail(\"%s failed at %%d; %s (prev: %%+v, this: %%+v)\", trace_i, prev, this)\n}",
                 expr,
                 cond,
@@ -74,15 +82,17 @@ public class GoTranslation {
 
 
     public GoExpr translateExpr(ExprOrOpArgNode fml) {
-        if (isConstant(fml)) {
-            if (fml instanceof StringNode) {
-                return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
-            } else if (fml instanceof NumeralNode) {
-                return goExpr(((NumeralNode) fml).val() + "");
-            }
-            throw fail("unknown");
-        } else if (fml instanceof OpApplNode) {
-            String name = ((OpApplNode) fml).getOperator().getName().toString();
+        // constants
+        if (fml instanceof StringNode) {
+            return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
+        }
+        if (fml instanceof NumeralNode) {
+            return goExpr(((NumeralNode) fml).val() + "");
+        }
+
+        if (fml instanceof OpApplNode) {
+            OpApplNode op = (OpApplNode) fml;
+            String name = op.getOperator().getName().toString();
             List<ExprOrOpArgNode> args = operatorArgs(fml);
             switch (name) {
                 case "TRUE":
@@ -162,9 +172,9 @@ public class GoTranslation {
                 case "$RcdConstructor":
                     // [a |-> 1, b |-> 2]
                     List<GoExpr> all = args.stream().map(a -> {
-                        OpApplNode op = (OpApplNode) a;
-                        if (op.getOperator().getName().equals("$Pair")) {
-                            List<ExprOrOpArgNode> args1 = operatorArgs(op);
+                        OpApplNode op1 = (OpApplNode) a;
+                        if (op1.getOperator().getName().equals("$Pair")) {
+                            List<ExprOrOpArgNode> args1 = operatorArgs(op1);
                             return goExpr("%s: %s",
                                     translateExpr(args1.get(0)),
                                     translateExpr(args1.get(1)));
@@ -246,8 +256,8 @@ public class GoTranslation {
                     // [r \in RM |-> "expr using r"]
                     // create a map and fill it with values from an existing set
                     ExprOrOpArgNode rhs = args.get(0);
-                    ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[0];
-                    FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(0);
+                    ExprNode set = op.getBdedQuantBounds()[0];
+                    FormalParamNode var = op.getQuantSymbolLists().get(0);
                     String v = fresh();
                     String k1 = fresh();
                     String v1 = fresh();
@@ -271,9 +281,9 @@ public class GoTranslation {
                     // int l = ((OpApplNode) fml).getBdedQuantBounds().length;
                     // TODO this translation assumes l = 1 for simplicity
                     // for (int i = 0; i < l; i++) {
-                    ExprNode set = ((OpApplNode) fml).getBdedQuantBounds()[0];
+                    ExprNode set = op.getBdedQuantBounds()[0];
                     GoExpr sset = translateExpr(set);
-                    FormalParamNode var = ((OpApplNode) fml).getQuantSymbolLists().get(0);
+                    FormalParamNode var = op.getQuantSymbolLists().get(0);
 
                     String v = fresh();
                     String k1 = fresh();
@@ -313,7 +323,7 @@ public class GoTranslation {
                     // user-defined operator
                     Object userDefined = defns.get(name);
                     if (userDefined instanceof MethodValue) {
-                        String s = Eval.prettyPrint(fml);
+                        String s = Eval.prettyPrint(op);
                         // we used to print a warning, but if the user never discovers the missing operator,
                         // it probably doesn't matter
                         // System.out.println("warning: cannot be translated: " + s);
@@ -322,13 +332,13 @@ public class GoTranslation {
                         throw new CannotBeTranslatedException(s);
                     }
                     if (userDefined != null) {
-                        return translateExpr(subst((OpApplNode) fml));
+                        return translateExpr(subst(op));
                     }
 
                     // treat as variable
-                    String eventVar = isPrimed(fml) ? "this" : "prev";
-                    if (isPrimed(fml)) {
-                        name = ((OpApplNode) operatorArgs(fml).get(0)).getOperator().getName().toString();
+                    String eventVar = isPrimed(op) ? "this" : "prev";
+                    if (isPrimed(op)) {
+                        name = ((OpApplNode) operatorArgs(op).get(0)).getOperator().getName().toString();
                     }
                     if (typ.empty()) {
                         return goExpr("%s.state.%s", eventVar, name);

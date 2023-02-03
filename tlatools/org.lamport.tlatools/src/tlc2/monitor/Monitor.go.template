@@ -119,10 +119,6 @@ func fail(format string, a ...any) error {
 
 %s
 
-// translated straightforwardly from TLA+ action.
-// conjunctions become seq composition
-// disjunctions are all checked and at least one branch has to be true
-
 /*
 func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
 
@@ -174,9 +170,7 @@ func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
 		// there is no null in TLA+, and also all the struct fields are any, which are reference types
 
 		// for each variable in state
-		if v.state.x != nil {
-			c.x = v.state.x
-		}
+		%s
 	}
 
 	// reset

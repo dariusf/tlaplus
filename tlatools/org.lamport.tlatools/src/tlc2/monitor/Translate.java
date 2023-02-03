@@ -48,10 +48,6 @@ public class Translate {
         return body instanceof OpApplNode && ((OpApplNode) body).getOperator().getName().equals("'");
     }
 
-    public static boolean isConstant(SemanticNode body) {
-        return body instanceof StringNode || body instanceof NumeralNode;
-    }
-
     public static List<ExprOrOpArgNode> operatorArgs(SemanticNode body) {
         if (!(body instanceof OpApplNode)) {
             throw fail("not an operator");

@@ -20,7 +20,6 @@ import java.util.stream.Stream;
 
 import static tlc2.monitor.GoTranslation.goBlock;
 import static tlc2.monitor.Translate.fail;
-import static tlc2.monitor.Translate.substitute;
 
 public class Monitoring {
 
@@ -92,6 +91,7 @@ public class Monitoring {
                         .map(p -> p.getName().toString())
                         .collect(Collectors.toList()));
                 GoBlock body = translation.translateTopLevel(defBody);
+
                 String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n%s\nreturn nil\n}",
                         d.getName().toString(),
                         params,
@@ -130,11 +130,17 @@ public class Monitoring {
         String imports = Stream.of("reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
                 .collect(Collectors.joining("\n"));
 
+        String varAssignments = variables.stream().map(v ->
+                        String.format("if v.state.%1$s != nil {\n" +
+                                "c.%1$s = v.state.%1$s\n" +
+                                "}", v.getName().toString()))
+                .collect(Collectors.joining("\n"));
+
         String module = String.format(overallTemplate,
                 pkg, imports, varDecls, actionNames,
                 stringSwitchCases,
 //                constantsFields,
-                checkSwitchCases, monitorFns);
+                checkSwitchCases, monitorFns, varAssignments);
 //        String module = monitorFns;
 
         Path filename = Paths.get(moduleName + ".go");
