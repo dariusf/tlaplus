@@ -74,63 +74,43 @@ public class GoTranslation {
             List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a, null)).collect(Collectors.toList());
             GoBlock res = goBlock("");
             for (int i = disjuncts.size() - 1; i >= 0; i--) {
-                GoBlock fail = i == disjuncts.size() - 1 ? failureMessage(action, op, "n/a", "n/a", disjuncts.get(i), cond) : res;
+                GoBlock fail = i == disjuncts.size() - 1 ? failureMessage(action, op, disjuncts.get(i), cond) : res;
                 res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
             }
             return res;
         }
 
-        List<String> subexprs = debugSubexpressions(op);
         GoExpr expr = translateExpr(op, null);
-        return failureMessage(action, op,
-                subexprs.size() > 0 ? subexprs.get(0) : "none",
-                subexprs.size() > 1 ? subexprs.get(1) : "none",
-                expr, cond);
+        return failureMessage(action, op, expr, cond);
     }
 
     public static String escape(String s) {
         return s.replaceAll("\\\\", "\\\\\\\\").replaceAll("\"", "\\\\\"");
     }
 
-    public List<String> debugSubexpressions(ExprOrOpArgNode op) {
-        List<String> res = new ArrayList<>();
-        String rhs = "\"none\"";
-        String lhs = "\"none\"";
-        try {
-            if (op instanceof OpApplNode) {
-                ExprOrOpArgNode[] args = ((OpApplNode) op).getArgs();
-                if (args.length > 0) {
-                    lhs = translateExpr(args[0], null).expr;
-                }
-                if (args.length > 1) {
-                    lhs = translateExpr(args[1], null).expr;
-                }
-            }
-        } catch (Exception e) {
-            // since this is just for debugging, swallow errors and don't fail
-            // (it is possible to fail, if we try to look at expressions we didn't create)
-        }
-        res.add(lhs);
-        res.add(rhs);
-        return res;
+    public static GoBlock failureMessage(String action, ExprOrOpArgNode op, GoExpr expr, String cond) {
+        return failureMessage(action, Eval.prettyPrint(op),
+                expr.subexprs.size() > 0 ? expr.subexprs.get(0).expr : "\"none\"",
+                expr.subexprs.size() > 1 ? expr.subexprs.get(1).expr : "\"none\"",
+                expr, cond);
     }
 
-    public static GoBlock failureMessage(String action, ExprOrOpArgNode op, String rhs, String lhs, GoExpr expr, String cond) {
-        return failureMessage(action, Eval.prettyPrint(op), lhs, rhs, expr, cond);
-    }
-
+    /**
+     * Lower-level function, for cases where we didn't translate from an OpApplNode, e.g. the initial state
+     */
     public static GoBlock failureMessage(String action, String op, String lhs, String rhs, GoExpr expr, String cond) {
-        return goBlock("if !(%s) {\n" +
-                        "return fail(\"%s failed in %s at %%d; %s%%n" +
-                        "lhs: %%s%%n" +
-                        "rhs: %%s%%n" +
-                        "prev: %%+v%%n" +
+        return goBlock("if !(%1$s) {\n" +
+                        "return fail(\"%2$s failed in %3$s at %%d; %4$s\\n\\n" +
+                        "lhs: %5$s = %%+v\\n" +
+                        "rhs: %6$s = %%+v\\n\\n" +
+                        "prev: %%+v\\n\\n" +
                         "this: %%+v\"" +
-                        ", trace_i, prev, this, %s, %s)\n}",
+                        ", trace_i, %7$s, %8$s, prev, this)\n}",
                 expr,
                 cond,
                 action,
                 escape(op),
+                escape(lhs), escape(rhs),
                 lhs, rhs
         );
     }
@@ -495,6 +475,7 @@ public class GoTranslation {
 //                    }
 //                });
             } else if (a instanceof GoExpr) {
+                res.subexprs.add((GoExpr) a);
                 res.defs.addAll(((GoExpr) a).defs);
                 return Stream.of(((GoExpr) a).expr);
             } else {
