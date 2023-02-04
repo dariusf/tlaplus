@@ -76,7 +76,7 @@ public class Monitoring {
                         String letVar = letLet.getName().toString();
                         translation.boundVarNames.add(letVar);
                         letBindings = letBindings.seq(goBlock("%s := %s",
-                                letVar, translation.translateExpr(letLet.getBody())));
+                                letVar, translation.translateExpr(letLet.getBody(), null)));
                     }
                     defBody = let.getBody();
                 }
@@ -92,13 +92,13 @@ public class Monitoring {
                 translation.boundVarNames.addAll(Arrays.stream(d.getParams())
                         .map(p -> p.getName().toString())
                         .collect(Collectors.toList()));
-                GoBlock body = translation.translateTopLevel(defBody);
+                GoBlock body = translation.translateTopLevel(d.getName().toString(), defBody);
 
                 String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
                                 "%s\n" +
                                 "return nil\n" +
                                 "}",
-                        d.getName().toString(),
+                        d.getName(),
                         params,
                         letBindings.seq(body)
                 );
@@ -135,7 +135,7 @@ public class Monitoring {
                                         "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
                                         "return err\n" +
                                         "}",
-                                d.getName().toString(),
+                                d.getName(),
                                 translateParams(d, (i, p) -> String.format("this.params[%d]", i))))
                 .collect(Collectors.joining("\n"));
 
