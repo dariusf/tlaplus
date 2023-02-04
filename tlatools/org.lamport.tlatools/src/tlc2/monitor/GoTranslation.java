@@ -164,7 +164,7 @@ public class GoTranslation {
                 case "$SetEnumerate": {
                     // {1, 2}
                     String v = fresh("setliteral");
-                    GoBlock def = goBlock("%s := map[string]any{}", v);
+                    GoBlock def = goBlock("%s := map[any]any{}", v);
                     def = args.stream().map(a -> {
                                 GoExpr a1 = translateExpr(a, null);
                                 return goBlock("%s[hash(%s)] = %s", v, a1, a1);
@@ -192,7 +192,7 @@ public class GoTranslation {
                             throw fail("unexpected");
                         }
                     }).collect(Collectors.toList());
-                    return goExpr("map[string]any{%s}", joinGoExpr(all, ", "));
+                    return goExpr("map[any]any{%s}", joinGoExpr(all, ", "));
                 case "$DisjList":
                 case "\\or":
                     return args.stream().map(a -> translateExpr(a, null))
@@ -234,7 +234,7 @@ public class GoTranslation {
                     String v2 = fresh();
                     GoExpr a1 = translateExpr(left, Type.SET);
                     GoExpr a2 = translateExpr(right, Type.SET);
-                    GoBlock unionMaps = goBlock("%1$s := map[string]any{}\n" +
+                    GoBlock unionMaps = goBlock("%1$s := map[any]any{}\n" +
                                     "for %2$s, %3$s := range %6$s {\n%1$s[%2$s] = %3$s\n}\n" +
                                     "for %4$s, %5$s := range %7$s {\n%1$s[%4$s] = %5$s\n}",
                             v, k1, v1, k2, v2, a1, a2);
@@ -396,7 +396,7 @@ public class GoTranslation {
             return goExpr(v.toString());
         } else if (v instanceof SetEnumValue) {
             String v1 = fresh("setlit");
-            GoBlock def = goBlock("%s := map[string]any{}", v1);
+            GoBlock def = goBlock("%s := map[any]any{}", v1);
             def = toList(((SetEnumValue) v).elems).stream().map(a -> {
                         GoExpr a1 = translateValue(a);
                         return goBlock("%s[hash(%s)] = %s", v1, a1, a1);
