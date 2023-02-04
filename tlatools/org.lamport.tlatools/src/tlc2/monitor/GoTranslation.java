@@ -376,7 +376,7 @@ public class GoTranslation {
         if (typ.empty()) {
             return e;
         } else {
-            return goExpr("%s.(%s)", e, goTypeName(typ.peek()));
+            return goExpr("any(%s).(%s)", e, goTypeName(typ.peek()));
         }
     }
 

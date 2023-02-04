@@ -75,9 +75,7 @@ public class Monitoring {
                         // TODO assume there are no local operator definitions
                         String letVar = letLet.getName().toString();
                         translation.boundVarNames.add(letVar);
-                        // use var instead of := so we can specify the type as any, since non-ref
-                        // types can't be cast in Go, breaking the type assertions we do elsewhere
-                        letBindings = letBindings.seq(goBlock("var %s any = %s",
+                        letBindings = letBindings.seq(goBlock("%s := %s",
                                 letVar, translation.translateExpr(letLet.getBody())));
                     }
                     defBody = let.getBody();
