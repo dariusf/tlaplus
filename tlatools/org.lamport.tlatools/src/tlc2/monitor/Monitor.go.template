@@ -4,8 +4,17 @@ import (
     %s
 )
 
+type set = map[string]any
+type record = map[string]any
+type seq = []any
+
 // panic instead of returning error
 var crash = true
+
+func hash(a any) string {
+    s, _ := json.Marshal(a)
+    return string(s)
+}
 
 func thisFile() string {
 	_, file, _, ok := runtime.Caller(1)

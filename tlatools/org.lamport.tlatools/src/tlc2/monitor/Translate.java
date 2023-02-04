@@ -23,7 +23,10 @@ public class Translate {
     static int n = 0;
 
     static String fresh() {
-        return "v" + n++;
+        return String.format("v%d", n++);
+    }
+    static String fresh(String suffix) {
+        return String.format("v%d_%s", n++, suffix);
     }
 
     /**

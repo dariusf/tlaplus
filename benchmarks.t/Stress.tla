@@ -62,6 +62,10 @@ I1 ==
   LET c == 1 IN
   (a + b + c) = 1
 
+Sets ==
+  /\ ({1,2} \union {3}) = {}
+  /\ 1 \notin {3}
+
 Next ==
   \/ A
   \/ A1

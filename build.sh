@@ -15,6 +15,7 @@ test () {
 
 alias c=compile
 alias t=test
+alias d='dune promote'
 
 tlatools() {
   name=$1
