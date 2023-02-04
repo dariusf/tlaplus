@@ -34,9 +34,14 @@ public class GoTranslation {
     public GoBlock translateInitial(Map<UniqueString, IValue> initial) {
         // this assumes the initial state contains all equalities
         return initial.entrySet().stream().map(e -> {
+            GoExpr val = translateValue(e.getValue());
             GoExpr expr = goExpr("reflect.DeepEqual(this.state.%s, %s)",
-                    e.getKey().toString(), translateValue(e.getValue()));
-            return failureMessage("initial", String.format("%s = %s", e.getKey(), Eval.prettyPrint(e.getValue())), expr, "precondition");
+                    e.getKey().toString(), val);
+            return failureMessage("initial",
+                    String.format("%s = %s",
+                            e.getKey(), Eval.prettyPrint(e.getValue())),
+                    String.format("this.state.%s", e.getKey().toString()), val.expr,
+                    expr, "precondition");
         }).reduce(GoBlock::seq).get();
     }
 
@@ -69,30 +74,65 @@ public class GoTranslation {
             List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a, null)).collect(Collectors.toList());
             GoBlock res = goBlock("");
             for (int i = disjuncts.size() - 1; i >= 0; i--) {
-                GoBlock fail = i == disjuncts.size() - 1 ? failureMessage(action, op, disjuncts.get(i), cond) : res;
+                GoBlock fail = i == disjuncts.size() - 1 ? failureMessage(action, op, "n/a", "n/a", disjuncts.get(i), cond) : res;
                 res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
             }
             return res;
         }
 
+        List<String> subexprs = debugSubexpressions(op);
         GoExpr expr = translateExpr(op, null);
-        return failureMessage(action, op, expr, cond);
+        return failureMessage(action, op,
+                subexprs.size() > 0 ? subexprs.get(0) : "none",
+                subexprs.size() > 1 ? subexprs.get(1) : "none",
+                expr, cond);
     }
 
     public static String escape(String s) {
         return s.replaceAll("\\\\", "\\\\\\\\").replaceAll("\"", "\\\\\"");
     }
 
-    public static GoBlock failureMessage(String action, ExprOrOpArgNode op, GoExpr expr, String cond) {
-        return failureMessage(action, Eval.prettyPrint(op), expr, cond);
+    public List<String> debugSubexpressions(ExprOrOpArgNode op) {
+        List<String> res = new ArrayList<>();
+        String rhs = "\"none\"";
+        String lhs = "\"none\"";
+        try {
+            if (op instanceof OpApplNode) {
+                ExprOrOpArgNode[] args = ((OpApplNode) op).getArgs();
+                if (args.length > 0) {
+                    lhs = translateExpr(args[0], null).expr;
+                }
+                if (args.length > 1) {
+                    lhs = translateExpr(args[1], null).expr;
+                }
+            }
+        } catch (Exception e) {
+            // since this is just for debugging, swallow errors and don't fail
+            // (it is possible to fail, if we try to look at expressions we didn't create)
+        }
+        res.add(lhs);
+        res.add(rhs);
+        return res;
     }
 
-    public static GoBlock failureMessage(String action, String op, GoExpr expr, String cond) {
-        return goBlock("if !(%s) {\nreturn fail(\"%s failed in %s at %%d; %s (prev: %%+v, this: %%+v)\", trace_i, prev, this)\n}",
+    public static GoBlock failureMessage(String action, ExprOrOpArgNode op, String rhs, String lhs, GoExpr expr, String cond) {
+        return failureMessage(action, Eval.prettyPrint(op), lhs, rhs, expr, cond);
+    }
+
+    public static GoBlock failureMessage(String action, String op, String lhs, String rhs, GoExpr expr, String cond) {
+        return goBlock("if !(%s) {\n" +
+                        "return fail(\"%s failed in %s at %%d; %s%%n" +
+                        "lhs: %%s%%n" +
+                        "rhs: %%s%%n" +
+                        "prev: %%+v%%n" +
+                        "this: %%+v\"" +
+                        ", trace_i, prev, this, %s, %s)\n}",
                 expr,
                 cond,
                 action,
-                escape(op));
+                escape(op),
+                lhs, rhs
+        );
     }
 
 
@@ -380,7 +420,7 @@ public class GoTranslation {
 
     public static List<IValue> toList(ValueVec vv) {
         List<IValue> res = new ArrayList<>();
-        for (int i=0; i<vv.size(); i++) {
+        for (int i = 0; i < vv.size(); i++) {
             res.add(vv.elementAt(i));
         }
         return res;
