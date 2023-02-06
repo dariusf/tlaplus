@@ -35,7 +35,7 @@ public class GoTranslation {
         // this assumes the initial state contains all equalities
         return initial.entrySet().stream().map(e -> {
             GoExpr val = translateValue(e.getValue());
-            GoExpr expr = goExpr("reflect.DeepEqual(this.state.%s, %s)",
+            GoExpr expr = goExpr("Eq(this.state.%s, %s)",
                     e.getKey().toString(), val);
             return failureMessage("initial",
                     String.format("%s = %s",
@@ -72,10 +72,11 @@ public class GoTranslation {
             // once we go through a disjunction, we give up on splitting any subexpressions.
             // the disjunction itself still becomes a series of nested ifs.
             List<GoExpr> disjuncts = args.stream().map(a -> translateExpr(a, null)).collect(Collectors.toList());
-            GoBlock res = goBlock("");
-            for (int i = disjuncts.size() - 1; i >= 0; i--) {
-                GoBlock fail = i == disjuncts.size() - 1 ? failureMessage(action, op, disjuncts.get(i), cond) : res;
-                res = goBlock("if !(%s) {\n%s\n}\n", disjuncts.get(i), fail);
+            // assume there are at least 2 args
+            int last = disjuncts.size() - 1;
+            GoBlock res = failureMessage(action, op, disjuncts.get(last), cond);
+            for (int i = last - 1; i >= 0; i--) {
+                res = goBlock("if IsFalse(%s) {\n%s\n}\n", disjuncts.get(i), res);
             }
             return res;
         }
@@ -90,8 +91,8 @@ public class GoTranslation {
 
     public static GoBlock failureMessage(String action, ExprOrOpArgNode op, GoExpr expr, String cond) {
         return failureMessage(action, Eval.prettyPrint(op),
-                expr.subexprs.size() > 0 ? expr.subexprs.get(0).expr : "\"none\"",
-                expr.subexprs.size() > 1 ? expr.subexprs.get(1).expr : "\"none\"",
+                expr.subexprs.size() > 0 ? expr.subexprs.get(0).expr : "\"<none>\"",
+                expr.subexprs.size() > 1 ? expr.subexprs.get(1).expr : "\"<none>\"",
                 expr, cond);
     }
 
@@ -99,7 +100,13 @@ public class GoTranslation {
      * Lower-level function, for cases where we didn't translate from an OpApplNode, e.g. the initial state
      */
     public static GoBlock failureMessage(String action, String op, String lhs, String rhs, GoExpr expr, String cond) {
-        return goBlock("if !(%1$s) {\n" +
+        if (lhs.startsWith("func")) {
+            lhs = "\"<func>\"";
+        }
+        if (rhs.startsWith("func")) {
+            rhs = "\"<func>\"";
+        }
+        return goBlock("if IsFalse(%1$s) {\n" +
                         "return fail(\"%2$s failed in %3$s at %%d; %4$s\\n\\n" +
                         "lhs: %5$s = %%+v\\n" +
                         "rhs: %6$s = %%+v\\n\\n" +
@@ -119,10 +126,10 @@ public class GoTranslation {
     public GoExpr translateExpr(ExprOrOpArgNode fml, Type typ) {
         // constants
         if (fml instanceof StringNode) {
-            return goExpr("\"" + ((StringNode) fml).getRep().toString() + "\"");
+            return goExpr("str(\"" + ((StringNode) fml).getRep().toString() + "\")");
         }
         if (fml instanceof NumeralNode) {
-            return goExpr(((NumeralNode) fml).val() + "");
+            return goExpr("integer(%d)", ((NumeralNode) fml).val());
         }
 
         if (fml instanceof OpApplNode) {
@@ -131,73 +138,86 @@ public class GoTranslation {
             List<ExprOrOpArgNode> args = operatorArgs(fml);
             switch (name) {
                 case "TRUE":
-                    return goExpr("true");
+                    return goExpr("boolean(true)");
                 case "FALSE":
-                    return goExpr("false");
-                case "<":
-                case "<=":
-                case ">":
-                case ">=":
-                case "+":
-                case "-":
-                case "*":
-                case "/": {
+                    return goExpr("boolean(false)");
+                case "<": {
                     GoExpr a1 = translateExpr(args.get(0), Type.INT);
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
-                    return goExpr("(%s %s %s)", a1, name, a2);
+                    return goExpr("IntLt(%s, %s)", a1, a2);
+                }
+                case "<=": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntLte(%s, %s)", a1, a2);
+                }
+                case ">": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntGt(%s, %s)", a1, a2);
+                }
+                case ">=": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntGte(%s, %s)", a1, a2);
+                }
+                case "+": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntPlus(%s, %s)", a1, a2);
+                }
+                case "-": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntMinus(%s, %s)", a1, a2);
+                }
+                case "*": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntMul(%s, %s)", a1, a2);
                 }
                 case "=": {
                     GoExpr a1 = translateExpr(args.get(0), null);
                     GoExpr a2 = translateExpr(args.get(1), null);
-                    return goExpr("reflect.DeepEqual(%s, %s)", a1, a2);
+                    return goExpr("Eq(%s, %s)", a1, a2);
                 }
                 case "/=": {
                     GoExpr a1 = translateExpr(args.get(0), null);
                     GoExpr a2 = translateExpr(args.get(1), null);
-                    return goExpr("!reflect.DeepEqual(%s, %s)",
-                            a1, a2);
+                    return goExpr("Neq(%s, %s)", a1, a2);
                 }
                 case "Some":
-                    return goExpr("[]any{%s}", translateExpr(args.get(0), null));
+                    return goExpr("Some(%s)", translateExpr(args.get(0), null));
                 case "None":
-                    return goExpr("[]any{}");
+                    return goExpr("None()");
                 case "Append": {
                     GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
                     GoExpr a2 = translateExpr(args.get(1), Type.SEQ);
-                    return goExpr("append(%s, %s)", a1, a2);
+                    return goExpr("Append(%s, %s)", a1, a2);
                 }
                 case "ToSet": {
-                    String v = fresh("toset");
                     GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
-                    GoBlock def = goBlock("%s := map[any]bool{}\n" +
-                            "for _, v := range %s {\n" +
-                            "%s[v] = true\n" +
-                            "}", v, a1, v);
-                    return goExpr(def, "%s", v);
+                    return goExpr("ToSet(%s)", a1);
                 }
                 case "$FcnApply": {
                     // record indexing
                     GoExpr map = translateExpr(args.get(0), Type.RECORD);
                     GoExpr key = translateExpr(args.get(1), Type.STRING);
-                    return goExpr("%s[%s]", map, key);
+                    return goExpr("RecordIndex(%s, %s)", map, key);
                 }
                 case "$SetEnumerate": {
                     // {1, 2}
-                    String v = fresh("setliteral");
-                    GoBlock def = goBlock("%s := map[any]any{}", v);
-                    def = args.stream().map(a -> {
-                                GoExpr a1 = translateExpr(a, null);
-                                return goBlock("%s[hash(%s)] = %s", v, a1, a1);
-                            })
-                            .reduce(def, GoBlock::seq);
-                    return goExpr(def, "%s", v);
+                    List<GoExpr> args1 = args.stream()
+                            .map(a -> translateExpr(a, null))
+                            .collect(Collectors.toList());
+                    return goExpr("set(%s)", joinGoExpr(args1, ", "));
                 }
                 case "$Tuple": {
                     // <<>>
                     List<GoExpr> exprs = args.stream()
                             .map(a -> translateExpr(a, null))
                             .map(a -> goExpr("%s", a)).collect(Collectors.toList());
-                    return goExpr("[]any{%s}", joinGoExpr(exprs, ", "));
+                    return goExpr("seq(%s)", joinGoExpr(exprs, ", "));
                 }
                 case "$RcdConstructor":
                     // [a |-> 1, b |-> 2]
@@ -205,23 +225,23 @@ public class GoTranslation {
                         OpApplNode op1 = (OpApplNode) a;
                         if (op1.getOperator().getName().equals("$Pair")) {
                             List<ExprOrOpArgNode> args1 = operatorArgs(op1);
-                            return goExpr("%s: %s",
+                            return goExpr("%s, %s",
                                     translateExpr(args1.get(0), null),
                                     translateExpr(args1.get(1), null));
                         } else {
                             throw fail("unexpected");
                         }
                     }).collect(Collectors.toList());
-                    return goExpr("map[any]any{%s}", joinGoExpr(all, ", "));
+                    return goExpr("record(%s)", joinGoExpr(all, ", "));
                 case "$DisjList":
                 case "\\or":
                     return args.stream().map(a -> translateExpr(a, null))
-                            .reduce((a, b) -> goExpr("(%s || %s)", a, b))
+                            .reduce((a, b) -> goExpr("Or(%s, %s)", a, b))
                             .get();
                 case "$ConjList":
                 case "\\land":
                     return args.stream().map(a -> translateExpr(a, null))
-                            .reduce((a, b) -> goExpr("(%s && %s)", a, b))
+                            .reduce((a, b) -> goExpr("And(%s, %s)", a, b))
                             .get();
                 case "$Except": {
                     // create a new map differing in one element
@@ -229,50 +249,28 @@ public class GoTranslation {
                     List<ExprOrOpArgNode> pairArgs = operatorArgs(args.get(1));
                     ExprOrOpArgNode map = operatorArgs(pairArgs.get(0)).get(0);
                     ExprOrOpArgNode key = pairArgs.get(1);
-                    String v = fresh("except");
-                    String k1 = fresh();
-                    String v1 = fresh();
                     GoExpr unprimed1 = translateExpr(unprimed, Type.RECORD);
-                    GoExpr map1 = translateExpr(map, null);
+                    GoExpr map1 = translateExpr(map, Type.STRING);
                     GoExpr key1 = translateExpr(key, null);
-                    GoBlock copyMap = goBlock("%1$s := map[any]any{}\n" +
-                                    "for %2$s, %3$s := range %4$s {\n" +
-                                    "%1$s[%2$s] = %3$s\n" +
-                                    "}\n" +
-                                    "%1$s[%5$s] = %6$s",
-                            v, k1, v1, unprimed1, map1, key1);
-                    return goExpr(copyMap, "%s", v);
+                    return goExpr("Except(%s, %s, %s)", unprimed1, map1, key1);
                 }
                 case "\\union": {
                     // create a new map with the elements of both
                     ExprOrOpArgNode left = args.get(0);
                     ExprOrOpArgNode right = args.get(1);
-                    String v = fresh("union");
-                    String k1 = fresh();
-                    String v1 = fresh();
-                    String k2 = fresh();
-                    String v2 = fresh();
                     GoExpr a1 = translateExpr(left, Type.SET);
                     GoExpr a2 = translateExpr(right, Type.SET);
-                    GoBlock unionMaps = goBlock("%1$s := map[any]any{}\n" +
-                                    "for %2$s, %3$s := range %6$s {\n%1$s[%2$s] = %3$s\n}\n" +
-                                    "for %4$s, %5$s := range %7$s {\n%1$s[%4$s] = %5$s\n}",
-                            v, k1, v1, k2, v2, a1, a2);
-                    return goExpr(unionMaps, "%s", v);
+                    return goExpr("SetUnion(%s, %s)", a1, a2);
                 }
                 case "\\in": {
-                    String ok = fresh("in");
                     GoExpr elt = translateExpr(args.get(0), null);
                     GoExpr set = translateExpr(args.get(1), Type.SET);
-                    GoBlock def1 = goBlock("_, %s := %s[hash(%s)]", ok, set, elt);
-                    return goExpr(def1, "%s", ok);
+                    return goExpr("SetIn(%s, %s)", elt, set);
                 }
                 case "\\notin": {
-                    String ok = fresh("notin");
                     GoExpr elt = translateExpr(args.get(0), null);
                     GoExpr set = translateExpr(args.get(1), Type.SET);
-                    GoBlock def1 = goBlock("_, %s := %s[hash(%s)]", ok, set, elt);
-                    return goExpr(def1, "!%s", ok);
+                    return goExpr("SetNotIn(%s, %s)", elt, set);
                 }
                 case "$FcnConstructor": {
                     // [r \in RM |-> "expr using r"]
@@ -280,8 +278,6 @@ public class GoTranslation {
                     ExprOrOpArgNode rhs = args.get(0);
                     ExprNode set = op.getBdedQuantBounds()[0];
                     FormalParamNode var = op.getQuantSymbolLists().get(0);
-                    String v = fresh("fnconstr");
-                    String k1 = fresh();
                     String v1 = fresh();
                     ExprOrOpArgNode rhs1 = substitute(rhs, Collections.singletonMap(var, tla(v1)));
                     if (rhs == rhs1) {
@@ -290,11 +286,9 @@ public class GoTranslation {
                     boundVarNames.add(v1);
                     GoExpr a1 = translateExpr(set, null);
                     GoExpr a2 = translateExpr(rhs1, Type.SET);
-                    GoBlock unionMaps = goBlock("%1$s := map[any]any{}\n" +
-                                    "for %2$s, %3$s := range %4$s {\n%1$s[%2$s] = %5$s\n}\n",
-                            v, k1, v1, a1, a2);
                     boundVarNames.remove(v1);
-                    return goExpr(unionMaps, "%s", v);
+                    GoExpr func = goExpr("func(%s TLA) TLA { return %s }", v1, a2);
+                    return goExpr("FnConstruct(%s, %s)", a1, func);
                 }
                 case "$BoundedForall": {
                     OpApplNode cond = (OpApplNode) args.get(0);
@@ -305,16 +299,14 @@ public class GoTranslation {
                     GoExpr sset = translateExpr(set, null);
                     FormalParamNode var = op.getQuantSymbolLists().get(0);
 
-                    String v = fresh("boundedforall");
                     String k1 = fresh();
 
                     boundVarNames.add(k1);
                     GoExpr body = translateExpr(substitute(cond, Map.of(var, tla(k1))), null);
                     boundVarNames.remove(k1);
-
-                    GoBlock b = goBlock("%1$s := true\nfor %2$s, _ := range %3$s {", v, k1, sset)
-                            .seq(goBlock("%1$s = %1$s && %4$s\n}", v, k1, sset, body));
-                    return goExpr(b, "%s", v);
+                    // ensure this is a separate subexpression
+                    GoExpr func = goExpr("func(%s TLA) Bool { return %s }", k1, body);
+                    return goExpr("BoundedForall(%s, %s)", sset, func);
                 }
                 case "UNCHANGED": {
                     if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {
@@ -376,7 +368,7 @@ public class GoTranslation {
         if (typ == null) {
             return e;
         } else {
-            return goExpr("any(%s).(%s)", e, goTypeName(typ));
+            return goExpr("%s.(%s)", e, goTypeName(typ));
         }
     }
 
@@ -411,32 +403,28 @@ public class GoTranslation {
      */
     public static GoExpr translateValue(IValue v) {
         if (v instanceof StringValue) {
-            return goExpr("\"" + ((StringValue) v).getVal() + "\"");
+            return goExpr("str(\"" + ((StringValue) v).getVal() + "\")");
         } else if (v instanceof IntValue) {
-            return goExpr(v.toString());
+            return goExpr("integer(%s)", v.toString());
         } else if (v instanceof SetEnumValue) {
-            String v1 = fresh("setlit");
-            GoBlock def = goBlock("%s := map[any]any{}", v1);
-            def = toList(((SetEnumValue) v).elems).stream().map(a -> {
-                        GoExpr a1 = translateValue(a);
-                        return goBlock("%s[hash(%s)] = %s", v1, a1, a1);
-                    })
-                    .reduce(def, GoBlock::seq);
-            return goExpr(def, "%s", v1);
+            List<GoExpr> args = toList(((SetEnumValue) v).elems).stream()
+                    .map(a -> translateValue(a))
+                    .collect(Collectors.toList());
+            return goExpr("set(%s)", joinGoExpr(args, ", "));
         } else if (v instanceof TupleValue) {
             List<GoExpr> exprs = Arrays.stream(((TupleValue) v).elems)
                     .map(a -> translateValue(a))
-                    .map(a -> goExpr("%s", a)).collect(Collectors.toList());
-            return goExpr("[]any{%s}", joinGoExpr(exprs, ", "));
+                    .collect(Collectors.toList());
+            return goExpr("seq(%s)", joinGoExpr(exprs, ", "));
         } else if (v instanceof FcnRcdValue) {
             // record literals, like [r1 |-> "working"]
             List<GoExpr> res = new ArrayList<>();
             for (int i = 0; i < ((FcnRcdValue) v).domain.length; i++) {
-                res.add(goExpr("%s: %s",
+                res.add(goExpr("%s, %s",
                         translateValue(((FcnRcdValue) v).domain[i]),
                         translateValue(((FcnRcdValue) v).values[i])));
             }
-            return goExpr("map[any]any{%s}", goExprJoin(", ", res));
+            return goExpr("record(%s)", goExprJoin(", ", res));
         }
         throw fail("invalid type of value " + v.getClass().getSimpleName());
     }
@@ -465,6 +453,8 @@ public class GoTranslation {
         GoExpr res = new GoExpr();
         Object[] args1 = Arrays.stream(args).flatMap(a -> {
             if (a instanceof String) {
+                return Stream.of(a);
+            } else if (a instanceof Integer) {
                 return Stream.of(a);
             } else if (a instanceof List) {
                 throw fail("invalid");
@@ -513,17 +503,17 @@ public class GoTranslation {
     static String goTypeName(Type typ) {
         switch (typ) {
             case INT:
-                return "int";
+                return "Int";
             case STRING:
-                return "string";
+                return "String";
             case BOOL:
-                return "bool";
+                return "Bool";
             case RECORD:
-                return "record";
+                return "Record";
             case SET:
-                return "set";
+                return "Set";
             case SEQ:
-                return "seq";
+                return "Seq";
         }
         throw fail("goTypeName: unhandled " + typ);
     }

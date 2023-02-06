@@ -75,7 +75,7 @@ public class Monitoring {
                         // TODO assume there are no local operator definitions
                         String letVar = letLet.getName().toString();
                         translation.boundVarNames.add(letVar);
-                        letBindings = letBindings.seq(goBlock("%s := %s",
+                        letBindings = letBindings.seq(goBlock("var %s TLA = %s",
                                 letVar, translation.translateExpr(letLet.getBody(), null)));
                     }
                     defBody = let.getBody();
@@ -88,7 +88,7 @@ public class Monitoring {
                     String m = String.format("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
                     throw new CannotBeTranslatedException(m);
                 }
-                String params = translateParams(d, (i, p) -> String.format("%s any", p.getName().toString()));
+                String params = translateParams(d, (i, p) -> String.format("%s TLA", p.getName().toString()));
                 translation.boundVarNames.addAll(Arrays.stream(d.getParams())
                         .map(p -> p.getName().toString())
                         .collect(Collectors.toList()));
@@ -116,7 +116,7 @@ public class Monitoring {
         }
 
         String pkg = "monitoring";
-        String varDecls = variables.stream().map(v -> String.format("%s any", v.getName())).collect(Collectors.joining("\n"));
+        String varDecls = variables.stream().map(v -> String.format("%s TLA", v.getName())).collect(Collectors.joining("\n"));
 
         String actionNames = definitions.stream()
                         .filter(d -> translatedDefs.contains(d.getName().toString()))
@@ -139,7 +139,7 @@ public class Monitoring {
                                 translateParams(d, (i, p) -> String.format("this.params[%d]", i))))
                 .collect(Collectors.joining("\n"));
 
-        String imports = Stream.of("encoding/json", "reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
+        String imports = Stream.of("encoding/json", "strconv", "reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
                 .collect(Collectors.joining("\n"));
 
         String varAssignments = variables.stream().map(v ->

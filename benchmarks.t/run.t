@@ -166,12 +166,235 @@
   	"path"
   	"reflect"
   	"runtime"
+  	"strconv"
   	"strings"
   )
   
-  type set = map[any]any
-  type record = map[any]any
-  type seq = []any
+  // TLA expressions
+  type TLA interface {
+  	String() string
+  }
+  
+  type Seq struct {
+  	elements []TLA
+  }
+  
+  func (s Seq) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("<<%s>>", strings.Join(ss, ", "))
+  }
+  
+  type Record struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Record) String() string {
+  	ss := []string{}
+  	for k, v := range s.elements {
+  		ss = append(ss, fmt.Sprintf("%s |-> %s", k, v.String()))
+  	}
+  	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
+  }
+  
+  type Set struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Set) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("{%s}", strings.Join(ss, ", "))
+  }
+  
+  type Int struct {
+  	value int
+  }
+  
+  func (s Int) String() string {
+  	return fmt.Sprintf("%d", s.value)
+  }
+  
+  type Bool struct {
+  	value bool
+  }
+  
+  func (b Bool) String() string {
+  	return strconv.FormatBool(b.value)
+  }
+  
+  type String struct {
+  	value string
+  }
+  
+  func (s String) String() string {
+  	return s.value
+  }
+  
+  // smart constructors
+  
+  func boolean(b bool) Bool {
+  	return Bool{value: b}
+  }
+  
+  func integer(n int) Int {
+  	return Int{value: n}
+  }
+  
+  func str(s string) String {
+  	return String{value: s}
+  }
+  
+  func set(elts ...TLA) Set {
+  	res := map[string]TLA{}
+  	for _, v := range elts {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func record(kvs ...TLA) Record {
+  	res := map[string]TLA{}
+  	for i := 0; i < len(kvs)/2; i += 2 {
+  		res[kvs[i].(String).value] = kvs[i+1]
+  	}
+  	return Record{elements: res}
+  }
+  
+  func seq(elts ...TLA) Seq {
+  	return Seq{elements: elts}
+  }
+  
+  // library
+  
+  func Some(a TLA) Seq {
+  	return seq(a)
+  }
+  
+  func None() Seq {
+  	return seq()
+  }
+  
+  func Append(a Seq, b Seq) Seq {
+  	return Seq{elements: append(a.elements, b.elements...)}
+  }
+  
+  func SetUnion(a Set, b Set) Set {
+  	res := map[string]TLA{}
+  	for k, v := range a.elements {
+  		res[k] = v
+  	}
+  	for k, v := range b.elements {
+  		res[k] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func SetIn(a TLA, b Set) Bool {
+  	_, ok := b.elements[hash(a)]
+  	return boolean(ok)
+  }
+  
+  func SetNotIn(a TLA, b Set) Bool {
+  	return boolean(!SetIn(a, b).value)
+  }
+  
+  func RecordIndex(a Record, b String) TLA {
+  	return a.elements[b.value]
+  }
+  
+  func IntPlus(a Int, b Int) Int {
+  	return integer(a.value + b.value)
+  }
+  
+  func IntMinus(a Int, b Int) Int {
+  	return integer(a.value - b.value)
+  }
+  
+  func IntMul(a Int, b Int) Int {
+  	return Int{value: a.value * b.value}
+  }
+  
+  func IntLt(a Int, b Int) Bool {
+  	return boolean(a.value < b.value)
+  }
+  
+  func IntLte(a Int, b Int) Bool {
+  	return boolean(a.value <= b.value)
+  }
+  
+  func IntGt(a Int, b Int) Bool {
+  	return boolean(a.value > b.value)
+  }
+  
+  func IntGte(a Int, b Int) Bool {
+  	return boolean(a.value >= b.value)
+  }
+  
+  func Eq(a TLA, b TLA) Bool {
+  	return boolean(reflect.DeepEqual(a, b))
+  }
+  
+  func Not(b Bool) Bool {
+  	return boolean(!b.value)
+  }
+  
+  func Neq(a TLA, b TLA) Bool {
+  	return Not(Eq(a, b))
+  }
+  
+  func And(a Bool, b Bool) Bool {
+  	return boolean(a.value && b.value)
+  }
+  
+  func Or(a Bool, b Bool) Bool {
+  	return boolean(a.value || b.value)
+  }
+  
+  func IsFalse(a TLA) bool {
+  	return !a.(Bool).value
+  }
+  
+  func IsTrue(a TLA) bool {
+  	return !IsFalse(a)
+  }
+  
+  func ToSet(s Seq) Set {
+  	res := map[string]TLA{}
+  	for _, v := range s.elements {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func Except(r Record, k String, v TLA) Record {
+  	res := map[string]TLA{}
+  	for k1, v1 := range r.elements {
+  		res[k1] = v1
+  	}
+  	res[k.value] = v
+  	return Record{elements: res}
+  }
+  
+  func BoundedForall(set Set, f func(TLA) Bool) Bool {
+  	res := true
+  	for _, v := range set.elements {
+  		res = true && IsTrue(f(v))
+  	}
+  	return Bool{value: res}
+  }
+  
+  func FnConstruct(set Set, f func(TLA) TLA) Record {
+  	res := map[string]TLA{}
+  	for _, v := range set.elements {
+  		res[v.(String).value] = f(v)
+  	}
+  	return Record{elements: res}
+  }
   
   // panic instead of returning error
   var crash = true
@@ -205,7 +428,7 @@
   }
   
   type State struct {
-  	x any
+  	x TLA
   }
   
   type EventType int
@@ -234,13 +457,13 @@
   
   type Event struct {
   	typ    EventType
-  	params []any
+  	params []TLA
   	state  State
   	file   string
   	line   int
   }
   
-  func printParams(ps []any) string {
+  func printParams(ps []TLA) string {
   	res := []string{}
   	for _, v := range ps {
   		res = append(res, fmt.Sprintf("%+v", v))
@@ -321,32 +544,32 @@
   
   func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, 1)) {
-  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: 1 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, 1, prev, this)
+  	if IsFalse(Eq(this.state.x, integer(1))) {
+  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, integer(1), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, (any(prev.state.x).(int) + 1))) {
-  		return fail("postcondition failed in A at %d; '(x) = x + 1\n\nlhs: this.state.x = %+v\nrhs: (any(prev.state.x).(int) + 1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, (any(prev.state.x).(int) + 1), prev, this)
+  	if IsFalse(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1)))) {
+  		return fail("postcondition failed in A at %d; '(x) = x + 1\n\nlhs: this.state.x = %+v\nrhs: IntPlus(prev.state.x.(Int), integer(1)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, IntPlus(prev.state.x.(Int), integer(1)), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
   
-  	if !(any(prev.state.x).(int) < 2) {
-  		return fail("precondition failed in Constr at %d; x < 2\n\nlhs: any(prev.state.x).(int) = %+v\nrhs: 2 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(int), 2, prev, this)
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(2))) {
+  		return fail("precondition failed in Constr at %d; x < 2\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(2) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(2), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
   
-  	if !(any(prev.state.x).(int) < 3) {
-  		return fail("precondition failed in Inv at %d; x < 3\n\nlhs: any(prev.state.x).(int) = %+v\nrhs: 3 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(int), 3, prev, this)
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(3))) {
+  		return fail("precondition failed in Inv at %d; x < 3\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(3) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(3), prev, this)
   	}
   	return nil
   }
@@ -373,7 +596,7 @@
   */
   
   // this state value can have nil fields
-  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
   
   	e := Event{
   		typ:    typ,
@@ -385,7 +608,7 @@
   	return nil
   }
   
-  func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
   
   	// override current values with extras
   	// all have to pertain to this action
@@ -435,12 +658,235 @@
   	"path"
   	"reflect"
   	"runtime"
+  	"strconv"
   	"strings"
   )
   
-  type set = map[any]any
-  type record = map[any]any
-  type seq = []any
+  // TLA expressions
+  type TLA interface {
+  	String() string
+  }
+  
+  type Seq struct {
+  	elements []TLA
+  }
+  
+  func (s Seq) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("<<%s>>", strings.Join(ss, ", "))
+  }
+  
+  type Record struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Record) String() string {
+  	ss := []string{}
+  	for k, v := range s.elements {
+  		ss = append(ss, fmt.Sprintf("%s |-> %s", k, v.String()))
+  	}
+  	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
+  }
+  
+  type Set struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Set) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("{%s}", strings.Join(ss, ", "))
+  }
+  
+  type Int struct {
+  	value int
+  }
+  
+  func (s Int) String() string {
+  	return fmt.Sprintf("%d", s.value)
+  }
+  
+  type Bool struct {
+  	value bool
+  }
+  
+  func (b Bool) String() string {
+  	return strconv.FormatBool(b.value)
+  }
+  
+  type String struct {
+  	value string
+  }
+  
+  func (s String) String() string {
+  	return s.value
+  }
+  
+  // smart constructors
+  
+  func boolean(b bool) Bool {
+  	return Bool{value: b}
+  }
+  
+  func integer(n int) Int {
+  	return Int{value: n}
+  }
+  
+  func str(s string) String {
+  	return String{value: s}
+  }
+  
+  func set(elts ...TLA) Set {
+  	res := map[string]TLA{}
+  	for _, v := range elts {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func record(kvs ...TLA) Record {
+  	res := map[string]TLA{}
+  	for i := 0; i < len(kvs)/2; i += 2 {
+  		res[kvs[i].(String).value] = kvs[i+1]
+  	}
+  	return Record{elements: res}
+  }
+  
+  func seq(elts ...TLA) Seq {
+  	return Seq{elements: elts}
+  }
+  
+  // library
+  
+  func Some(a TLA) Seq {
+  	return seq(a)
+  }
+  
+  func None() Seq {
+  	return seq()
+  }
+  
+  func Append(a Seq, b Seq) Seq {
+  	return Seq{elements: append(a.elements, b.elements...)}
+  }
+  
+  func SetUnion(a Set, b Set) Set {
+  	res := map[string]TLA{}
+  	for k, v := range a.elements {
+  		res[k] = v
+  	}
+  	for k, v := range b.elements {
+  		res[k] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func SetIn(a TLA, b Set) Bool {
+  	_, ok := b.elements[hash(a)]
+  	return boolean(ok)
+  }
+  
+  func SetNotIn(a TLA, b Set) Bool {
+  	return boolean(!SetIn(a, b).value)
+  }
+  
+  func RecordIndex(a Record, b String) TLA {
+  	return a.elements[b.value]
+  }
+  
+  func IntPlus(a Int, b Int) Int {
+  	return integer(a.value + b.value)
+  }
+  
+  func IntMinus(a Int, b Int) Int {
+  	return integer(a.value - b.value)
+  }
+  
+  func IntMul(a Int, b Int) Int {
+  	return Int{value: a.value * b.value}
+  }
+  
+  func IntLt(a Int, b Int) Bool {
+  	return boolean(a.value < b.value)
+  }
+  
+  func IntLte(a Int, b Int) Bool {
+  	return boolean(a.value <= b.value)
+  }
+  
+  func IntGt(a Int, b Int) Bool {
+  	return boolean(a.value > b.value)
+  }
+  
+  func IntGte(a Int, b Int) Bool {
+  	return boolean(a.value >= b.value)
+  }
+  
+  func Eq(a TLA, b TLA) Bool {
+  	return boolean(reflect.DeepEqual(a, b))
+  }
+  
+  func Not(b Bool) Bool {
+  	return boolean(!b.value)
+  }
+  
+  func Neq(a TLA, b TLA) Bool {
+  	return Not(Eq(a, b))
+  }
+  
+  func And(a Bool, b Bool) Bool {
+  	return boolean(a.value && b.value)
+  }
+  
+  func Or(a Bool, b Bool) Bool {
+  	return boolean(a.value || b.value)
+  }
+  
+  func IsFalse(a TLA) bool {
+  	return !a.(Bool).value
+  }
+  
+  func IsTrue(a TLA) bool {
+  	return !IsFalse(a)
+  }
+  
+  func ToSet(s Seq) Set {
+  	res := map[string]TLA{}
+  	for _, v := range s.elements {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func Except(r Record, k String, v TLA) Record {
+  	res := map[string]TLA{}
+  	for k1, v1 := range r.elements {
+  		res[k1] = v1
+  	}
+  	res[k.value] = v
+  	return Record{elements: res}
+  }
+  
+  func BoundedForall(set Set, f func(TLA) Bool) Bool {
+  	res := true
+  	for _, v := range set.elements {
+  		res = true && IsTrue(f(v))
+  	}
+  	return Bool{value: res}
+  }
+  
+  func FnConstruct(set Set, f func(TLA) TLA) Record {
+  	res := map[string]TLA{}
+  	for _, v := range set.elements {
+  		res[v.(String).value] = f(v)
+  	}
+  	return Record{elements: res}
+  }
   
   // panic instead of returning error
   var crash = true
@@ -474,7 +920,7 @@
   }
   
   type State struct {
-  	x any
+  	x TLA
   }
   
   type EventType int
@@ -493,6 +939,7 @@
   	H1
   	H2
   	H3
+  	H4
   	I1
   	Sets
   )
@@ -525,6 +972,8 @@
   		return "H2"
   	case H3:
   		return "H3"
+  	case H4:
+  		return "H4"
   	case I1:
   		return "I1"
   	case Sets:
@@ -536,13 +985,13 @@
   
   type Event struct {
   	typ    EventType
-  	params []any
+  	params []TLA
   	state  State
   	file   string
   	line   int
   }
   
-  func printParams(ps []any) string {
+  func printParams(ps []TLA) string {
   	res := []string{}
   	for _, v := range ps {
   		res = append(res, fmt.Sprintf("%+v", v))
@@ -638,6 +1087,10 @@
   			if err := m.CheckH3(i, prev, this); err != nil {
   				return err
   			}
+  		case H4:
+  			if err := m.CheckH4(i, prev, this); err != nil {
+  				return err
+  			}
   		case I1:
   			if err := m.CheckI1(i, prev, this); err != nil {
   				return err
@@ -667,37 +1120,37 @@
   
   func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, 1)) {
-  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: 1 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, 1, prev, this)
+  	if IsFalse(Eq(this.state.x, integer(1))) {
+  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, integer(1), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
-  	if !(any(prev.state.x).(int) < 0) {
-  		return fail("precondition failed in A at %d; x < 0\n\nlhs: any(prev.state.x).(int) = %+v\nrhs: 0 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(int), 0, prev, this)
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(0))) {
+  		return fail("precondition failed in A at %d; x < 0\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(0), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.x, (any(prev.state.x).(int) + 1))) {
-  		return fail("postcondition failed in A at %d; '(x) = x + 1\n\nlhs: this.state.x = %+v\nrhs: (any(prev.state.x).(int) + 1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, (any(prev.state.x).(int) + 1), prev, this)
+  	if IsFalse(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1)))) {
+  		return fail("postcondition failed in A at %d; '(x) = x + 1\n\nlhs: this.state.x = %+v\nrhs: IntPlus(prev.state.x.(Int), integer(1)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, IntPlus(prev.state.x.(Int), integer(1)), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckA1(trace_i int, prev Event, this Event) error {
   
-  	if !(any(prev.state.x).(int) < 0) {
-  		return fail("precondition failed in A1 at %d; x < 0\n\nlhs: any(prev.state.x).(int) = %+v\nrhs: 0 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(int), 0, prev, this)
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(0))) {
+  		return fail("precondition failed in A1 at %d; x < 0\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(0), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.x, (any(prev.state.x).(int)+1)) && (any(prev.state.x).(int) < 0)) {
-  		return fail("precondition failed in A1 at %d; '(x) = x + 1 \\land x < 0\n\nlhs: reflect.DeepEqual(this.state.x, (any(prev.state.x).(int) + 1)) = %+v\nrhs: (any(prev.state.x).(int) < 0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.x, (any(prev.state.x).(int)+1)), (any(prev.state.x).(int) < 0), prev, this)
+  	if IsFalse(And(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))), IntLt(prev.state.x.(Int), integer(0)))) {
+  		return fail("precondition failed in A1 at %d; '(x) = x + 1 \\land x < 0\n\nlhs: Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))) = %+v\nrhs: IntLt(prev.state.x.(Int), integer(0)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))), IntLt(prev.state.x.(Int), integer(0)), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckB(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, prev.state.x)) {
+  	if IsFalse(Eq(this.state.x, prev.state.x)) {
   		return fail("precondition failed in B at %d; UNCHANGED(x)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
   	}
   	return nil
@@ -705,7 +1158,7 @@
   
   func (m *Monitor) CheckC(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(prev.state.x, prev.state.x)) {
+  	if IsFalse(Eq(prev.state.x, prev.state.x)) {
   		return fail("precondition failed in C at %d; Send(x)\n\nlhs: prev.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
   	}
   	return nil
@@ -713,15 +1166,11 @@
   
   func (m *Monitor) CheckD(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 2)) {
+  	if IsFalse(And(Eq(prev.state.x, integer(1)), Eq(this.state.x, integer(2)))) {
   
-  		if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
-  
-  			if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
-  				return fail("precondition failed in D at %d; ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3))\n\nlhs: !reflect.DeepEqual(prev.state.x, 1) = %+v\nrhs: reflect.DeepEqual(this.state.x, 3) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !reflect.DeepEqual(prev.state.x, 1), reflect.DeepEqual(this.state.x, 3), prev, this)
-  			}
+  		if IsFalse(And(Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)))) {
+  			return fail("precondition failed in D at %d; ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3))\n\nlhs: Neq(prev.state.x, integer(1)) = %+v\nrhs: Eq(this.state.x, integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)), prev, this)
   		}
-  
   	}
   
   	return nil
@@ -729,116 +1178,75 @@
   
   func (m *Monitor) CheckE(trace_i int, prev Event, this Event) error {
   
-  	if !((reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 2)) && (reflect.DeepEqual(prev.state.x, 2) || (reflect.DeepEqual(prev.state.x, 3) && reflect.DeepEqual(prev.state.x, 1)))) {
+  	if IsFalse(And(And(Eq(prev.state.x, integer(1)), Eq(this.state.x, integer(2))), Or(Eq(prev.state.x, integer(2)), And(Eq(prev.state.x, integer(3)), Eq(prev.state.x, integer(1)))))) {
   
-  		if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
-  
-  			if !(!reflect.DeepEqual(prev.state.x, 1) && reflect.DeepEqual(this.state.x, 3)) {
-  				return fail("precondition failed in E at %d; ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3))\n\nlhs: !reflect.DeepEqual(prev.state.x, 1) = %+v\nrhs: reflect.DeepEqual(this.state.x, 3) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !reflect.DeepEqual(prev.state.x, 1), reflect.DeepEqual(this.state.x, 3), prev, this)
-  			}
+  		if IsFalse(And(Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)))) {
+  			return fail("precondition failed in E at %d; ((x = 1 /\\ '(x) = 2) \\/ (x /= 1 /\\ '(x) = 3))\n\nlhs: Neq(prev.state.x, integer(1)) = %+v\nrhs: Eq(this.state.x, integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)), prev, this)
   		}
-  
   	}
   
   	return nil
   }
   
-  func (m *Monitor) CheckF(z any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckF(z TLA, trace_i int, prev Event, this Event) error {
   
-  	if !(true) {
-  		return fail("precondition failed in F at %d; TRUE\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(boolean(true)) {
+  		return fail("precondition failed in F at %d; TRUE\n\nlhs: \"<none>\" = %+v\nrhs: \"<none>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckG(trace_i int, prev Event, this Event) error {
   
-  	v0_except := map[any]any{}
-  	for v1, v2 := range map[any]any{"a": 1} {
-  		v0_except[v1] = v2
-  	}
-  	v0_except["a"] = 2
-  	if !(reflect.DeepEqual(v0_except["a"], 2)) {
-  		return fail("precondition failed in G at %d; [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2\n\nlhs: v0_except[\"a\"] = %+v\nrhs: 2 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, v0_except["a"], 2, prev, this)
+  	if IsFalse(Eq(RecordIndex(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2))) {
+  		return fail("precondition failed in G at %d; [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2\n\nlhs: RecordIndex(Except(record(str(\"a\"), integer(1)), str(\"a\"), integer(2)), str(\"a\")) = %+v\nrhs: integer(2) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckH(trace_i int, prev Event, this Event) error {
   
-  	v3_setliteral := map[any]any{}
-  	v3_setliteral[hash(1)] = 1
-  	v3_setliteral[hash(2)] = 2
-  	v4_boundedforall := true
-  	for v5, _ := range v3_setliteral {
-  		v3_setliteral := map[any]any{}
-  		v3_setliteral[hash(1)] = 1
-  		v3_setliteral[hash(2)] = 2
-  		v4_boundedforall = v4_boundedforall && reflect.DeepEqual(v5, 1)
-  	}
-  	if !(v4_boundedforall) {
-  		return fail("precondition failed in H at %d; \\A r \\in {1, 2} : r = 1\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v0 TLA) Bool { return Eq(v0, integer(1)) })) {
+  		return fail("precondition failed in H at %d; \\A r \\in {1, 2} : r = 1\n\nlhs: set(integer(1), integer(2)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckH1(trace_i int, prev Event, this Event) error {
   
-  	v6_setliteral := map[any]any{}
-  	v6_setliteral[hash(1)] = 1
-  	v6_setliteral[hash(2)] = 2
-  	v7_boundedforall := true
-  	for v8, _ := range v6_setliteral {
-  		v6_setliteral := map[any]any{}
-  		v6_setliteral[hash(1)] = 1
-  		v6_setliteral[hash(2)] = 2
-  		v9_setliteral := map[any]any{}
-  		v9_setliteral[hash(3)] = 3
-  		v9_setliteral[hash(4)] = 4
-  		v10_boundedforall := true
-  		for v11, _ := range v9_setliteral {
-  			v9_setliteral := map[any]any{}
-  			v9_setliteral[hash(3)] = 3
-  			v9_setliteral[hash(4)] = 4
-  			v10_boundedforall = v10_boundedforall && reflect.DeepEqual(v11, v8)
-  		}
-  		v7_boundedforall = v7_boundedforall && v10_boundedforall
-  	}
-  	if !(v7_boundedforall) {
-  		return fail("precondition failed in H1 at %d; \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v1 TLA) Bool {
+  		return BoundedForall(set(integer(3), integer(4)), func(v2 TLA) Bool { return Eq(v2, v1) })
+  	})) {
+  		return fail("precondition failed in H1 at %d; \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s\n\nlhs: set(integer(1), integer(2)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckH2(trace_i int, prev Event, this Event) error {
   
-  	v15_setlit := map[any]any{}
-  	v15_setlit[hash("s1")] = "s1"
-  	v15_setlit[hash("2")] = "2"
-  	v12_fnconstr := map[any]any{}
-  	for v13, _ := range v15_setlit {
-  		v12_fnconstr[v13] = "a"
-  	}
-  
-  	if !(reflect.DeepEqual(v12_fnconstr["a"], 1)) {
-  		return fail("precondition failed in H2 at %d; [ r \\in RM |-> \"a\" ][\"a\"] = 1\n\nlhs: v12_fnconstr[\"a\"] = %+v\nrhs: 1 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, v12_fnconstr["a"], 1, prev, this)
+  	if IsFalse(Eq(RecordIndex(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1))) {
+  		return fail("precondition failed in H2 at %d; [ r \\in RM |-> \"a\" ][\"a\"] = 1\n\nlhs: RecordIndex(FnConstruct(set(str(\"s1\"), str(\"2\")), func(_ TLA) TLA { return str(\"a\") }), str(\"a\")) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckH3(trace_i int, prev Event, this Event) error {
   
-  	v19_setlit := map[any]any{}
-  	v19_setlit[hash("s1")] = "s1"
-  	v19_setlit[hash("2")] = "2"
-  	v16_fnconstr := map[any]any{}
-  	for v17, v18 := range v19_setlit {
-  		v16_fnconstr[v17] = any(v18).(set)
+  	if IsFalse(Eq(RecordIndex(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return v4.(Set) }), str("a")), integer(1))) {
+  		return fail("precondition failed in H3 at %d; [ r \\in RM |-> r ][\"a\"] = 1\n\nlhs: RecordIndex(FnConstruct(set(str(\"s1\"), str(\"2\")), func(v4 TLA) TLA { return v4.(Set) }), str(\"a\")) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return v4.(Set) }), str("a")), integer(1), prev, this)
+  	}
+  	return nil
+  }
+  
+  func (m *Monitor) CheckH4(trace_i int, prev Event, this Event) error {
+  
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v5 TLA) Bool { return Eq(v5, integer(1)) })) {
+  
+  		if IsFalse(BoundedForall(set(integer(2), integer(3)), func(v6 TLA) Bool { return Eq(v6, integer(2)) })) {
+  			return fail("precondition failed in H4 at %d; (\\A r \\in {1, 2} : r = 1 \\/ \\A r \\in {2, 3} : r = 2)\n\nlhs: set(integer(2), integer(3)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(2), integer(3)), "<func>", prev, this)
+  		}
   	}
   
-  	if !(reflect.DeepEqual(v16_fnconstr["a"], 1)) {
-  		return fail("precondition failed in H3 at %d; [ r \\in RM |-> r ][\"a\"] = 1\n\nlhs: v16_fnconstr[\"a\"] = %+v\nrhs: 1 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, v16_fnconstr["a"], 1, prev, this)
-  	}
   	return nil
   }
   
@@ -852,38 +1260,22 @@
   
   func (m *Monitor) CheckI1(trace_i int, prev Event, this Event) error {
   
-  	a := 1
-  	b := 1
-  	c := 1
-  	if !(reflect.DeepEqual(((any(a).(int) + any(b).(int)) + any(c).(int)), 1)) {
-  		return fail("precondition failed in I1 at %d; a + b + c = 1\n\nlhs: ((any(a).(int) + any(b).(int)) + any(c).(int)) = %+v\nrhs: 1 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, ((any(a).(int) + any(b).(int)) + any(c).(int)), 1, prev, this)
+  	var a TLA = integer(1)
+  	var b TLA = integer(1)
+  	var c TLA = integer(1)
+  	if IsFalse(Eq(IntPlus(IntPlus(a.(Int), b.(Int)), c.(Int)), integer(1))) {
+  		return fail("precondition failed in I1 at %d; a + b + c = 1\n\nlhs: IntPlus(IntPlus(a.(Int), b.(Int)), c.(Int)) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, IntPlus(IntPlus(a.(Int), b.(Int)), c.(Int)), integer(1), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckSets(trace_i int, prev Event, this Event) error {
   
-  	v25_setliteral := map[any]any{}
-  	v25_setliteral[hash(1)] = 1
-  	v25_setliteral[hash(2)] = 2
-  	v26_setliteral := map[any]any{}
-  	v26_setliteral[hash(3)] = 3
-  	v20_union := map[any]any{}
-  	for v21, v22 := range v25_setliteral {
-  		v20_union[v21] = v22
+  	if IsFalse(Eq(SetUnion(set(integer(1), integer(2)), set(integer(3))), set())) {
+  		return fail("precondition failed in Sets at %d; {1, 2} \\union {3} = {}\n\nlhs: SetUnion(set(integer(1), integer(2)), set(integer(3))) = %+v\nrhs: set() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetUnion(set(integer(1), integer(2)), set(integer(3))), set(), prev, this)
   	}
-  	for v23, v24 := range v26_setliteral {
-  		v20_union[v23] = v24
-  	}
-  	v27_setliteral := map[any]any{}
-  	if !(reflect.DeepEqual(v20_union, v27_setliteral)) {
-  		return fail("precondition failed in Sets at %d; {1, 2} \\union {3} = {}\n\nlhs: v20_union = %+v\nrhs: v27_setliteral = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, v20_union, v27_setliteral, prev, this)
-  	}
-  	v29_setliteral := map[any]any{}
-  	v29_setliteral[hash(3)] = 3
-  	_, v28_notin := v29_setliteral[hash(1)]
-  	if !(!v28_notin) {
-  		return fail("precondition failed in Sets at %d; 1 \\notin {3}\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetNotIn(integer(1), set(integer(3)))) {
+  		return fail("precondition failed in Sets at %d; 1 \\notin {3}\n\nlhs: integer(1) = %+v\nrhs: set(integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, integer(1), set(integer(3)), prev, this)
   	}
   	return nil
   }
@@ -910,7 +1302,7 @@
   */
   
   // this state value can have nil fields
-  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
   
   	e := Event{
   		typ:    typ,
@@ -922,7 +1314,7 @@
   	return nil
   }
   
-  func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
   
   	// override current values with extras
   	// all have to pertain to this action
@@ -972,12 +1364,235 @@
   	"path"
   	"reflect"
   	"runtime"
+  	"strconv"
   	"strings"
   )
   
-  type set = map[any]any
-  type record = map[any]any
-  type seq = []any
+  // TLA expressions
+  type TLA interface {
+  	String() string
+  }
+  
+  type Seq struct {
+  	elements []TLA
+  }
+  
+  func (s Seq) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("<<%s>>", strings.Join(ss, ", "))
+  }
+  
+  type Record struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Record) String() string {
+  	ss := []string{}
+  	for k, v := range s.elements {
+  		ss = append(ss, fmt.Sprintf("%s |-> %s", k, v.String()))
+  	}
+  	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
+  }
+  
+  type Set struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Set) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("{%s}", strings.Join(ss, ", "))
+  }
+  
+  type Int struct {
+  	value int
+  }
+  
+  func (s Int) String() string {
+  	return fmt.Sprintf("%d", s.value)
+  }
+  
+  type Bool struct {
+  	value bool
+  }
+  
+  func (b Bool) String() string {
+  	return strconv.FormatBool(b.value)
+  }
+  
+  type String struct {
+  	value string
+  }
+  
+  func (s String) String() string {
+  	return s.value
+  }
+  
+  // smart constructors
+  
+  func boolean(b bool) Bool {
+  	return Bool{value: b}
+  }
+  
+  func integer(n int) Int {
+  	return Int{value: n}
+  }
+  
+  func str(s string) String {
+  	return String{value: s}
+  }
+  
+  func set(elts ...TLA) Set {
+  	res := map[string]TLA{}
+  	for _, v := range elts {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func record(kvs ...TLA) Record {
+  	res := map[string]TLA{}
+  	for i := 0; i < len(kvs)/2; i += 2 {
+  		res[kvs[i].(String).value] = kvs[i+1]
+  	}
+  	return Record{elements: res}
+  }
+  
+  func seq(elts ...TLA) Seq {
+  	return Seq{elements: elts}
+  }
+  
+  // library
+  
+  func Some(a TLA) Seq {
+  	return seq(a)
+  }
+  
+  func None() Seq {
+  	return seq()
+  }
+  
+  func Append(a Seq, b Seq) Seq {
+  	return Seq{elements: append(a.elements, b.elements...)}
+  }
+  
+  func SetUnion(a Set, b Set) Set {
+  	res := map[string]TLA{}
+  	for k, v := range a.elements {
+  		res[k] = v
+  	}
+  	for k, v := range b.elements {
+  		res[k] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func SetIn(a TLA, b Set) Bool {
+  	_, ok := b.elements[hash(a)]
+  	return boolean(ok)
+  }
+  
+  func SetNotIn(a TLA, b Set) Bool {
+  	return boolean(!SetIn(a, b).value)
+  }
+  
+  func RecordIndex(a Record, b String) TLA {
+  	return a.elements[b.value]
+  }
+  
+  func IntPlus(a Int, b Int) Int {
+  	return integer(a.value + b.value)
+  }
+  
+  func IntMinus(a Int, b Int) Int {
+  	return integer(a.value - b.value)
+  }
+  
+  func IntMul(a Int, b Int) Int {
+  	return Int{value: a.value * b.value}
+  }
+  
+  func IntLt(a Int, b Int) Bool {
+  	return boolean(a.value < b.value)
+  }
+  
+  func IntLte(a Int, b Int) Bool {
+  	return boolean(a.value <= b.value)
+  }
+  
+  func IntGt(a Int, b Int) Bool {
+  	return boolean(a.value > b.value)
+  }
+  
+  func IntGte(a Int, b Int) Bool {
+  	return boolean(a.value >= b.value)
+  }
+  
+  func Eq(a TLA, b TLA) Bool {
+  	return boolean(reflect.DeepEqual(a, b))
+  }
+  
+  func Not(b Bool) Bool {
+  	return boolean(!b.value)
+  }
+  
+  func Neq(a TLA, b TLA) Bool {
+  	return Not(Eq(a, b))
+  }
+  
+  func And(a Bool, b Bool) Bool {
+  	return boolean(a.value && b.value)
+  }
+  
+  func Or(a Bool, b Bool) Bool {
+  	return boolean(a.value || b.value)
+  }
+  
+  func IsFalse(a TLA) bool {
+  	return !a.(Bool).value
+  }
+  
+  func IsTrue(a TLA) bool {
+  	return !IsFalse(a)
+  }
+  
+  func ToSet(s Seq) Set {
+  	res := map[string]TLA{}
+  	for _, v := range s.elements {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func Except(r Record, k String, v TLA) Record {
+  	res := map[string]TLA{}
+  	for k1, v1 := range r.elements {
+  		res[k1] = v1
+  	}
+  	res[k.value] = v
+  	return Record{elements: res}
+  }
+  
+  func BoundedForall(set Set, f func(TLA) Bool) Bool {
+  	res := true
+  	for _, v := range set.elements {
+  		res = true && IsTrue(f(v))
+  	}
+  	return Bool{value: res}
+  }
+  
+  func FnConstruct(set Set, f func(TLA) TLA) Record {
+  	res := map[string]TLA{}
+  	for _, v := range set.elements {
+  		res[v.(String).value] = f(v)
+  	}
+  	return Record{elements: res}
+  }
   
   // panic instead of returning error
   var crash = true
@@ -1011,7 +1626,7 @@
   }
   
   type State struct {
-  	x any
+  	x TLA
   }
   
   type EventType int
@@ -1040,13 +1655,13 @@
   
   type Event struct {
   	typ    EventType
-  	params []any
+  	params []TLA
   	state  State
   	file   string
   	line   int
   }
   
-  func printParams(ps []any) string {
+  func printParams(ps []TLA) string {
   	res := []string{}
   	for _, v := range ps {
   		res = append(res, fmt.Sprintf("%+v", v))
@@ -1127,32 +1742,32 @@
   
   func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, 1)) {
-  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: 1 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, 1, prev, this)
+  	if IsFalse(Eq(this.state.x, integer(1))) {
+  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, integer(1), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(this.state.x, (any(prev.state.x).(int) + 1))) {
-  		return fail("postcondition failed in A at %d; '(x) = x + 1\n\nlhs: this.state.x = %+v\nrhs: (any(prev.state.x).(int) + 1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, (any(prev.state.x).(int) + 1), prev, this)
+  	if IsFalse(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1)))) {
+  		return fail("postcondition failed in A at %d; '(x) = x + 1\n\nlhs: this.state.x = %+v\nrhs: IntPlus(prev.state.x.(Int), integer(1)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, IntPlus(prev.state.x.(Int), integer(1)), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckConstr(trace_i int, prev Event, this Event) error {
   
-  	if !(any(prev.state.x).(int) < 2) {
-  		return fail("precondition failed in Constr at %d; x < 2\n\nlhs: any(prev.state.x).(int) = %+v\nrhs: 2 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(int), 2, prev, this)
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(2))) {
+  		return fail("precondition failed in Constr at %d; x < 2\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(2) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(2), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckInv(trace_i int, prev Event, this Event) error {
   
-  	if !(any(prev.state.x).(int) < 3) {
-  		return fail("precondition failed in Inv at %d; x < 3\n\nlhs: any(prev.state.x).(int) = %+v\nrhs: 3 = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(int), 3, prev, this)
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(3))) {
+  		return fail("precondition failed in Inv at %d; x < 3\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(3) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(3), prev, this)
   	}
   	return nil
   }
@@ -1179,7 +1794,7 @@
   */
   
   // this state value can have nil fields
-  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
   
   	e := Event{
   		typ:    typ,
@@ -1191,7 +1806,7 @@
   	return nil
   }
   
-  func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
   
   	// override current values with extras
   	// all have to pertain to this action
@@ -1241,12 +1856,235 @@
   	"path"
   	"reflect"
   	"runtime"
+  	"strconv"
   	"strings"
   )
   
-  type set = map[any]any
-  type record = map[any]any
-  type seq = []any
+  // TLA expressions
+  type TLA interface {
+  	String() string
+  }
+  
+  type Seq struct {
+  	elements []TLA
+  }
+  
+  func (s Seq) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("<<%s>>", strings.Join(ss, ", "))
+  }
+  
+  type Record struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Record) String() string {
+  	ss := []string{}
+  	for k, v := range s.elements {
+  		ss = append(ss, fmt.Sprintf("%s |-> %s", k, v.String()))
+  	}
+  	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
+  }
+  
+  type Set struct {
+  	elements map[string]TLA
+  }
+  
+  func (s Set) String() string {
+  	ss := []string{}
+  	for _, v := range s.elements {
+  		ss = append(ss, v.String())
+  	}
+  	return fmt.Sprintf("{%s}", strings.Join(ss, ", "))
+  }
+  
+  type Int struct {
+  	value int
+  }
+  
+  func (s Int) String() string {
+  	return fmt.Sprintf("%d", s.value)
+  }
+  
+  type Bool struct {
+  	value bool
+  }
+  
+  func (b Bool) String() string {
+  	return strconv.FormatBool(b.value)
+  }
+  
+  type String struct {
+  	value string
+  }
+  
+  func (s String) String() string {
+  	return s.value
+  }
+  
+  // smart constructors
+  
+  func boolean(b bool) Bool {
+  	return Bool{value: b}
+  }
+  
+  func integer(n int) Int {
+  	return Int{value: n}
+  }
+  
+  func str(s string) String {
+  	return String{value: s}
+  }
+  
+  func set(elts ...TLA) Set {
+  	res := map[string]TLA{}
+  	for _, v := range elts {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func record(kvs ...TLA) Record {
+  	res := map[string]TLA{}
+  	for i := 0; i < len(kvs)/2; i += 2 {
+  		res[kvs[i].(String).value] = kvs[i+1]
+  	}
+  	return Record{elements: res}
+  }
+  
+  func seq(elts ...TLA) Seq {
+  	return Seq{elements: elts}
+  }
+  
+  // library
+  
+  func Some(a TLA) Seq {
+  	return seq(a)
+  }
+  
+  func None() Seq {
+  	return seq()
+  }
+  
+  func Append(a Seq, b Seq) Seq {
+  	return Seq{elements: append(a.elements, b.elements...)}
+  }
+  
+  func SetUnion(a Set, b Set) Set {
+  	res := map[string]TLA{}
+  	for k, v := range a.elements {
+  		res[k] = v
+  	}
+  	for k, v := range b.elements {
+  		res[k] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func SetIn(a TLA, b Set) Bool {
+  	_, ok := b.elements[hash(a)]
+  	return boolean(ok)
+  }
+  
+  func SetNotIn(a TLA, b Set) Bool {
+  	return boolean(!SetIn(a, b).value)
+  }
+  
+  func RecordIndex(a Record, b String) TLA {
+  	return a.elements[b.value]
+  }
+  
+  func IntPlus(a Int, b Int) Int {
+  	return integer(a.value + b.value)
+  }
+  
+  func IntMinus(a Int, b Int) Int {
+  	return integer(a.value - b.value)
+  }
+  
+  func IntMul(a Int, b Int) Int {
+  	return Int{value: a.value * b.value}
+  }
+  
+  func IntLt(a Int, b Int) Bool {
+  	return boolean(a.value < b.value)
+  }
+  
+  func IntLte(a Int, b Int) Bool {
+  	return boolean(a.value <= b.value)
+  }
+  
+  func IntGt(a Int, b Int) Bool {
+  	return boolean(a.value > b.value)
+  }
+  
+  func IntGte(a Int, b Int) Bool {
+  	return boolean(a.value >= b.value)
+  }
+  
+  func Eq(a TLA, b TLA) Bool {
+  	return boolean(reflect.DeepEqual(a, b))
+  }
+  
+  func Not(b Bool) Bool {
+  	return boolean(!b.value)
+  }
+  
+  func Neq(a TLA, b TLA) Bool {
+  	return Not(Eq(a, b))
+  }
+  
+  func And(a Bool, b Bool) Bool {
+  	return boolean(a.value && b.value)
+  }
+  
+  func Or(a Bool, b Bool) Bool {
+  	return boolean(a.value || b.value)
+  }
+  
+  func IsFalse(a TLA) bool {
+  	return !a.(Bool).value
+  }
+  
+  func IsTrue(a TLA) bool {
+  	return !IsFalse(a)
+  }
+  
+  func ToSet(s Seq) Set {
+  	res := map[string]TLA{}
+  	for _, v := range s.elements {
+  		res[hash(v)] = v
+  	}
+  	return Set{elements: res}
+  }
+  
+  func Except(r Record, k String, v TLA) Record {
+  	res := map[string]TLA{}
+  	for k1, v1 := range r.elements {
+  		res[k1] = v1
+  	}
+  	res[k.value] = v
+  	return Record{elements: res}
+  }
+  
+  func BoundedForall(set Set, f func(TLA) Bool) Bool {
+  	res := true
+  	for _, v := range set.elements {
+  		res = true && IsTrue(f(v))
+  	}
+  	return Bool{value: res}
+  }
+  
+  func FnConstruct(set Set, f func(TLA) TLA) Record {
+  	res := map[string]TLA{}
+  	for _, v := range set.elements {
+  		res[v.(String).value] = f(v)
+  	}
+  	return Record{elements: res}
+  }
   
   // panic instead of returning error
   var crash = true
@@ -1280,14 +2118,14 @@
   }
   
   type State struct {
-  	who             any
-  	lastMsgReceived any
-  	tmCommitted     any
-  	lastMsgSent     any
-  	tmPrepared      any
-  	msgs            any
-  	tmAborted       any
-  	rmState         any
+  	who             TLA
+  	lastMsgReceived TLA
+  	tmCommitted     TLA
+  	lastMsgSent     TLA
+  	tmPrepared      TLA
+  	msgs            TLA
+  	tmAborted       TLA
+  	rmState         TLA
   }
   
   type EventType int
@@ -1343,13 +2181,13 @@
   
   type Event struct {
   	typ    EventType
-  	params []any
+  	params []TLA
   	state  State
   	file   string
   	line   int
   }
   
-  func printParams(ps []any) string {
+  func printParams(ps []TLA) string {
   	res := []string{}
   	for _, v := range ps {
   		res = append(res, fmt.Sprintf("%+v", v))
@@ -1466,502 +2304,334 @@
   
   func (m *Monitor) CheckInitial(trace_i int, prev Event, this Event) error {
   
-  	v100_setlit := map[any]any{}
-  	if !(reflect.DeepEqual(this.state.msgs, v100_setlit)) {
-  		return fail("precondition failed in initial at %d; msgs = {}\n\nlhs: this.state.msgs = %+v\nrhs: v100_setlit = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.msgs, v100_setlit, prev, this)
+  	if IsFalse(Eq(this.state.msgs, set())) {
+  		return fail("precondition failed in initial at %d; msgs = {}\n\nlhs: this.state.msgs = %+v\nrhs: set() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.msgs, set(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmAborted, []any{})) {
-  		return fail("precondition failed in initial at %d; tmAborted = <<>>\n\nlhs: this.state.tmAborted = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmAborted, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.tmAborted, seq())) {
+  		return fail("precondition failed in initial at %d; tmAborted = <<>>\n\nlhs: this.state.tmAborted = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmAborted, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmCommitted, []any{})) {
-  		return fail("precondition failed in initial at %d; tmCommitted = <<>>\n\nlhs: this.state.tmCommitted = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmCommitted, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.tmCommitted, seq())) {
+  		return fail("precondition failed in initial at %d; tmCommitted = <<>>\n\nlhs: this.state.tmCommitted = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmCommitted, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
-  		return fail("precondition failed in initial at %d; lastMsgSent = <<>>\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, seq())) {
+  		return fail("precondition failed in initial at %d; lastMsgSent = <<>>\n\nlhs: this.state.lastMsgSent = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmPrepared, []any{})) {
-  		return fail("precondition failed in initial at %d; tmPrepared = <<>>\n\nlhs: this.state.tmPrepared = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmPrepared, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.tmPrepared, seq())) {
+  		return fail("precondition failed in initial at %d; tmPrepared = <<>>\n\nlhs: this.state.tmPrepared = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmPrepared, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
-  		return fail("precondition failed in initial at %d; lastMsgReceived = <<>>\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgReceived, seq())) {
+  		return fail("precondition failed in initial at %d; lastMsgReceived = <<>>\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.rmState, map[any]any{"r1": "working", "r2": "working"})) {
-  		return fail("precondition failed in initial at %d; rmState = [r1 |-> \"working\", r2 |-> \"working\"]\n\nlhs: this.state.rmState = %+v\nrhs: map[any]any{\"r1\": \"working\", \"r2\": \"working\"} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, map[any]any{"r1": "working", "r2": "working"}, prev, this)
+  	if IsFalse(Eq(this.state.rmState, record(str("r1"), str("working"), str("r2"), str("working")))) {
+  		return fail("precondition failed in initial at %d; rmState = [r1 |-> \"working\", r2 |-> \"working\"]\n\nlhs: this.state.rmState = %+v\nrhs: record(str(\"r1\"), str(\"working\"), str(\"r2\"), str(\"working\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, record(str("r1"), str("working"), str("r2"), str("working")), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "none")) {
-  		return fail("precondition failed in initial at %d; who = \"none\"\n\nlhs: this.state.who = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "none", prev, this)
+  	if IsFalse(Eq(this.state.who, str("none"))) {
+  		return fail("precondition failed in initial at %d; who = \"none\"\n\nlhs: this.state.who = %+v\nrhs: str(\"none\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("none"), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckCReceivePrepare(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckCReceivePrepare(r TLA, trace_i int, prev Event, this Event) error {
   
-  	_, v0_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Prepared", "rm": r})]
-  	if !(v0_in) {
-  		return fail("precondition failed in CReceivePrepare at %d; Receive([\"type\" |-> \"Prepared\", \"rm\" |-> r])\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(record(str("type"), str("Prepared"), str("rm"), r), prev.state.msgs.(Set))) {
+  		return fail("precondition failed in CReceivePrepare at %d; Receive([\"type\" |-> \"Prepared\", \"rm\" |-> r])\n\nlhs: record(str(\"type\"), str(\"Prepared\"), str(\"rm\"), r) = %+v\nrhs: prev.state.msgs.(Set) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, record(str("type"), str("Prepared"), str("rm"), r), prev.state.msgs.(Set), prev, this)
   	}
-  	v2_toset := map[any]bool{}
-  	for _, v := range any(prev.state.tmPrepared).(seq) {
-  		v2_toset[v] = true
+  	if IsFalse(SetNotIn(r, ToSet(prev.state.tmPrepared.(Seq)))) {
+  		return fail("precondition failed in CReceivePrepare at %d; r \\notin ToSet(tmPrepared)\n\nlhs: r = %+v\nrhs: ToSet(prev.state.tmPrepared.(Seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, r, ToSet(prev.state.tmPrepared.(Seq)), prev, this)
   	}
-  	_, v1_notin := v2_toset[hash(r)]
-  	if !(!v1_notin) {
-  		return fail("precondition failed in CReceivePrepare at %d; r \\notin ToSet(tmPrepared)\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(Eq(this.state.tmPrepared, Append(prev.state.tmPrepared.(Seq), r.(Seq)))) {
+  		return fail("postcondition failed in CReceivePrepare at %d; '(tmPrepared) = Append(tmPrepared, r)\n\nlhs: this.state.tmPrepared = %+v\nrhs: Append(prev.state.tmPrepared.(Seq), r.(Seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmPrepared, Append(prev.state.tmPrepared.(Seq), r.(Seq)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmPrepared, append(any(prev.state.tmPrepared).(seq), any(r).(seq)))) {
-  		return fail("postcondition failed in CReceivePrepare at %d; '(tmPrepared) = Append(tmPrepared, r)\n\nlhs: this.state.tmPrepared = %+v\nrhs: append(any(prev.state.tmPrepared).(seq), any(r).(seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmPrepared, append(any(prev.state.tmPrepared).(seq), any(r).(seq)), prev, this)
+  	if IsFalse(Eq(this.state.who, str("coordinator"))) {
+  		return fail("postcondition failed in CReceivePrepare at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: str(\"coordinator\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("coordinator"), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  		return fail("postcondition failed in CReceivePrepare at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: \"coordinator\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "coordinator", prev, this)
+  	if IsFalse(Eq(this.state.lastMsgReceived, Some(record(str("type"), str("Prepared"), str("rm"), r)))) {
+  		return fail("postcondition failed in CReceivePrepare at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Prepared\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: Some(record(str(\"type\"), str(\"Prepared\"), str(\"rm\"), r)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, Some(record(str("type"), str("Prepared"), str("rm"), r)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[any]any{"type": "Prepared", "rm": r}})) {
-  		return fail("postcondition failed in CReceivePrepare at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Prepared\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{map[any]any{\"type\": \"Prepared\", \"rm\": r}} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{map[any]any{"type": "Prepared", "rm": r}}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, None())) {
+  		return fail("postcondition failed in CReceivePrepare at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, None(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
-  		return fail("postcondition failed in CReceivePrepare at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.msgs, prev.state.msgs)) {
+  	if IsFalse(Eq(this.state.msgs, prev.state.msgs)) {
   		return fail("precondition failed in CReceivePrepare at %d; UNCHANGED(<<msgs>>)\n\nlhs: this.state.msgs = %+v\nrhs: prev.state.msgs = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.msgs, prev.state.msgs, prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CReceivePrepare at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in CReceivePrepare at %d; UNCHANGED(<<tmCommitted, tmAborted>>)\n\nlhs: reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(Eq(this.state.tmCommitted, prev.state.tmCommitted), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in CReceivePrepare at %d; UNCHANGED(<<tmCommitted, tmAborted>>)\n\nlhs: Eq(this.state.tmCommitted, prev.state.tmCommitted) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.tmCommitted, prev.state.tmCommitted), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckCSendPrepare(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckCSendPrepare(r TLA, trace_i int, prev Event, this Event) error {
   
-  	v3_toset := map[any]bool{}
-  	for _, v := range any(prev.state.tmPrepared).(seq) {
-  		v3_toset[v] = true
+  	if IsFalse(Neq(ToSet(prev.state.tmPrepared.(Seq)), set(str("r1"), str("r2")))) {
+  		return fail("precondition failed in CSendPrepare at %d; ToSet(tmPrepared) /= RM\n\nlhs: ToSet(prev.state.tmPrepared.(Seq)) = %+v\nrhs: set(str(\"r1\"), str(\"r2\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, ToSet(prev.state.tmPrepared.(Seq)), set(str("r1"), str("r2")), prev, this)
   	}
-  	v4_setlit := map[any]any{}
-  	v4_setlit[hash("r1")] = "r1"
-  	v4_setlit[hash("r2")] = "r2"
-  	if !(!reflect.DeepEqual(v3_toset, v4_setlit)) {
-  		return fail("precondition failed in CSendPrepare at %d; ToSet(tmPrepared) /= RM\n\nlhs: v3_toset = %+v\nrhs: v4_setlit = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, v3_toset, v4_setlit, prev, this)
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Prepare"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Prepare"), str("rm"), r)))))) {
+  		return fail("precondition failed in CSendPrepare at %d; Send([\"type\" |-> \"Prepare\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Prepare\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Prepare\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Prepare"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Prepare"), str("rm"), r)))), prev, this)
   	}
-  	_, v5_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Prepare", "rm": r})]
-  	v11_setliteral := map[any]any{}
-  	v11_setliteral[hash(map[any]any{"type": "Prepare", "rm": r})] = map[any]any{"type": "Prepare", "rm": r}
-  	v6_union := map[any]any{}
-  	for v7, v8 := range any(prev.state.msgs).(set) {
-  		v6_union[v7] = v8
+  	if IsFalse(Eq(this.state.who, str("coordinator"))) {
+  		return fail("postcondition failed in CSendPrepare at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: str(\"coordinator\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("coordinator"), prev, this)
   	}
-  	for v9, v10 := range v11_setliteral {
-  		v6_union[v9] = v10
+  	if IsFalse(Eq(this.state.lastMsgReceived, None())) {
+  		return fail("postcondition failed in CSendPrepare at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, None(), prev, this)
   	}
-  	if !(!v5_notin && reflect.DeepEqual(this.state.msgs, v6_union)) {
-  		return fail("precondition failed in CSendPrepare at %d; Send([\"type\" |-> \"Prepare\", \"rm\" |-> r])\n\nlhs: !v5_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v6_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v5_notin, reflect.DeepEqual(this.state.msgs, v6_union), prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, Some(record(str("type"), str("Prepare"), str("rm"), r)))) {
+  		return fail("postcondition failed in CSendPrepare at %d; '(lastMsgSent) = Some([\"type\" |-> \"Prepare\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgSent = %+v\nrhs: Some(record(str(\"type\"), str(\"Prepare\"), str(\"rm\"), r)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, Some(record(str("type"), str("Prepare"), str("rm"), r)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  		return fail("postcondition failed in CSendPrepare at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: \"coordinator\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "coordinator", prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
-  		return fail("postcondition failed in CSendPrepare at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[any]any{"type": "Prepare", "rm": r}})) {
-  		return fail("postcondition failed in CSendPrepare at %d; '(lastMsgSent) = Some([\"type\" |-> \"Prepare\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{map[any]any{\"type\": \"Prepare\", \"rm\": r}} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{map[any]any{"type": "Prepare", "rm": r}}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CSendPrepare at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in CSendPrepare at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in CSendPrepare at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckCSendCommit(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckCSendCommit(r TLA, trace_i int, prev Event, this Event) error {
   
-  	v12_toset := map[any]bool{}
-  	for _, v := range any(prev.state.tmPrepared).(seq) {
-  		v12_toset[v] = true
+  	if IsFalse(Eq(ToSet(prev.state.tmPrepared.(Seq)), set(str("r1"), str("r2")))) {
+  		return fail("precondition failed in CSendCommit at %d; ToSet(tmPrepared) = RM\n\nlhs: ToSet(prev.state.tmPrepared.(Seq)) = %+v\nrhs: set(str(\"r1\"), str(\"r2\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, ToSet(prev.state.tmPrepared.(Seq)), set(str("r1"), str("r2")), prev, this)
   	}
-  	v13_setlit := map[any]any{}
-  	v13_setlit[hash("r1")] = "r1"
-  	v13_setlit[hash("r2")] = "r2"
-  	if !(reflect.DeepEqual(v12_toset, v13_setlit)) {
-  		return fail("precondition failed in CSendCommit at %d; ToSet(tmPrepared) = RM\n\nlhs: v12_toset = %+v\nrhs: v13_setlit = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, v12_toset, v13_setlit, prev, this)
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Commit"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Commit"), str("rm"), r)))))) {
+  		return fail("precondition failed in CSendCommit at %d; Send([\"type\" |-> \"Commit\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Commit\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Commit\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Commit"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Commit"), str("rm"), r)))), prev, this)
   	}
-  	_, v14_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Commit", "rm": r})]
-  	v20_setliteral := map[any]any{}
-  	v20_setliteral[hash(map[any]any{"type": "Commit", "rm": r})] = map[any]any{"type": "Commit", "rm": r}
-  	v15_union := map[any]any{}
-  	for v16, v17 := range any(prev.state.msgs).(set) {
-  		v15_union[v16] = v17
+  	if IsFalse(Eq(this.state.who, str("coordinator"))) {
+  		return fail("postcondition failed in CSendCommit at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: str(\"coordinator\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("coordinator"), prev, this)
   	}
-  	for v18, v19 := range v20_setliteral {
-  		v15_union[v18] = v19
+  	if IsFalse(Eq(this.state.lastMsgReceived, None())) {
+  		return fail("postcondition failed in CSendCommit at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, None(), prev, this)
   	}
-  	if !(!v14_notin && reflect.DeepEqual(this.state.msgs, v15_union)) {
-  		return fail("precondition failed in CSendCommit at %d; Send([\"type\" |-> \"Commit\", \"rm\" |-> r])\n\nlhs: !v14_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v15_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v14_notin, reflect.DeepEqual(this.state.msgs, v15_union), prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, Some(record(str("type"), str("Commit"), str("rm"), r)))) {
+  		return fail("postcondition failed in CSendCommit at %d; '(lastMsgSent) = Some([\"type\" |-> \"Commit\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgSent = %+v\nrhs: Some(record(str(\"type\"), str(\"Commit\"), str(\"rm\"), r)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, Some(record(str("type"), str("Commit"), str("rm"), r)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  		return fail("postcondition failed in CSendCommit at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: \"coordinator\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "coordinator", prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
-  		return fail("postcondition failed in CSendCommit at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[any]any{"type": "Commit", "rm": r}})) {
-  		return fail("postcondition failed in CSendCommit at %d; '(lastMsgSent) = Some([\"type\" |-> \"Commit\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{map[any]any{\"type\": \"Commit\", \"rm\": r}} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{map[any]any{"type": "Commit", "rm": r}}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CSendCommit at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in CSendCommit at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in CSendCommit at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckCSendAbort(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckCSendAbort(r TLA, trace_i int, prev Event, this Event) error {
   
-  	if !(!reflect.DeepEqual(prev.state.tmAborted, []any{})) {
-  		return fail("precondition failed in CSendAbort at %d; tmAborted /= <<>>\n\nlhs: prev.state.tmAborted = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.tmAborted, []any{}, prev, this)
+  	if IsFalse(Neq(prev.state.tmAborted, seq())) {
+  		return fail("precondition failed in CSendAbort at %d; tmAborted /= <<>>\n\nlhs: prev.state.tmAborted = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.tmAborted, seq(), prev, this)
   	}
-  	_, v21_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Abort", "rm": r})]
-  	v27_setliteral := map[any]any{}
-  	v27_setliteral[hash(map[any]any{"type": "Abort", "rm": r})] = map[any]any{"type": "Abort", "rm": r}
-  	v22_union := map[any]any{}
-  	for v23, v24 := range any(prev.state.msgs).(set) {
-  		v22_union[v23] = v24
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Abort"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Abort"), str("rm"), r)))))) {
+  		return fail("precondition failed in CSendAbort at %d; Send([\"type\" |-> \"Abort\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Abort\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Abort\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Abort"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Abort"), str("rm"), r)))), prev, this)
   	}
-  	for v25, v26 := range v27_setliteral {
-  		v22_union[v25] = v26
+  	if IsFalse(Eq(this.state.who, str("coordinator"))) {
+  		return fail("postcondition failed in CSendAbort at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: str(\"coordinator\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("coordinator"), prev, this)
   	}
-  	if !(!v21_notin && reflect.DeepEqual(this.state.msgs, v22_union)) {
-  		return fail("precondition failed in CSendAbort at %d; Send([\"type\" |-> \"Abort\", \"rm\" |-> r])\n\nlhs: !v21_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v22_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v21_notin, reflect.DeepEqual(this.state.msgs, v22_union), prev, this)
+  	if IsFalse(Eq(this.state.lastMsgReceived, None())) {
+  		return fail("postcondition failed in CSendAbort at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, None(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  		return fail("postcondition failed in CSendAbort at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: \"coordinator\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "coordinator", prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, Some(record(str("type"), str("Abort"), str("rm"), r)))) {
+  		return fail("postcondition failed in CSendAbort at %d; '(lastMsgSent) = Some([\"type\" |-> \"Abort\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgSent = %+v\nrhs: Some(record(str(\"type\"), str(\"Abort\"), str(\"rm\"), r)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, Some(record(str("type"), str("Abort"), str("rm"), r)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
-  		return fail("postcondition failed in CSendAbort at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{map[any]any{"type": "Abort", "rm": r}})) {
-  		return fail("postcondition failed in CSendAbort at %d; '(lastMsgSent) = Some([\"type\" |-> \"Abort\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{map[any]any{\"type\": \"Abort\", \"rm\": r}} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{map[any]any{"type": "Abort", "rm": r}}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CSendAbort at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in CSendAbort at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in CSendAbort at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckCReceiveCommit(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckCReceiveCommit(r TLA, trace_i int, prev Event, this Event) error {
   
-  	_, v28_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Committed", "rm": r})]
-  	if !(v28_in) {
-  		return fail("precondition failed in CReceiveCommit at %d; Receive([\"type\" |-> \"Committed\", \"rm\" |-> r])\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(record(str("type"), str("Committed"), str("rm"), r), prev.state.msgs.(Set))) {
+  		return fail("precondition failed in CReceiveCommit at %d; Receive([\"type\" |-> \"Committed\", \"rm\" |-> r])\n\nlhs: record(str(\"type\"), str(\"Committed\"), str(\"rm\"), r) = %+v\nrhs: prev.state.msgs.(Set) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, record(str("type"), str("Committed"), str("rm"), r), prev.state.msgs.(Set), prev, this)
   	}
-  	v30_toset := map[any]bool{}
-  	for _, v := range any(prev.state.tmCommitted).(seq) {
-  		v30_toset[v] = true
+  	if IsFalse(SetNotIn(r, ToSet(prev.state.tmCommitted.(Seq)))) {
+  		return fail("precondition failed in CReceiveCommit at %d; r \\notin ToSet(tmCommitted)\n\nlhs: r = %+v\nrhs: ToSet(prev.state.tmCommitted.(Seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, r, ToSet(prev.state.tmCommitted.(Seq)), prev, this)
   	}
-  	_, v29_notin := v30_toset[hash(r)]
-  	if !(!v29_notin) {
-  		return fail("precondition failed in CReceiveCommit at %d; r \\notin ToSet(tmCommitted)\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(Eq(this.state.who, str("coordinator"))) {
+  		return fail("postcondition failed in CReceiveCommit at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: str(\"coordinator\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("coordinator"), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  		return fail("postcondition failed in CReceiveCommit at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: \"coordinator\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "coordinator", prev, this)
+  	if IsFalse(Eq(this.state.tmCommitted, Append(prev.state.tmCommitted.(Seq), r.(Seq)))) {
+  		return fail("postcondition failed in CReceiveCommit at %d; '(tmCommitted) = Append(tmCommitted, r)\n\nlhs: this.state.tmCommitted = %+v\nrhs: Append(prev.state.tmCommitted.(Seq), r.(Seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmCommitted, Append(prev.state.tmCommitted.(Seq), r.(Seq)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmCommitted, append(any(prev.state.tmCommitted).(seq), any(r).(seq)))) {
-  		return fail("postcondition failed in CReceiveCommit at %d; '(tmCommitted) = Append(tmCommitted, r)\n\nlhs: this.state.tmCommitted = %+v\nrhs: append(any(prev.state.tmCommitted).(seq), any(r).(seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmCommitted, append(any(prev.state.tmCommitted).(seq), any(r).(seq)), prev, this)
+  	if IsFalse(Eq(this.state.lastMsgReceived, Some(record(str("type"), str("Committed"), str("rm"), r)))) {
+  		return fail("postcondition failed in CReceiveCommit at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Committed\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: Some(record(str(\"type\"), str(\"Committed\"), str(\"rm\"), r)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, Some(record(str("type"), str("Committed"), str("rm"), r)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[any]any{"type": "Committed", "rm": r}})) {
-  		return fail("postcondition failed in CReceiveCommit at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Committed\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{map[any]any{\"type\": \"Committed\", \"rm\": r}} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{map[any]any{"type": "Committed", "rm": r}}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, None())) {
+  		return fail("postcondition failed in CReceiveCommit at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, None(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
-  		return fail("postcondition failed in CReceiveCommit at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CReceiveCommit at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in CReceiveCommit at %d; UNCHANGED(<<tmPrepared, msgs, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.msgs, prev.state.msgs)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in CReceiveCommit at %d; UNCHANGED(<<tmPrepared, msgs, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.msgs, prev.state.msgs)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.msgs, prev.state.msgs)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckCReceiveAbort(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckCReceiveAbort(r TLA, trace_i int, prev Event, this Event) error {
   
-  	_, v31_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Aborted", "rm": r})]
-  	if !(v31_in) {
-  		return fail("precondition failed in CReceiveAbort at %d; Receive([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(record(str("type"), str("Aborted"), str("rm"), r), prev.state.msgs.(Set))) {
+  		return fail("precondition failed in CReceiveAbort at %d; Receive([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: record(str(\"type\"), str(\"Aborted\"), str(\"rm\"), r) = %+v\nrhs: prev.state.msgs.(Set) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, record(str("type"), str("Aborted"), str("rm"), r), prev.state.msgs.(Set), prev, this)
   	}
-  	v33_toset := map[any]bool{}
-  	for _, v := range any(prev.state.tmAborted).(seq) {
-  		v33_toset[v] = true
+  	if IsFalse(SetNotIn(r, ToSet(prev.state.tmAborted.(Seq)))) {
+  		return fail("precondition failed in CReceiveAbort at %d; r \\notin ToSet(tmAborted)\n\nlhs: r = %+v\nrhs: ToSet(prev.state.tmAborted.(Seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, r, ToSet(prev.state.tmAborted.(Seq)), prev, this)
   	}
-  	_, v32_notin := v33_toset[hash(r)]
-  	if !(!v32_notin) {
-  		return fail("precondition failed in CReceiveAbort at %d; r \\notin ToSet(tmAborted)\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(Eq(this.state.who, str("coordinator"))) {
+  		return fail("postcondition failed in CReceiveAbort at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: str(\"coordinator\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("coordinator"), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "coordinator")) {
-  		return fail("postcondition failed in CReceiveAbort at %d; '(who) = \"coordinator\"\n\nlhs: this.state.who = %+v\nrhs: \"coordinator\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "coordinator", prev, this)
+  	if IsFalse(Eq(this.state.tmAborted, Append(prev.state.tmAborted.(Seq), r.(Seq)))) {
+  		return fail("postcondition failed in CReceiveAbort at %d; '(tmAborted) = Append(tmAborted, r)\n\nlhs: this.state.tmAborted = %+v\nrhs: Append(prev.state.tmAborted.(Seq), r.(Seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmAborted, Append(prev.state.tmAborted.(Seq), r.(Seq)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmAborted, append(any(prev.state.tmAborted).(seq), any(r).(seq)))) {
-  		return fail("postcondition failed in CReceiveAbort at %d; '(tmAborted) = Append(tmAborted, r)\n\nlhs: this.state.tmAborted = %+v\nrhs: append(any(prev.state.tmAborted).(seq), any(r).(seq)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmAborted, append(any(prev.state.tmAborted).(seq), any(r).(seq)), prev, this)
+  	if IsFalse(Eq(this.state.lastMsgReceived, Some(record(str("type"), str("Aborted"), str("rm"), r)))) {
+  		return fail("postcondition failed in CReceiveAbort at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: Some(record(str(\"type\"), str(\"Aborted\"), str(\"rm\"), r)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, Some(record(str("type"), str("Aborted"), str("rm"), r)), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{map[any]any{"type": "Aborted", "rm": r}})) {
-  		return fail("postcondition failed in CReceiveAbort at %d; '(lastMsgReceived) = Some([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{map[any]any{\"type\": \"Aborted\", \"rm\": r}} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{map[any]any{"type": "Aborted", "rm": r}}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, None())) {
+  		return fail("postcondition failed in CReceiveAbort at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, None(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
-  		return fail("postcondition failed in CReceiveAbort at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{}, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CReceiveAbort at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) {
-  		return fail("precondition failed in CReceiveAbort at %d; UNCHANGED(<<tmPrepared, msgs, tmCommitted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)) = %+v\nrhs: reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.msgs, prev.state.msgs)), reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.msgs, prev.state.msgs)), Eq(this.state.tmCommitted, prev.state.tmCommitted))) {
+  		return fail("precondition failed in CReceiveAbort at %d; UNCHANGED(<<tmPrepared, msgs, tmCommitted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.msgs, prev.state.msgs)) = %+v\nrhs: Eq(this.state.tmCommitted, prev.state.tmCommitted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.msgs, prev.state.msgs)), Eq(this.state.tmCommitted, prev.state.tmCommitted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckPHandlePrepare(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckPHandlePrepare(r TLA, trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(any(prev.state.rmState).(record)[any(r).(string)], "working")) {
-  		return fail("precondition failed in PHandlePrepare at %d; rmState[r] = \"working\"\n\nlhs: any(prev.state.rmState).(record)[any(r).(string)] = %+v\nrhs: \"working\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.rmState).(record)[any(r).(string)], "working", prev, this)
+  	if IsFalse(Eq(RecordIndex(prev.state.rmState.(Record), r.(String)), str("working"))) {
+  		return fail("precondition failed in PHandlePrepare at %d; rmState[r] = \"working\"\n\nlhs: RecordIndex(prev.state.rmState.(Record), r.(String)) = %+v\nrhs: str(\"working\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(prev.state.rmState.(Record), r.(String)), str("working"), prev, this)
   	}
-  	_, v34_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Prepare", "rm": r})]
-  	if !(v34_in) {
-  		return fail("precondition failed in PHandlePrepare at %d; Receive([\"type\" |-> \"Prepare\", \"rm\" |-> r])\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(record(str("type"), str("Prepare"), str("rm"), r), prev.state.msgs.(Set))) {
+  		return fail("precondition failed in PHandlePrepare at %d; Receive([\"type\" |-> \"Prepare\", \"rm\" |-> r])\n\nlhs: record(str(\"type\"), str(\"Prepare\"), str(\"rm\"), r) = %+v\nrhs: prev.state.msgs.(Set) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, record(str("type"), str("Prepare"), str("rm"), r), prev.state.msgs.(Set), prev, this)
   	}
-  	v35_except := map[any]any{}
-  	for v36, v37 := range any(prev.state.rmState).(record) {
-  		v35_except[v36] = v37
+  	if IsFalse(Eq(this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("prepared")))) {
+  		return fail("postcondition failed in PHandlePrepare at %d; '(rmState) = [rmState EXCEPT ![r] = \"prepared\"]\n\nlhs: this.state.rmState = %+v\nrhs: Except(prev.state.rmState.(Record), r.(String), str(\"prepared\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("prepared")), prev, this)
   	}
-  	v35_except[r] = "prepared"
-  	if !(reflect.DeepEqual(this.state.rmState, v35_except)) {
-  		return fail("postcondition failed in PHandlePrepare at %d; '(rmState) = [rmState EXCEPT ![r] = \"prepared\"]\n\nlhs: this.state.rmState = %+v\nrhs: v35_except = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, v35_except, prev, this)
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Prepared"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Prepared"), str("rm"), r)))))) {
+  		return fail("precondition failed in PHandlePrepare at %d; Send([\"type\" |-> \"Prepared\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Prepared\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Prepared\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Prepared"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Prepared"), str("rm"), r)))), prev, this)
   	}
-  	_, v38_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Prepared", "rm": r})]
-  	v44_setliteral := map[any]any{}
-  	v44_setliteral[hash(map[any]any{"type": "Prepared", "rm": r})] = map[any]any{"type": "Prepared", "rm": r}
-  	v39_union := map[any]any{}
-  	for v40, v41 := range any(prev.state.msgs).(set) {
-  		v39_union[v40] = v41
-  	}
-  	for v42, v43 := range v44_setliteral {
-  		v39_union[v42] = v43
-  	}
-  	if !(!v38_notin && reflect.DeepEqual(this.state.msgs, v39_union)) {
-  		return fail("precondition failed in PHandlePrepare at %d; Send([\"type\" |-> \"Prepared\", \"rm\" |-> r])\n\nlhs: !v38_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v39_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v38_notin, reflect.DeepEqual(this.state.msgs, v39_union), prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.who, r)) {
+  	if IsFalse(Eq(this.state.who, r)) {
   		return fail("postcondition failed in PHandlePrepare at %d; '(who) = r\n\nlhs: this.state.who = %+v\nrhs: r = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, r, prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
-  		return fail("precondition failed in PHandlePrepare at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived), reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
+  	if IsFalse(And(Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent))) {
+  		return fail("precondition failed in PHandlePrepare at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: Eq(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in PHandlePrepare at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in PHandlePrepare at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckPHandleCommit(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckPHandleCommit(r TLA, trace_i int, prev Event, this Event) error {
   
-  	if !(reflect.DeepEqual(any(prev.state.rmState).(record)[any(r).(string)], "prepared")) {
-  		return fail("precondition failed in PHandleCommit at %d; rmState[r] = \"prepared\"\n\nlhs: any(prev.state.rmState).(record)[any(r).(string)] = %+v\nrhs: \"prepared\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.rmState).(record)[any(r).(string)], "prepared", prev, this)
+  	if IsFalse(Eq(RecordIndex(prev.state.rmState.(Record), r.(String)), str("prepared"))) {
+  		return fail("precondition failed in PHandleCommit at %d; rmState[r] = \"prepared\"\n\nlhs: RecordIndex(prev.state.rmState.(Record), r.(String)) = %+v\nrhs: str(\"prepared\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(prev.state.rmState.(Record), r.(String)), str("prepared"), prev, this)
   	}
-  	_, v45_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Commit", "rm": r})]
-  	if !(v45_in) {
-  		return fail("precondition failed in PHandleCommit at %d; Receive([\"type\" |-> \"Commit\", \"rm\" |-> r])\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(record(str("type"), str("Commit"), str("rm"), r), prev.state.msgs.(Set))) {
+  		return fail("precondition failed in PHandleCommit at %d; Receive([\"type\" |-> \"Commit\", \"rm\" |-> r])\n\nlhs: record(str(\"type\"), str(\"Commit\"), str(\"rm\"), r) = %+v\nrhs: prev.state.msgs.(Set) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, record(str("type"), str("Commit"), str("rm"), r), prev.state.msgs.(Set), prev, this)
   	}
-  	v46_except := map[any]any{}
-  	for v47, v48 := range any(prev.state.rmState).(record) {
-  		v46_except[v47] = v48
+  	if IsFalse(Eq(this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("committed")))) {
+  		return fail("postcondition failed in PHandleCommit at %d; '(rmState) = [rmState EXCEPT ![r] = \"committed\"]\n\nlhs: this.state.rmState = %+v\nrhs: Except(prev.state.rmState.(Record), r.(String), str(\"committed\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("committed")), prev, this)
   	}
-  	v46_except[r] = "committed"
-  	if !(reflect.DeepEqual(this.state.rmState, v46_except)) {
-  		return fail("postcondition failed in PHandleCommit at %d; '(rmState) = [rmState EXCEPT ![r] = \"committed\"]\n\nlhs: this.state.rmState = %+v\nrhs: v46_except = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, v46_except, prev, this)
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Committed"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Committed"), str("rm"), r)))))) {
+  		return fail("precondition failed in PHandleCommit at %d; Send([\"type\" |-> \"Committed\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Committed\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Committed\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Committed"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Committed"), str("rm"), r)))), prev, this)
   	}
-  	_, v49_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Committed", "rm": r})]
-  	v55_setliteral := map[any]any{}
-  	v55_setliteral[hash(map[any]any{"type": "Committed", "rm": r})] = map[any]any{"type": "Committed", "rm": r}
-  	v50_union := map[any]any{}
-  	for v51, v52 := range any(prev.state.msgs).(set) {
-  		v50_union[v51] = v52
-  	}
-  	for v53, v54 := range v55_setliteral {
-  		v50_union[v53] = v54
-  	}
-  	if !(!v49_notin && reflect.DeepEqual(this.state.msgs, v50_union)) {
-  		return fail("precondition failed in PHandleCommit at %d; Send([\"type\" |-> \"Committed\", \"rm\" |-> r])\n\nlhs: !v49_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v50_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v49_notin, reflect.DeepEqual(this.state.msgs, v50_union), prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.who, r)) {
+  	if IsFalse(Eq(this.state.who, r)) {
   		return fail("postcondition failed in PHandleCommit at %d; '(who) = r\n\nlhs: this.state.who = %+v\nrhs: r = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, r, prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
-  		return fail("precondition failed in PHandleCommit at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived), reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
+  	if IsFalse(And(Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent))) {
+  		return fail("precondition failed in PHandleCommit at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: Eq(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in PHandleCommit at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in PHandleCommit at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckPHandleAbort(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckPHandleAbort(r TLA, trace_i int, prev Event, this Event) error {
   
-  	v57_setliteral := map[any]any{}
-  	v57_setliteral[hash("working")] = "working"
-  	v57_setliteral[hash("prepared")] = "prepared"
-  	_, v56_in := v57_setliteral[hash(any(prev.state.rmState).(record)[any(r).(string)])]
-  	if !(v56_in) {
-  		return fail("precondition failed in PHandleAbort at %d; rmState[r] \\in {\"working\", \"prepared\"}\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(RecordIndex(prev.state.rmState.(Record), r.(String)), set(str("working"), str("prepared")))) {
+  		return fail("precondition failed in PHandleAbort at %d; rmState[r] \\in {\"working\", \"prepared\"}\n\nlhs: RecordIndex(prev.state.rmState.(Record), r.(String)) = %+v\nrhs: set(str(\"working\"), str(\"prepared\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(prev.state.rmState.(Record), r.(String)), set(str("working"), str("prepared")), prev, this)
   	}
-  	_, v58_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Abort", "rm": r})]
-  	if !(v58_in) {
-  		return fail("precondition failed in PHandleAbort at %d; Receive([\"type\" |-> \"Abort\", \"rm\" |-> r])\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(record(str("type"), str("Abort"), str("rm"), r), prev.state.msgs.(Set))) {
+  		return fail("precondition failed in PHandleAbort at %d; Receive([\"type\" |-> \"Abort\", \"rm\" |-> r])\n\nlhs: record(str(\"type\"), str(\"Abort\"), str(\"rm\"), r) = %+v\nrhs: prev.state.msgs.(Set) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, record(str("type"), str("Abort"), str("rm"), r), prev.state.msgs.(Set), prev, this)
   	}
-  	v59_except := map[any]any{}
-  	for v60, v61 := range any(prev.state.rmState).(record) {
-  		v59_except[v60] = v61
+  	if IsFalse(Eq(this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("aborted")))) {
+  		return fail("postcondition failed in PHandleAbort at %d; '(rmState) = [rmState EXCEPT ![r] = \"aborted\"]\n\nlhs: this.state.rmState = %+v\nrhs: Except(prev.state.rmState.(Record), r.(String), str(\"aborted\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("aborted")), prev, this)
   	}
-  	v59_except[r] = "aborted"
-  	if !(reflect.DeepEqual(this.state.rmState, v59_except)) {
-  		return fail("postcondition failed in PHandleAbort at %d; '(rmState) = [rmState EXCEPT ![r] = \"aborted\"]\n\nlhs: this.state.rmState = %+v\nrhs: v59_except = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, v59_except, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.who, r)) {
+  	if IsFalse(Eq(this.state.who, r)) {
   		return fail("postcondition failed in PHandleAbort at %d; '(who) = r\n\nlhs: this.state.who = %+v\nrhs: r = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, r, prev, this)
   	}
-  	_, v62_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Aborted", "rm": r})]
-  	v68_setliteral := map[any]any{}
-  	v68_setliteral[hash(map[any]any{"type": "Aborted", "rm": r})] = map[any]any{"type": "Aborted", "rm": r}
-  	v63_union := map[any]any{}
-  	for v64, v65 := range any(prev.state.msgs).(set) {
-  		v63_union[v64] = v65
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Aborted"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Aborted"), str("rm"), r)))))) {
+  		return fail("precondition failed in PHandleAbort at %d; Send([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Aborted\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Aborted\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Aborted"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Aborted"), str("rm"), r)))), prev, this)
   	}
-  	for v66, v67 := range v68_setliteral {
-  		v63_union[v66] = v67
+  	if IsFalse(And(Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent))) {
+  		return fail("precondition failed in PHandleAbort at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: Eq(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
   	}
-  	if !(!v62_notin && reflect.DeepEqual(this.state.msgs, v63_union)) {
-  		return fail("precondition failed in PHandleAbort at %d; Send([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: !v62_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v63_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v62_notin, reflect.DeepEqual(this.state.msgs, v63_union), prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
-  		return fail("precondition failed in PHandleAbort at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived), reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
-  	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in PHandleAbort at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in PHandleAbort at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
-  func (m *Monitor) CheckPSpontaneouslyAbort(r any, trace_i int, prev Event, this Event) error {
+  func (m *Monitor) CheckPSpontaneouslyAbort(r TLA, trace_i int, prev Event, this Event) error {
   
-  	v70_setliteral := map[any]any{}
-  	v70_setliteral[hash("working")] = "working"
-  	v70_setliteral[hash("prepared")] = "prepared"
-  	_, v69_in := v70_setliteral[hash(any(prev.state.rmState).(record)[any(r).(string)])]
-  	if !(v69_in) {
-  		return fail("precondition failed in PSpontaneouslyAbort at %d; rmState[r] \\in {\"working\", \"prepared\"}\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
+  	if IsFalse(SetIn(RecordIndex(prev.state.rmState.(Record), r.(String)), set(str("working"), str("prepared")))) {
+  		return fail("precondition failed in PSpontaneouslyAbort at %d; rmState[r] \\in {\"working\", \"prepared\"}\n\nlhs: RecordIndex(prev.state.rmState.(Record), r.(String)) = %+v\nrhs: set(str(\"working\"), str(\"prepared\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(prev.state.rmState.(Record), r.(String)), set(str("working"), str("prepared")), prev, this)
   	}
-  	v71_except := map[any]any{}
-  	for v72, v73 := range any(prev.state.rmState).(record) {
-  		v71_except[v72] = v73
+  	if IsFalse(Eq(this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("aborted")))) {
+  		return fail("postcondition failed in PSpontaneouslyAbort at %d; '(rmState) = [rmState EXCEPT ![r] = \"aborted\"]\n\nlhs: this.state.rmState = %+v\nrhs: Except(prev.state.rmState.(Record), r.(String), str(\"aborted\")) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, Except(prev.state.rmState.(Record), r.(String), str("aborted")), prev, this)
   	}
-  	v71_except[r] = "aborted"
-  	if !(reflect.DeepEqual(this.state.rmState, v71_except)) {
-  		return fail("postcondition failed in PSpontaneouslyAbort at %d; '(rmState) = [rmState EXCEPT ![r] = \"aborted\"]\n\nlhs: this.state.rmState = %+v\nrhs: v71_except = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, v71_except, prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.who, r)) {
+  	if IsFalse(Eq(this.state.who, r)) {
   		return fail("postcondition failed in PSpontaneouslyAbort at %d; '(who) = r\n\nlhs: this.state.who = %+v\nrhs: r = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, r, prev, this)
   	}
-  	_, v74_notin := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Aborted", "rm": r})]
-  	v80_setliteral := map[any]any{}
-  	v80_setliteral[hash(map[any]any{"type": "Aborted", "rm": r})] = map[any]any{"type": "Aborted", "rm": r}
-  	v75_union := map[any]any{}
-  	for v76, v77 := range any(prev.state.msgs).(set) {
-  		v75_union[v76] = v77
+  	if IsFalse(And(SetNotIn(record(str("type"), str("Aborted"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Aborted"), str("rm"), r)))))) {
+  		return fail("precondition failed in PSpontaneouslyAbort at %d; Send([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: SetNotIn(record(str(\"type\"), str(\"Aborted\"), str(\"rm\"), r), prev.state.msgs.(Set)) = %+v\nrhs: Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str(\"type\"), str(\"Aborted\"), str(\"rm\"), r)))) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetNotIn(record(str("type"), str("Aborted"), str("rm"), r), prev.state.msgs.(Set)), Eq(this.state.msgs, SetUnion(prev.state.msgs.(Set), set(record(str("type"), str("Aborted"), str("rm"), r)))), prev, this)
   	}
-  	for v78, v79 := range v80_setliteral {
-  		v75_union[v78] = v79
+  	if IsFalse(And(Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent))) {
+  		return fail("precondition failed in PSpontaneouslyAbort at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: Eq(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
   	}
-  	if !(!v74_notin && reflect.DeepEqual(this.state.msgs, v75_union)) {
-  		return fail("precondition failed in PSpontaneouslyAbort at %d; Send([\"type\" |-> \"Aborted\", \"rm\" |-> r])\n\nlhs: !v74_notin = %+v\nrhs: reflect.DeepEqual(this.state.msgs, v75_union) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, !v74_notin, reflect.DeepEqual(this.state.msgs, v75_union), prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
-  		return fail("precondition failed in PSpontaneouslyAbort at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived), reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
-  	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in PSpontaneouslyAbort at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in PSpontaneouslyAbort at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
   	return nil
   }
   
   func (m *Monitor) CheckCReset(trace_i int, prev Event, this Event) error {
   
-  	v81_setlit := map[any]any{}
-  	v81_setlit[hash("r1")] = "r1"
-  	v81_setlit[hash("r2")] = "r2"
-  	v82_boundedforall := true
-  	for v83, _ := range v81_setlit {
-  		v81_setlit := map[any]any{}
-  		v81_setlit[hash("r1")] = "r1"
-  		v81_setlit[hash("r2")] = "r2"
-  		_, v84_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Committed", "rm": v83})]
-  		v82_boundedforall = v82_boundedforall && v84_in
-  	}
-  	if !(v82_boundedforall) {
+  	if IsFalse(BoundedForall(set(str("r1"), str("r2")), func(v0 TLA) Bool {
+  		return SetIn(record(str("type"), str("Committed"), str("rm"), v0), prev.state.msgs.(Set))
+  	})) {
   
-  		v85_setlit := map[any]any{}
-  		v85_setlit[hash("r1")] = "r1"
-  		v85_setlit[hash("r2")] = "r2"
-  		v86_boundedforall := true
-  		for v87, _ := range v85_setlit {
-  			v85_setlit := map[any]any{}
-  			v85_setlit[hash("r1")] = "r1"
-  			v85_setlit[hash("r2")] = "r2"
-  			_, v88_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Aborted", "rm": v87})]
-  			v86_boundedforall = v86_boundedforall && v88_in
+  		if IsFalse(BoundedForall(set(str("r1"), str("r2")), func(v1 TLA) Bool {
+  			return SetIn(record(str("type"), str("Aborted"), str("rm"), v1), prev.state.msgs.(Set))
+  		})) {
+  			return fail("precondition failed in CReset at %d; (\\A r \\in RM : [\"type\" |-> \"Committed\", \"rm\" |-> r] \\in msgs \\/ \\A r \\in RM : [\"type\" |-> \"Aborted\", \"rm\" |-> r] \\in msgs)\n\nlhs: set(str(\"r1\"), str(\"r2\")) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(str("r1"), str("r2")), "<func>", prev, this)
   		}
-  		if !(v86_boundedforall) {
-  
-  			v85_setlit := map[any]any{}
-  			v85_setlit[hash("r1")] = "r1"
-  			v85_setlit[hash("r2")] = "r2"
-  			v86_boundedforall := true
-  			for v87, _ := range v85_setlit {
-  				v85_setlit := map[any]any{}
-  				v85_setlit[hash("r1")] = "r1"
-  				v85_setlit[hash("r2")] = "r2"
-  				_, v88_in := any(prev.state.msgs).(set)[hash(map[any]any{"type": "Aborted", "rm": v87})]
-  				v86_boundedforall = v86_boundedforall && v88_in
-  			}
-  			if !(v86_boundedforall) {
-  				return fail("precondition failed in CReset at %d; (\\A r \\in RM : [\"type\" |-> \"Committed\", \"rm\" |-> r] \\in msgs \\/ \\A r \\in RM : [\"type\" |-> \"Aborted\", \"rm\" |-> r] \\in msgs)\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
-  			}
-  		}
-  
   	}
   
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, []any{})) {
-  		return fail("postcondition failed in CReset at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgReceived, None())) {
+  		return fail("postcondition failed in CReset at %d; '(lastMsgReceived) = None\n\nlhs: this.state.lastMsgReceived = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgReceived, None(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgSent, []any{})) {
-  		return fail("postcondition failed in CReset at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.lastMsgSent, None())) {
+  		return fail("postcondition failed in CReset at %d; '(lastMsgSent) = None\n\nlhs: this.state.lastMsgSent = %+v\nrhs: None() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.lastMsgSent, None(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmPrepared, []any{})) {
-  		return fail("postcondition failed in CReset at %d; '(tmPrepared) = <<>>\n\nlhs: this.state.tmPrepared = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmPrepared, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.tmPrepared, seq())) {
+  		return fail("postcondition failed in CReset at %d; '(tmPrepared) = <<>>\n\nlhs: this.state.tmPrepared = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmPrepared, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmCommitted, []any{})) {
-  		return fail("postcondition failed in CReset at %d; '(tmCommitted) = <<>>\n\nlhs: this.state.tmCommitted = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmCommitted, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.tmCommitted, seq())) {
+  		return fail("postcondition failed in CReset at %d; '(tmCommitted) = <<>>\n\nlhs: this.state.tmCommitted = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmCommitted, seq(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.tmAborted, []any{})) {
-  		return fail("postcondition failed in CReset at %d; '(tmAborted) = <<>>\n\nlhs: this.state.tmAborted = %+v\nrhs: []any{} = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmAborted, []any{}, prev, this)
+  	if IsFalse(Eq(this.state.tmAborted, seq())) {
+  		return fail("postcondition failed in CReset at %d; '(tmAborted) = <<>>\n\nlhs: this.state.tmAborted = %+v\nrhs: seq() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.tmAborted, seq(), prev, this)
   	}
-  	v89_setliteral := map[any]any{}
-  	if !(reflect.DeepEqual(this.state.msgs, v89_setliteral)) {
-  		return fail("postcondition failed in CReset at %d; '(msgs) = {}\n\nlhs: this.state.msgs = %+v\nrhs: v89_setliteral = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.msgs, v89_setliteral, prev, this)
+  	if IsFalse(Eq(this.state.msgs, set())) {
+  		return fail("postcondition failed in CReset at %d; '(msgs) = {}\n\nlhs: this.state.msgs = %+v\nrhs: set() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.msgs, set(), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.rmState, prev.state.rmState)) {
+  	if IsFalse(Eq(this.state.rmState, prev.state.rmState)) {
   		return fail("precondition failed in CReset at %d; UNCHANGED(<<rmState>>)\n\nlhs: this.state.rmState = %+v\nrhs: prev.state.rmState = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, prev.state.rmState, prev, this)
   	}
   	return nil
@@ -1969,68 +2639,26 @@
   
   func (m *Monitor) CheckPReset(trace_i int, prev Event, this Event) error {
   
-  	v90_setlit := map[any]any{}
-  	v90_setlit[hash("r1")] = "r1"
-  	v90_setlit[hash("r2")] = "r2"
-  	v91_boundedforall := true
-  	for v92, _ := range v90_setlit {
-  		v90_setlit := map[any]any{}
-  		v90_setlit[hash("r1")] = "r1"
-  		v90_setlit[hash("r2")] = "r2"
-  		v91_boundedforall = v91_boundedforall && reflect.DeepEqual(any(prev.state.rmState).(record)[any(v92).(string)], "aborted")
-  	}
-  	if !(v91_boundedforall) {
+  	if IsFalse(BoundedForall(set(str("r1"), str("r2")), func(v2 TLA) Bool { return Eq(RecordIndex(prev.state.rmState.(Record), v2.(String)), str("aborted")) })) {
   
-  		v93_setlit := map[any]any{}
-  		v93_setlit[hash("r1")] = "r1"
-  		v93_setlit[hash("r2")] = "r2"
-  		v94_boundedforall := true
-  		for v95, _ := range v93_setlit {
-  			v93_setlit := map[any]any{}
-  			v93_setlit[hash("r1")] = "r1"
-  			v93_setlit[hash("r2")] = "r2"
-  			v94_boundedforall = v94_boundedforall && reflect.DeepEqual(any(prev.state.rmState).(record)[any(v95).(string)], "committed")
+  		if IsFalse(BoundedForall(set(str("r1"), str("r2")), func(v3 TLA) Bool { return Eq(RecordIndex(prev.state.rmState.(Record), v3.(String)), str("committed")) })) {
+  			return fail("precondition failed in PReset at %d; (\\A r \\in RM : rmState[r] = \"aborted\" \\/ \\A r \\in RM : rmState[r] = \"committed\")\n\nlhs: set(str(\"r1\"), str(\"r2\")) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(str("r1"), str("r2")), "<func>", prev, this)
   		}
-  		if !(v94_boundedforall) {
-  
-  			v93_setlit := map[any]any{}
-  			v93_setlit[hash("r1")] = "r1"
-  			v93_setlit[hash("r2")] = "r2"
-  			v94_boundedforall := true
-  			for v95, _ := range v93_setlit {
-  				v93_setlit := map[any]any{}
-  				v93_setlit[hash("r1")] = "r1"
-  				v93_setlit[hash("r2")] = "r2"
-  				v94_boundedforall = v94_boundedforall && reflect.DeepEqual(any(prev.state.rmState).(record)[any(v95).(string)], "committed")
-  			}
-  			if !(v94_boundedforall) {
-  				return fail("precondition failed in PReset at %d; (\\A r \\in RM : rmState[r] = \"aborted\" \\/ \\A r \\in RM : rmState[r] = \"committed\")\n\nlhs: \"none\" = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "none", "none", prev, this)
-  			}
-  		}
-  
   	}
   
-  	v99_setlit := map[any]any{}
-  	v99_setlit[hash("r1")] = "r1"
-  	v99_setlit[hash("r2")] = "r2"
-  	v96_fnconstr := map[any]any{}
-  	for v97, _ := range v99_setlit {
-  		v96_fnconstr[v97] = "working"
+  	if IsFalse(Eq(this.state.rmState, FnConstruct(set(str("r1"), str("r2")), func(_ TLA) TLA { return str("working") }))) {
+  		return fail("postcondition failed in PReset at %d; '(rmState) = [ r \\in RM |-> \"working\" ]\n\nlhs: this.state.rmState = %+v\nrhs: FnConstruct(set(str(\"r1\"), str(\"r2\")), func(_ TLA) TLA { return str(\"working\") }) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, FnConstruct(set(str("r1"), str("r2")), func(_ TLA) TLA { return str("working") }), prev, this)
   	}
-  
-  	if !(reflect.DeepEqual(this.state.rmState, v96_fnconstr)) {
-  		return fail("postcondition failed in PReset at %d; '(rmState) = [ r \\in RM |-> \"working\" ]\n\nlhs: this.state.rmState = %+v\nrhs: v96_fnconstr = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.rmState, v96_fnconstr, prev, this)
+  	if IsFalse(Eq(this.state.who, str("none"))) {
+  		return fail("postcondition failed in PReset at %d; '(who) = \"none\"\n\nlhs: this.state.who = %+v\nrhs: str(\"none\") = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, str("none"), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.who, "none")) {
-  		return fail("postcondition failed in PReset at %d; '(who) = \"none\"\n\nlhs: this.state.who = %+v\nrhs: \"none\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.who, "none", prev, this)
+  	if IsFalse(And(Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent))) {
+  		return fail("precondition failed in PReset at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: Eq(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.lastMsgReceived, prev.state.lastMsgReceived), Eq(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
   	}
-  	if !(reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) && reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent)) {
-  		return fail("precondition failed in PReset at %d; UNCHANGED(<<lastMsgReceived, lastMsgSent>>)\n\nlhs: reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived) = %+v\nrhs: reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, reflect.DeepEqual(this.state.lastMsgReceived, prev.state.lastMsgReceived), reflect.DeepEqual(this.state.lastMsgSent, prev.state.lastMsgSent), prev, this)
+  	if IsFalse(And(And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted))) {
+  		return fail("precondition failed in PReset at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: Eq(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, And(Eq(this.state.tmPrepared, prev.state.tmPrepared), Eq(this.state.tmCommitted, prev.state.tmCommitted)), Eq(this.state.tmAborted, prev.state.tmAborted), prev, this)
   	}
-  	if !((reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) && reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted)) {
-  		return fail("precondition failed in PReset at %d; UNCHANGED(<<tmPrepared, tmCommitted, tmAborted>>)\n\nlhs: (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)) = %+v\nrhs: reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, (reflect.DeepEqual(this.state.tmPrepared, prev.state.tmPrepared) && reflect.DeepEqual(this.state.tmCommitted, prev.state.tmCommitted)), reflect.DeepEqual(this.state.tmAborted, prev.state.tmAborted), prev, this)
-  	}
-  	if !(reflect.DeepEqual(this.state.msgs, prev.state.msgs)) {
+  	if IsFalse(Eq(this.state.msgs, prev.state.msgs)) {
   		return fail("precondition failed in PReset at %d; UNCHANGED(<<msgs>>)\n\nlhs: this.state.msgs = %+v\nrhs: prev.state.msgs = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.msgs, prev.state.msgs, prev, this)
   	}
   	return nil
@@ -2062,7 +2690,7 @@
   */
   
   // this state value can have nil fields
-  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
   
   	e := Event{
   		typ:    typ,
@@ -2074,7 +2702,7 @@
   	return nil
   }
   
-  func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+  func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
   
   	// override current values with extras
   	// all have to pertain to this action

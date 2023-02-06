@@ -4,9 +4,231 @@ import (
     %s
 )
 
-type set = map[any]any
-type record = map[any]any
-type seq = []any
+// TLA expressions
+type TLA interface {
+	String() string
+}
+
+type Seq struct {
+	elements []TLA
+}
+
+func (s Seq) String() string {
+	ss := []string{}
+	for _, v := range s.elements {
+		ss = append(ss, v.String())
+	}
+	return fmt.Sprintf("<<%%s>>", strings.Join(ss, ", "))
+}
+
+type Record struct {
+	elements map[string]TLA
+}
+
+func (s Record) String() string {
+	ss := []string{}
+	for k, v := range s.elements {
+		ss = append(ss, fmt.Sprintf("%%s |-> %%s", k, v.String()))
+	}
+	return fmt.Sprintf("[%%s]", strings.Join(ss, ", "))
+}
+
+type Set struct {
+	elements map[string]TLA
+}
+
+func (s Set) String() string {
+	ss := []string{}
+	for _, v := range s.elements {
+		ss = append(ss, v.String())
+	}
+	return fmt.Sprintf("{%%s}", strings.Join(ss, ", "))
+}
+
+type Int struct {
+	value int
+}
+
+func (s Int) String() string {
+	return fmt.Sprintf("%%d", s.value)
+}
+
+type Bool struct {
+	value bool
+}
+
+func (b Bool) String() string {
+	return strconv.FormatBool(b.value)
+}
+
+type String struct {
+	value string
+}
+
+func (s String) String() string {
+	return s.value
+}
+
+// smart constructors
+
+func boolean(b bool) Bool {
+	return Bool{value: b}
+}
+
+func integer(n int) Int {
+	return Int{value: n}
+}
+
+func str(s string) String {
+	return String{value: s}
+}
+
+func set(elts ...TLA) Set {
+	res := map[string]TLA{}
+	for _, v := range elts {
+		res[hash(v)] = v
+	}
+	return Set{elements: res}
+}
+
+func record(kvs ...TLA) Record {
+	res := map[string]TLA{}
+	for i := 0; i < len(kvs)/2; i += 2 {
+		res[kvs[i].(String).value] = kvs[i+1]
+	}
+	return Record{elements: res}
+}
+
+func seq(elts ...TLA) Seq {
+	return Seq{elements: elts}
+}
+
+// library
+
+func Some(a TLA) Seq {
+	return seq(a)
+}
+
+func None() Seq {
+	return seq()
+}
+
+func Append(a Seq, b Seq) Seq {
+	return Seq{elements: append(a.elements, b.elements...)}
+}
+
+func SetUnion(a Set, b Set) Set {
+	res := map[string]TLA{}
+	for k, v := range a.elements {
+		res[k] = v
+	}
+	for k, v := range b.elements {
+		res[k] = v
+	}
+	return Set{elements: res}
+}
+
+func SetIn(a TLA, b Set) Bool {
+	_, ok := b.elements[hash(a)]
+	return boolean(ok)
+}
+
+func SetNotIn(a TLA, b Set) Bool {
+	return boolean(!SetIn(a, b).value)
+}
+
+func RecordIndex(a Record, b String) TLA {
+	return a.elements[b.value]
+}
+
+func IntPlus(a Int, b Int) Int {
+	return integer(a.value + b.value)
+}
+
+func IntMinus(a Int, b Int) Int {
+	return integer(a.value - b.value)
+}
+
+func IntMul(a Int, b Int) Int {
+	return Int{value: a.value * b.value}
+}
+
+func IntLt(a Int, b Int) Bool {
+	return boolean(a.value < b.value)
+}
+
+func IntLte(a Int, b Int) Bool {
+	return boolean(a.value <= b.value)
+}
+
+func IntGt(a Int, b Int) Bool {
+	return boolean(a.value > b.value)
+}
+
+func IntGte(a Int, b Int) Bool {
+	return boolean(a.value >= b.value)
+}
+
+func Eq(a TLA, b TLA) Bool {
+	return boolean(reflect.DeepEqual(a, b))
+}
+
+func Not(b Bool) Bool {
+	return boolean(!b.value)
+}
+
+func Neq(a TLA, b TLA) Bool {
+	return Not(Eq(a, b))
+}
+
+func And(a Bool, b Bool) Bool {
+	return boolean(a.value && b.value)
+}
+
+func Or(a Bool, b Bool) Bool {
+	return boolean(a.value || b.value)
+}
+
+func IsFalse(a TLA) bool {
+	return !a.(Bool).value
+}
+
+func IsTrue(a TLA) bool {
+	return !IsFalse(a)
+}
+
+func ToSet(s Seq) Set {
+    res := map[string]TLA{}
+    for _, v := range s.elements {
+        res[hash(v)] = v
+    }
+    return Set{elements: res}
+}
+
+func Except(r Record, k String, v TLA) Record {
+    res := map[string]TLA{}
+    for k1, v1 := range r.elements {
+        res[k1] = v1
+    }
+    res[k.value] = v
+    return Record{elements: res}
+}
+
+func BoundedForall(set Set, f func(TLA) Bool) Bool {
+    res := true
+    for _, v := range set.elements {
+        res = true && IsTrue(f(v))
+    }
+    return Bool{value: res}
+}
+
+func FnConstruct(set Set, f func(TLA) TLA) Record {
+    res := map[string]TLA{}
+    for _, v := range set.elements {
+        res[v.(String).value] = f(v)
+    }
+    return Record{elements: res}
+}
 
 // panic instead of returning error
 var crash = true
@@ -62,13 +284,13 @@ func (e EventType) String() string {
 
 type Event struct {
 	typ    EventType
-	params []any
+	params []TLA
 	state  State
 	file   string
 	line   int
 }
 
-func printParams(ps []any) string {
+func printParams(ps []TLA) string {
 	res := []string{}
 	for _, v := range ps {
 		res = append(res, fmt.Sprintf("%%+v", v))
@@ -165,7 +387,7 @@ func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
 */
 
 // this state value can have nil fields
-func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
+func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
 
 	e := Event{
 		typ:    typ,
@@ -177,7 +399,7 @@ func (m *Monitor) CaptureVariable(v State, typ EventType, args ...any) error {
 	return nil
 }
 
-func (m *Monitor) CaptureState(c State, typ EventType, args ...any) error {
+func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
 
 	// override current values with extras
 	// all have to pertain to this action

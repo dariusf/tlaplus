@@ -54,6 +54,10 @@ H == \A r \in {1, 2} : r = 1
 H1 == \A s \in {1, 2} : \A r \in {3, 4} : r = s
 H2 == [ r \in RM |-> "a" ]["a"] = 1
 H3 == [ r \in RM |-> r ]["a"] = 1
+H4 ==
+  /\
+    \/ \A r \in {1, 2} : r = 1
+    \/ \A r \in {2, 3} : r = 2
 
 I == ToTrace(CounterExample)
 I1 ==
