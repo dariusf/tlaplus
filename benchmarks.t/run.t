@@ -1000,3 +1000,8 @@
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor TwoPhaseCommitFull.tla
   parse ok
   compile ok
+
+  $ monitor_check raft
+  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor raft.tla
+  parse ok
+  compile ok
