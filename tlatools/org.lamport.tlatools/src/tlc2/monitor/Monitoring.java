@@ -18,11 +18,21 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static tlc2.monitor.GoTranslation.goBlock;
 import static tlc2.monitor.Translate.fail;
-import static tlc2.monitor.Translate.tla;
 
 public class Monitoring {
+
+    public static Set<String> libraryFunctions = new HashSet<>();
+
+    static {
+        libraryFunctions.addAll(List.of(
+                "ToSet", "Option", "Some", "None",
+                // raft
+                "MapThenFoldSet", "FoldFunction", "FoldSeq", "Remove",
+                "RemoveAt", "IsPrefix", "IsInjective", "SetToSeq",
+                "Min", "Max"
+        ));
+    }
 
     static String getResourceFileAsString(String fileName) throws IOException {
         ClassLoader classLoader = ClassLoader.getSystemClassLoader();
@@ -41,6 +51,9 @@ public class Monitoring {
 
         UniqueString moduleName = rootModule.getName();
         List<OpDeclNode> variables = Arrays.asList(rootModule.getVariableDecls());
+        Set<String> declaredVariableNames = variables.stream()
+                .map(v -> v.getName().toString())
+                .collect(Collectors.toSet());
 
 //        String constantsFields = constants.entrySet().stream()
 //                .map(e ->
@@ -54,64 +67,83 @@ public class Monitoring {
                 .map(d -> (OpDefNode) d)
                 .collect(Collectors.toList());
 
+        TLDefVisitor tldVisitor = new TLDefVisitor();
+        Set<String> topLevelDefs = definitions.stream()
+                .filter(d -> d.getBody().accept(tldVisitor))
+                .map(d -> d.getName().toString())
+                .collect(Collectors.toSet());
+
         Set<String> translatedDefs = new HashSet<>();
 
-        String monitorFns = definitions.stream().flatMap(d -> {
-            try {
-                if (d.getBody() instanceof SubstInNode) {
-                    // INSTANCE declarations are one instance of this
-                    return Stream.of();
-                }
-//                Set<String> letBoundNames = new HashSet<>();
-                // TODO move this into GoTranslation
-                GoTranslation translation = new GoTranslation(defns, constants);
-
-                // inline all the let bindings
-                GoBlock letBindings = goBlock("");
-                ExprNode defBody = d.getBody();
-                while (defBody instanceof LetInNode) {
-                    LetInNode let = (LetInNode) defBody;
-                    for (OpDefNode letLet : let.getLets()) {
-                        // TODO assume there are no local operator definitions
-                        String letVar = letLet.getName().toString();
-                        translation.boundVarNames.add(letVar);
-                        letBindings = letBindings.seq(goBlock("var %s TLA = %s",
-                                letVar, translation.translateExpr(letLet.getBody(), null)));
+        String monitorFns = definitions.stream()
+                .filter(d -> {
+                    if (topLevelDefs.isEmpty()) {
+                        return true;
                     }
-                    defBody = let.getBody();
-                }
+                    return topLevelDefs.contains(d.getName().toString());
+                })
+                .flatMap(d -> {
+                    try {
+                        if (d.getBody() instanceof SubstInNode) {
+                            // INSTANCE declarations are one instance of this
+                            return Stream.of();
+                        }
+//                Set<String> letBoundNames = new HashSet<>();
+                        // TODO move this into GoTranslation
+                        GoTranslation translation = new GoTranslation(topLevelDefs, defns, constants, declaredVariableNames);
 
-                if (!(defBody instanceof OpApplNode)) {
-                    // TODO let bindings show up BOTH as top-level operator definitions and as LetInNodes.
-                    //  From a quick glance at their state, there doesn't seem to be a way to filter them out.
-                    //  We ignore them as there is code above for inlining them.
-                    String m = String.format("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
-                    throw new CannotBeTranslatedException(m);
-                }
-                String params = translateParams(d, (i, p) -> String.format("%s TLA", p.getName().toString()));
-                translation.boundVarNames.addAll(Arrays.stream(d.getParams())
-                        .map(p -> p.getName().toString())
-                        .collect(Collectors.toList()));
-                GoBlock body = translation.translateTopLevel(d.getName().toString(), defBody);
+                        // inline all the let bindings
+//                GoBlock letBindings = goBlock("");
+//                ExprNode defBody = d.getBody();
+//                while (defBody instanceof LetInNode) {
+//                    LetInNode let = (LetInNode) defBody;
+//                    for (OpDefNode letLet : let.getLets()) {
+//                        // TODO assume there are no local operator definitions
+//                        String letVar = letLet.getName().toString();
+//                        translation.boundVarNames.add(letVar);
+//                        letBindings = letBindings.seq(goBlock("var %s TLA = %s",
+//                                letVar, translation.translateExpr(letLet.getBody(), null)));
+//                    }
+//                    defBody = let.getBody();
+//                }
 
-                String a = String.format("func (m *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
-                                "%s\n" +
-                                "return nil\n" +
-                                "}",
-                        d.getName(),
-                        params,
-                        letBindings.seq(body)
-                );
-                translatedDefs.add(d.getName().toString());
-                return Stream.of(a);
-            } catch (CannotBeTranslatedException e) {
-                return Stream.of(String.format("/* Action %s cannot be translated because of: %s */",
-                        d.getName(), e.getMessage()));
-            }
-        }).collect(Collectors.joining("\n\n"));
+//                if (!(defBody instanceof OpApplNode)) {
+//                    // TODO let bindings show up BOTH as top-level operator definitions and as LetInNodes.
+//                    //  From a quick glance at their state, there doesn't seem to be a way to filter them out.
+//                    //  We ignore them as there is code above for inlining them.
+//                    String m = String.format("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
+//                    throw new CannotBeTranslatedException(m);
+//                }
+                        String params = translateParams(d, (i, p) -> String.format("%s TLA", p.getName().toString()))
+                                .collect(Collectors.joining(", ")) + ", ";
 
-        GoBlock initialBody; {
-            GoTranslation translation = new GoTranslation(defns, constants);
+                        List<String> paramNames = translateParams(d, (i, p) -> p.getName().toString())
+                                .collect(Collectors.toList());
+
+                        translation.boundVarNames.addAll(paramNames);
+                        GoBlock body = translation.translateTopLevel(d.getName().toString(), d.getBody());
+                        translation.boundVarNames.removeAll(paramNames);
+
+                        String a = String.format("func (monitor *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
+                                        "%s\n" +
+                                        "return nil\n" +
+                                        "}",
+                                d.getName(),
+                                params,
+//                        letBindings.seq(body)
+                                body
+                        );
+                        translatedDefs.add(d.getName().toString());
+                        return Stream.of(a);
+                    } catch (CannotBeTranslatedException e) {
+                        return Stream.of(String.format("/* Action %s cannot be translated because of: %s */",
+                                d.getName(), e.getMessage()));
+                    }
+                }).collect(Collectors.joining("\n\n"));
+
+        GoBlock initialBody;
+        {
+            GoTranslation translation = new GoTranslation(topLevelDefs, defns, constants, declaredVariableNames);
             initialBody = translation.translateInitial(initialState);
         }
 
@@ -119,27 +151,27 @@ public class Monitoring {
         String varDecls = variables.stream().map(v -> String.format("%s TLA", v.getName())).collect(Collectors.joining("\n"));
 
         String actionNames = definitions.stream()
-                        .filter(d -> translatedDefs.contains(d.getName().toString()))
-                        .map(d -> d.getName().toString())
+                .filter(d -> translatedDefs.contains(d.getName().toString()))
+                .map(d -> d.getName().toString())
                 .collect(Collectors.joining("\n"));
 
         String stringSwitchCases = definitions.stream()
-                        .filter(d -> translatedDefs.contains(d.getName().toString()))
-                        .map(d -> d.getName().toString())
+                .filter(d -> translatedDefs.contains(d.getName().toString()))
+                .map(d -> d.getName().toString())
                 .map(d -> String.format("case %1$s:\nreturn \"%1$s\"", d))
                 .collect(Collectors.joining("\n"));
 
         String checkSwitchCases = definitions.stream()
-                        .filter(d -> translatedDefs.contains(d.getName().toString()))
-                        .map(d -> String.format("case %1$s:\n" +
-                                        "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
-                                        "return err\n" +
-                                        "}",
-                                d.getName(),
-                                translateParams(d, (i, p) -> String.format("this.params[%d]", i))))
+                .filter(d -> translatedDefs.contains(d.getName().toString()))
+                .map(d -> String.format("case %1$s:\n" +
+                                "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
+                                "return err\n" +
+                                "}",
+                        d.getName(),
+                        translateParams(d, (i, p) -> String.format("this.params[%d]", i)).collect(Collectors.joining(", ")) + ", "))
                 .collect(Collectors.joining("\n"));
 
-        String imports = Stream.of("encoding/json", "strconv", "reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
+        String imports = Stream.of("encoding/json", "math", "strconv", "reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
                 .collect(Collectors.joining("\n"));
 
         String varAssignments = variables.stream().map(v ->
@@ -167,17 +199,13 @@ public class Monitoring {
         }
     }
 
-    private static String translateParams(OpDefNode d, BiFunction<Integer, FormalParamNode, String> f) {
-        String params;
+    private static Stream<String> translateParams(OpDefNode d, BiFunction<Integer, FormalParamNode, String> f) {
         if (d.getArity() == 0) {
-            params = "";
+            return Stream.of();
         } else {
-            params =
-                    IntStream.range(0, d.getArity())
-                            .mapToObj(i -> f.apply(i, d.getParams()[i]))
-                            .collect(Collectors.joining(", ")) + ", ";
+            return IntStream.range(0, d.getArity())
+                    .mapToObj(i -> f.apply(i, d.getParams()[i]));
         }
-        return params;
     }
 
     private static boolean operatorWhitelist(SemanticNode d) {
@@ -192,7 +220,7 @@ public class Monitoring {
             } else if (extra.contains(name)) {
                 // User-defined blacklist
                 return false;
-            } else if (List.of("Messages", "Receive", "Send", "ToSet", "Option", "Some", "None").contains(name)) {
+            } else if (List.of("Messages", "Receive", "Send").contains(name) || libraryFunctions.contains(name)) {
                 // Library functions
                 return false;
             } else if (List.of("Terminating", "Termination").contains(name)) {

@@ -1,9 +1,11 @@
 package tlc2.synth;
 
 import tla2sany.semantic.*;
+import tlc2.monitor.CannotBeTranslatedException;
 import tlc2.monitor.GoExpr;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static tla2sany.semantic.ASTConstants.*;
@@ -28,6 +30,29 @@ public class PrettyPrintVisitor extends Visitor<String> {
     }
 
     @Override
+    public String visit(OpArgNode node) {
+        switch (node.getName().toString()) {
+            case "LAMBDA":
+                OpDefNode def = (OpDefNode) node.getOp();
+                String params = Arrays.stream(def.getParams())
+                        .map(p -> p.getName().toString())
+                        .collect(Collectors.joining(", "));
+                String body = def.getBody().accept(this);
+                return String.format("LAMBDA %s: %s", params, body);
+            default:
+                throw new UnsupportedOperationException("unimplemented");
+        }
+    }
+
+    @Override
+    public String visit(LetInNode node) {
+        String defs = Arrays.stream(node.getLets())
+                .map(d -> String.format("%s == %s", d.getName(), d.getBody().accept(this)))
+                .collect(Collectors.joining(" "));
+        return String.format("LET %s IN %s", defs, node.getBody().accept(this));
+    }
+
+    @Override
     public String visit(OpApplNode node) {
         String op = node.getOperator().getName().toString();
 
@@ -37,6 +62,12 @@ public class PrettyPrintVisitor extends Visitor<String> {
                     node.getArgs()[1].accept(this));
             //    } else if (op.equals(OP_seq.toString())) {
             // is OP_seq right?
+        } else if (op.equals(OP_rs.toString())) {
+            String rec = node.getArgs()[0].accept(this);
+            String field = node.getArgs()[1].accept(this);
+            // remove quotes. alternatively we could have it be the same as OP_fa
+            field = field.substring(1, field.length() - 1);
+            return String.format("%s.%s", rec, field);
         } else if (op.equals(OP_tup.toString())) {
             return String.format("<<%s>>",
                     Arrays.stream(node.getArgs())
@@ -80,8 +111,8 @@ public class PrettyPrintVisitor extends Visitor<String> {
             OpApplNode pair = (OpApplNode) node.getArgs()[1];
             ExprOrOpArgNode idx;
 //            if (pair.getArgs()[0] instanceof OpApplNode) {
-                // in [a EXCEPT ![i] = ...], the i is wrapped in a singleton $Seq OpApplNode
-                idx = ((OpApplNode) pair.getArgs()[0]).getArgs()[0];
+            // in [a EXCEPT ![i] = ...], the i is wrapped in a singleton $Seq OpApplNode
+            idx = ((OpApplNode) pair.getArgs()[0]).getArgs()[0];
 //            } else {
 //                // a string key
 //                idx = pair.getArgs()[0];
@@ -91,14 +122,20 @@ public class PrettyPrintVisitor extends Visitor<String> {
                     node.getArgs()[0].accept(this),
                     idx.accept(this),
                     exp.accept(this));
+        } else if (op.equals(OP_uc.toString())) {
+            return String.format("UNCHANGED %s", node.getArgs()[0].accept(this));
         }
 
         char first = op.charAt(0);
         if (!(first >= 'a' && first <= 'z') && !(first >= 'A' && first <= 'Z') && node.getArgs().length == 2) {
             return String.format("%s %s %s", node.getArgs()[0].accept(this), op, node.getArgs()[1].accept(this));
         }
+        if (op.charAt(0) == '\'') {
+            return String.format("%s'", node.getArgs()[0].accept(this));
+        }
         if (op.charAt(0) == '$') {
-            throw new UnsupportedOperationException("case unimplemented: " + op);
+//            throw new UnsupportedOperationException("case unimplemented: " + op);
+            throw new CannotBeTranslatedException("case unimplemented: " + op);
         }
         String args = Arrays.stream(node.getArgs()).map(n -> n.accept(this))
                 .collect(Collectors.joining(", "));

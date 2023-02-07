@@ -16,19 +16,25 @@ import static tlc2.monitor.Translate.*;
 
 public class GoTranslation {
 
+    private final Set<String> topLevelDefs;
     // User-defined operators
     private final Defns defns;
 
-    // CONSTANTs overridden in config file
+    // CONSTANTs with values from config file
     private final Map<String, IValue> constants;
+
+    // VARIABLEs
+    private final Set<String> variables;
 
     // These two fields should be parameters of translateExpr but are here to reduce boilerplate
     // TODO boundVarNames being a mutable set could be problematic if there is shadowing
     public final Set<String> boundVarNames = new HashSet<>();
 
-    public GoTranslation(Defns defns, Map<String, IValue> constants) {
+    public GoTranslation(Set<String> topLevelDefs, Defns defns, Map<String, IValue> constants, Set<String> variables) {
+        this.topLevelDefs = topLevelDefs;
         this.defns = defns;
         this.constants = constants;
+        this.variables = variables;
     }
 
     public GoBlock translateInitial(Map<UniqueString, IValue> initial) {
@@ -52,6 +58,11 @@ public class GoTranslation {
      * and produce a single large assertion.
      */
     public GoBlock translateTopLevel(String action, ExprOrOpArgNode op) {
+
+        if (op instanceof LetInNode) {
+            GoExpr expr = translateExpr(op, null);
+            return failureMessage(action, op, expr, "check");
+        }
 
         if (!(op instanceof OpApplNode)) {
             throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
@@ -81,6 +92,10 @@ public class GoTranslation {
             return res;
         }
 
+        if (opName.equals(OP_rfs)) {
+            throw new CannotBeTranslatedException("recursive function spec " + ((OpApplNode) op).getUnbdedQuantSymbols()[0].getName());
+        }
+
         GoExpr expr = translateExpr(op, null);
         return failureMessage(action, op, expr, cond);
     }
@@ -106,7 +121,8 @@ public class GoTranslation {
         if (rhs.startsWith("func")) {
             rhs = "\"<func>\"";
         }
-        return goBlock("if IsFalse(%1$s) {\n" +
+        return goBlock("// %9$s\n" +
+                        "if IsFalse(%1$s) {\n" +
                         "return fail(\"%2$s failed in %3$s at %%d; %4$s\\n\\n" +
                         "lhs: %5$s = %%+v\\n" +
                         "rhs: %6$s = %%+v\\n\\n" +
@@ -118,7 +134,8 @@ public class GoTranslation {
                 action,
                 escape(op),
                 escape(lhs), escape(rhs),
-                lhs, rhs
+                lhs, rhs,
+                op
         );
     }
 
@@ -130,6 +147,41 @@ public class GoTranslation {
         }
         if (fml instanceof NumeralNode) {
             return goExpr("integer(%d)", ((NumeralNode) fml).val());
+        }
+
+        // things which only appear as arguments, like lambdas
+        if (fml instanceof OpArgNode) {
+            OpArgNode op = (OpArgNode) fml;
+            String name = op.getName().toString();
+            switch (name) {
+                case "LAMBDA":
+                    OpDefNode opDef = (OpDefNode) op.getOp();
+                    String params = Arrays.stream(opDef.getParams())
+                            .map(p -> String.format("%s TLA", p.getName()))
+                            .collect(Collectors.joining(", "));
+                    GoExpr body = translateExpr(opDef.getBody(), null);
+                    return goExpr("func(%s) TLA { return %s }", params, body);
+                default:
+                    throw fail("unimplemented OpArgNode %s", name);
+            }
+        }
+
+        if (fml instanceof LetInNode) {
+            List<String> boundNames = new ArrayList<>();
+            // TODO assume no operator defs
+            List<String> defs = Arrays.stream(((LetInNode) fml).getLets())
+                    .map(l -> {
+                        GoExpr rhs = translateExpr(l.getBody(), null);
+                        boundNames.add(l.getName().toString());
+                        boundVarNames.add(l.getName().toString()); // possibly dependent lets
+                        return goBlock("var %s TLA = %s", l.getName(), rhs).toString();
+                    })
+                    .collect(Collectors.toList());
+            ExprNode body = ((LetInNode) fml).getBody();
+            GoExpr body1 = translateExpr(body, null);
+            boundVarNames.removeAll(boundNames);
+            body1.defs.addAll(defs);
+            return body1;
         }
 
         if (fml instanceof OpApplNode) {
@@ -186,6 +238,14 @@ public class GoTranslation {
                     GoExpr a2 = translateExpr(args.get(1), null);
                     return goExpr("Neq(%s, %s)", a1, a2);
                 }
+                case "Min": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.SET);
+                    return goExpr("Min(%s)", a1);
+                }
+                case "Max": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.SET);
+                    return goExpr("Max(%s)", a1);
+                }
                 case "Some":
                     return goExpr("Some(%s)", translateExpr(args.get(0), null));
                 case "None":
@@ -199,11 +259,12 @@ public class GoTranslation {
                     GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
                     return goExpr("ToSet(%s)", a1);
                 }
+                case "$RcdSelect":
                 case "$FcnApply": {
-                    // record indexing
+                    // record indexing and field access r.a
                     GoExpr map = translateExpr(args.get(0), Type.RECORD);
                     GoExpr key = translateExpr(args.get(1), Type.STRING);
-                    return goExpr("RecordIndex(%s, %s)", map, key);
+                    return qualifyWithType(goExpr("RecordIndex(%s, %s)", map, key), typ);
                 }
                 case "$SetEnumerate": {
                     // {1, 2}
@@ -234,15 +295,21 @@ public class GoTranslation {
                     }).collect(Collectors.toList());
                     return goExpr("record(%s)", joinGoExpr(all, ", "));
                 case "$DisjList":
-                case "\\or":
-                    return args.stream().map(a -> translateExpr(a, null))
+                case "\\or": {
+                    return args.stream().map(a -> translateExpr(a, Type.BOOL))
                             .reduce((a, b) -> goExpr("Or(%s, %s)", a, b))
                             .get();
+                }
                 case "$ConjList":
-                case "\\land":
-                    return args.stream().map(a -> translateExpr(a, null))
+                case "\\land": {
+                    return args.stream().map(a -> translateExpr(a, Type.BOOL))
                             .reduce((a, b) -> goExpr("And(%s, %s)", a, b))
                             .get();
+                }
+                case "\\lnot": {
+                    GoExpr e = translateExpr(args.get(0), Type.BOOL);
+                    return goExpr("Not(%s)", e);
+                }
                 case "$Except": {
                     // create a new map differing in one element
                     ExprOrOpArgNode unprimed = args.get(0);
@@ -290,7 +357,8 @@ public class GoTranslation {
                     GoExpr func = goExpr("func(%s TLA) TLA { return %s }", v1, a2);
                     return goExpr("FnConstruct(%s, %s)", a1, func);
                 }
-                case "$BoundedForall": {
+                case "$BoundedForall":
+                case "$BoundedExists": {
                     OpApplNode cond = (OpApplNode) args.get(0);
                     // int l = ((OpApplNode) fml).getBdedQuantBounds().length;
                     // TODO this translation assumes l = 1 for simplicity
@@ -306,20 +374,79 @@ public class GoTranslation {
                     boundVarNames.remove(k1);
                     // ensure this is a separate subexpression
                     GoExpr func = goExpr("func(%s TLA) Bool { return %s }", k1, body);
-                    return goExpr("BoundedForall(%s, %s)", sset, func);
+                    return goExpr("%s(%s, %s)", name.substring(1), sset, func);
                 }
                 case "UNCHANGED": {
-                    if (((OpApplNode) args.get(0)).getOperator().getName().equals("$Tuple")) {
-                        ExprOrOpArgNode[] tupleArgs = ((OpApplNode) args.get(0)).getArgs();
-                        return translateExpr(tla(OP_cl,
-                                Arrays.stream(tupleArgs)
-                                        .map(a -> tla("UNCHANGED", a))
-                                        .toArray(ExprOrOpArgNode[]::new)), null);
+
+                    if (args.get(0) instanceof OpApplNode) {
+                        OpApplNode var = (OpApplNode) args.get(0);
+                        String varName = var.getOperator().getName().toString();
+
+
+                        boolean tupleArg = varName.equals("$Tuple");
+                        if (tupleArg) {
+                            ExprOrOpArgNode[] tupleArgs = ((OpApplNode) args.get(0)).getArgs();
+                            return translateExpr(tla(OP_cl,
+                                    Arrays.stream(tupleArgs)
+                                            .map(a -> tla("UNCHANGED", a))
+                                            .toArray(ExprOrOpArgNode[]::new)), null);
+                        }
+
+                        boolean varArg = variables.contains(varName);
+                        if (varArg) {
+                            OpApplNode equal = tla("=", tla(OP_prime, var), var);
+                            return translateExpr(equal, null);
+                        }
+
+                        boolean opArg = defns.get(varName) != null && defns.get(varName) instanceof OpDefNode;
+                        if (opArg) {
+                            return translateExpr(tla("UNCHANGED", ((OpDefNode) defns.get(varName)).getBody()), typ);
+                        }
+
                     }
-                    ExprOrOpArgNode var = args.get(0);
-                    OpApplNode equal = tla("=", tla(OP_prime, var), var);
-                    return translateExpr(equal, null);
+
+                    throw fail("unknown kind of UNCHANGED expression");
                 }
+                case "$SubsetOf": {
+                    throw new CannotBeTranslatedException("cannot be translated efficiently: " + name);
+                }
+                case "FoldSeq": {
+                    GoExpr f = translateExpr(args.get(0), null);
+                    GoExpr init = translateExpr(args.get(1), null);
+                    GoExpr seq = translateExpr(args.get(2), Type.SEQ);
+                    return goExpr("FoldSeq(%s, %s, %s)", f, init, seq);
+                }
+                case "Remove": {
+                    GoExpr seq = translateExpr(args.get(0), Type.SEQ);
+                    GoExpr e = translateExpr(args.get(1), null);
+                    return goExpr("Remove(%s, %s)", seq, e);
+                }
+                case "SetToSeq": {
+                    GoExpr seq = translateExpr(args.get(0), Type.SET);
+                    return goExpr("SetToSeq(%s)", seq);
+                }
+                case "IsPrefix": {
+                    GoExpr pre = translateExpr(args.get(0), Type.SEQ);
+                    GoExpr seq = translateExpr(args.get(1), Type.SEQ);
+                    return goExpr("IsPrefix(%s)", pre, seq);
+                }
+                case "$IfThenElse": {
+                    GoExpr i = translateExpr(args.get(0), null);
+                    GoExpr t = translateExpr(args.get(1), null);
+                    GoExpr e = translateExpr(args.get(2), null);
+                    String v = fresh();
+                    return goExpr(goBlock("var %s TLA\n" +
+                            "if %s {\n" +
+                            "%s = %s\n" +
+                            "} else {\n" +
+                            "%s = %s\n" +
+                            "}", v, i, v, t, v, e), "%s", v);
+                }
+                case "MapThenFoldSet":
+                case "FoldFunction":
+                case "RemoveAt":
+                case "IsInjective":
+                    throw fail("unimplemented");
                 default:
 
                     if (boundVarNames.contains(name)) {
@@ -347,17 +474,13 @@ public class GoTranslation {
                         return translateExpr(subst(op), null);
                     }
 
-                    // treat as variable
-                    String eventVar = isPrimed(op) ? "this" : "prev";
-                    if (isPrimed(op)) {
-                        name = ((OpApplNode) operatorArgs(op).get(0)).getOperator().getName().toString();
+                    if (variables.contains(name) || isPrimed(op)) {
+                        String eventVar = isPrimed(op) ? "this" : "prev";
+                        if (isPrimed(op)) {
+                            name = ((OpApplNode) operatorArgs(op).get(0)).getOperator().getName().toString();
+                        }
+                        return qualifyWithType(goExpr("%s.state.%s", eventVar, name), typ);
                     }
-                    return qualifyWithType(goExpr("%s.state.%s", eventVar, name), typ);
-//                    if (typ.empty()) {
-//                        return ;
-//                    } else {
-//                        return goExpr("%s.state.%s.(%s)", eventVar, name, goTypeName(typ.peek()));
-//                    }
             }
         }
         throw fail("translateExpr: unknown, non-OpApplNode %s %s",
@@ -518,11 +641,14 @@ public class GoTranslation {
         throw fail("goTypeName: unhandled " + typ);
     }
 
+    /**
+     * Inlines an operator
+     */
     public OpApplNode subst(OpApplNode app) {
         OpDefNode def = (OpDefNode) defns.get(app.getOperator().getName());
-        Map<FormalParamNode, OpApplNode> subs = new HashMap<>();
+        Map<FormalParamNode, ExprOrOpArgNode> subs = new HashMap<>();
         for (int i = 0; i < def.getArity(); i++) {
-            subs.put(def.getParams()[i], (OpApplNode) app.getArgs()[i]);
+            subs.put(def.getParams()[i], app.getArgs()[i]);
         }
         return substitute((OpApplNode) def.getBody(), subs);
     }

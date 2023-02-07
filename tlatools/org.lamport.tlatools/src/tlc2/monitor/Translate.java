@@ -25,6 +25,7 @@ public class Translate {
     static String fresh() {
         return String.format("v%d", n++);
     }
+
     static String fresh(String suffix) {
         return String.format("v%d_%s", n++, suffix);
     }
@@ -67,7 +68,7 @@ public class Translate {
     /**
      * If no substitution is performed, guarantees substitute(n, subs) == n
      */
-    public static <T extends SemanticNode> T substitute(T node, Map<FormalParamNode, OpApplNode> subs) {
+    public static <T extends SemanticNode> T substitute(T node, Map<FormalParamNode, ExprOrOpArgNode> subs) {
         if (!(node instanceof OpApplNode)) {
             return node;
         }
@@ -76,13 +77,13 @@ public class Translate {
 
         boolean isVar = body.getArgs().length == 0 && body.getAllParams().size() == 1;
         if (isVar) {
-        for (Map.Entry<FormalParamNode, OpApplNode> e : subs.entrySet()) {
-            // checking size = 1 makes this not "containingBoundVar"
-            boolean isBound = body.getAllParams().contains(e.getKey());
-            if (isBound) {
-                return (T) e.getValue();
+            for (Map.Entry<FormalParamNode, ExprOrOpArgNode> e : subs.entrySet()) {
+                // checking size = 1 makes this not "containingBoundVar"
+                boolean isBound = body.getAllParams().contains(e.getKey());
+                if (isBound) {
+                    return (T) e.getValue();
+                }
             }
-        }
         }
 
         // not a bound variable. try to substitute inside it

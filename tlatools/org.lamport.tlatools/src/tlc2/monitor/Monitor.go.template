@@ -113,8 +113,8 @@ func None() Seq {
 	return seq()
 }
 
-func Append(a Seq, b Seq) Seq {
-	return Seq{elements: append(a.elements, b.elements...)}
+func Append(a Seq, b TLA) Seq {
+	return Seq{elements: append(a.elements, b)}
 }
 
 func SetUnion(a Set, b Set) Set {
@@ -217,7 +217,15 @@ func Except(r Record, k String, v TLA) Record {
 func BoundedForall(set Set, f func(TLA) Bool) Bool {
     res := true
     for _, v := range set.elements {
-        res = true && IsTrue(f(v))
+        res = res && IsTrue(f(v))
+    }
+    return Bool{value: res}
+}
+
+func BoundedExists(set Set, f func(TLA) Bool) Bool {
+    res := false
+    for _, v := range set.elements {
+        res = res || IsTrue(f(v))
     }
     return Bool{value: res}
 }
@@ -228,6 +236,61 @@ func FnConstruct(set Set, f func(TLA) TLA) Record {
         res[v.(String).value] = f(v)
     }
     return Record{elements: res}
+}
+
+func FoldSeq(f func(TLA, TLA) TLA, base TLA, seq Seq) TLA {
+    res := base
+    for _, v := range seq.elements {
+        res = f(v, res)
+    }
+    return res
+}
+
+func Remove(s Seq, e TLA) Seq {
+    res := []TLA{}
+    for _, v := range s.elements {
+        if IsTrue(Eq(v, e)) {
+            res = append(res, e)
+        }
+    }
+    return seq(res...)
+}
+
+func SetToSeq(set Set) Seq {
+    res := []TLA{}
+    for _, v := range set.elements {
+        res = append(res, v)
+    }
+    return seq(res...)
+}
+
+func Min(set Set) TLA {
+    res := math.MaxInt
+    for _, v := range set.elements {
+        if v.(Int).value < res {
+            res = v.(Int).value
+        }
+    }
+    return integer(res)
+}
+
+func Max(set Set) TLA {
+    res := math.MinInt
+    for _, v := range set.elements {
+        if v.(Int).value > res {
+            res = v.(Int).value
+        }
+    }
+    return integer(res)
+}
+
+func IsPrefix(prefix Seq, seq Seq) Bool {
+	for i := 0; i < len(prefix.elements); i++ {
+	    if IsFalse(Eq(prefix.elements[i], seq.elements[i])) {
+	        return boolean(false)
+	    }
+	}
+	return boolean(true)
 }
 
 // panic instead of returning error

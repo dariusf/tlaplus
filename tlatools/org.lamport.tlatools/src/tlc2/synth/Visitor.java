@@ -1,9 +1,6 @@
 package tlc2.synth;
 
-import tla2sany.semantic.ExprOrOpArgNode;
-import tla2sany.semantic.NumeralNode;
-import tla2sany.semantic.OpApplNode;
-import tla2sany.semantic.StringNode;
+import tla2sany.semantic.*;
 import tlc2.value.impl.IntValue;
 import tlc2.value.impl.RecordValue;
 import tlc2.value.impl.StringValue;
@@ -22,6 +19,14 @@ public abstract class Visitor<A> {
     }
 
     public A visit(OpApplNode node) {
+        throw new UnsupportedOperationException("unimplemented");
+    }
+
+    public A visit(OpArgNode node) {
+        throw new UnsupportedOperationException("unimplemented");
+    }
+
+    public A visit(LetInNode node) {
         throw new UnsupportedOperationException("unimplemented");
     }
 
