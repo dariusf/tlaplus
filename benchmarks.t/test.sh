@@ -5,7 +5,7 @@ monitor_check() {
   echo "$(wc -l < $1.go | tr -d ' ') lines"
   gofmt $1.go > /dev/null || { cat $1.go; return 1; }
   echo parse ok
-  go build $1.go || return 1
+  go build $1.go || { gofmt $1.go; return 1; }
   echo compile ok
 }
 

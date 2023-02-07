@@ -20,10 +20,16 @@ A1 ==
 
 B ==
   /\ UNCHANGED x
+  /\ UNCHANGED vars
+  /\ UNCHANGED <<x>>
 
 Send(y) == x = y
 C ==
   /\ Send(x)
+
+SendM(y) == Send(y)
+C1 ==
+  /\ SendM(x)
 
 D ==
   \/

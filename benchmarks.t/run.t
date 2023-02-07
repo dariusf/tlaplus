@@ -160,7 +160,7 @@
 
   $ monitor_check_show Stress
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor Stress.tla
-  825 lines
+  865 lines
   parse ok
   compile ok
   package monitoring
@@ -508,6 +508,8 @@
   	A1
   	B
   	C
+  	SendM
+  	C1
   	D
   	E
   	F
@@ -536,6 +538,10 @@
   		return "B"
   	case C:
   		return "C"
+  	case SendM:
+  		return "SendM"
+  	case C1:
+  		return "C1"
   	case D:
   		return "D"
   	case E:
@@ -639,6 +645,14 @@
   			}
   		case C:
   			if err := m.CheckC(i, prev, this); err != nil {
+  				return err
+  			}
+  		case SendM:
+  			if err := m.CheckSendM(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case C1:
+  			if err := m.CheckC1(i, prev, this); err != nil {
   				return err
   			}
   		case D:
@@ -757,6 +771,14 @@
   	if IsFalse(Eq(this.state.x, prev.state.x)) {
   		return fail("precondition failed in B at %d; UNCHANGED(x)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
   	}
+  	// UNCHANGED(vars)
+  	if IsFalse(Eq(this.state.x, prev.state.x)) {
+  		return fail("precondition failed in B at %d; UNCHANGED(vars)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
+  	}
+  	// UNCHANGED(<<x>>)
+  	if IsFalse(Eq(this.state.x, prev.state.x)) {
+  		return fail("precondition failed in B at %d; UNCHANGED(<<x>>)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
+  	}
   	return nil
   }
   
@@ -765,6 +787,24 @@
   	// Send(x)
   	if IsFalse(Eq(prev.state.x, prev.state.x)) {
   		return fail("precondition failed in C at %d; Send(x)\n\nlhs: prev.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckSendM(y TLA, trace_i int, prev Event, this Event) error {
+  
+  	// Send(y)
+  	if IsFalse(Eq(prev.state.x, y)) {
+  		return fail("precondition failed in SendM at %d; Send(y)\n\nlhs: prev.state.x = %+v\nrhs: y = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, y, prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckC1(trace_i int, prev Event, this Event) error {
+  
+  	// SendM(x)
+  	if IsFalse(Eq(prev.state.x, prev.state.x)) {
+  		return fail("precondition failed in C1 at %d; SendM(x)\n\nlhs: prev.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
   	}
   	return nil
   }
