@@ -59,13 +59,13 @@ public class GoTranslation {
      */
     public GoBlock translateTopLevel(String action, ExprOrOpArgNode op) {
 
-        if (op instanceof LetInNode) {
-            GoExpr expr = translateExpr(op, null);
-            return failureMessage(action, op, expr, "check");
-        }
+//        if (op instanceof LetInNode) {
+//        }
 
         if (!(op instanceof OpApplNode)) {
-            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
+//            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
+            GoExpr expr = translateExpr(op, null);
+            return failureMessage(action, op, expr, "check");
         }
 
         UniqueString opName = ((OpApplNode) op).getOperator().getName();
@@ -96,8 +96,10 @@ public class GoTranslation {
             throw new CannotBeTranslatedException("recursive function spec " + ((OpApplNode) op).getUnbdedQuantSymbols()[0].getName());
         }
 
-        GoExpr expr = translateExpr(op, null);
-        return failureMessage(action, op, expr, cond);
+        throw new CannotBeTranslatedException("unknown top level declaration type");
+
+//        GoExpr expr = translateExpr(op, null);
+//        return failureMessage(action, op, expr, cond);
     }
 
     public static String escape(String s) {

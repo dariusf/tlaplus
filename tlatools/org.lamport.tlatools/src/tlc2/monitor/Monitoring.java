@@ -115,7 +115,10 @@ public class Monitoring {
 //                    throw new CannotBeTranslatedException(m);
 //                }
                         String params = translateParams(d, (i, p) -> String.format("%s TLA", p.getName().toString()))
-                                .collect(Collectors.joining(", ")) + ", ";
+                                .collect(Collectors.joining(", "));
+                        if (!params.isEmpty()) {
+                            params += ", ";
+                        }
 
                         List<String> paramNames = translateParams(d, (i, p) -> p.getName().toString())
                                 .collect(Collectors.toList());
@@ -163,12 +166,18 @@ public class Monitoring {
 
         String checkSwitchCases = definitions.stream()
                 .filter(d -> translatedDefs.contains(d.getName().toString()))
-                .map(d -> String.format("case %1$s:\n" +
-                                "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
-                                "return err\n" +
-                                "}",
-                        d.getName(),
-                        translateParams(d, (i, p) -> String.format("this.params[%d]", i)).collect(Collectors.joining(", ")) + ", "))
+                .map(d -> {
+                    String params = translateParams(d, (i, p) -> String.format("this.params[%d]", i)).collect(Collectors.joining(", "));
+                    if (!params.isEmpty()) {
+                        params += ", ";
+                    }
+                    return String.format("case %1$s:\n" +
+                                    "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
+                                    "return err\n" +
+                                    "}",
+                            d.getName(),
+                            params);
+                })
                 .collect(Collectors.joining("\n"));
 
         String imports = Stream.of("encoding/json", "math", "strconv", "reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")

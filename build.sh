@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 tlaroot=${tlaroot-.}
-tla2tools=${tla2tools-tlatools/org.lamport.tlatools/dist/tla2tools.jar}
+tla2tools=${tla2tools-$tlaroot/tlatools/org.lamport.tlatools/dist/tla2tools.jar}
 
 compile() {
   ant -f $tlaroot/tlatools/org.lamport.tlatools/customBuild.xml -Dtest.skip=true compile dist
@@ -20,6 +20,7 @@ alias d='dune promote'
 tlatools() {
   name=$1
   shift
+  set -x
   java -XX:+UseParallelGC -cp "$tla2tools" "$name" "$@" 2>&1
 }
 
