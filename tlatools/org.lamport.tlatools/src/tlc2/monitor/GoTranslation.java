@@ -96,10 +96,9 @@ public class GoTranslation {
             throw new CannotBeTranslatedException("recursive function spec " + ((OpApplNode) op).getUnbdedQuantSymbols()[0].getName());
         }
 
-        throw new CannotBeTranslatedException("unknown top level declaration type");
-
-//        GoExpr expr = translateExpr(op, null);
-//        return failureMessage(action, op, expr, cond);
+        // expression
+        GoExpr expr = translateExpr(op, null);
+        return failureMessage(action, op, expr, cond);
     }
 
     public static String escape(String s) {

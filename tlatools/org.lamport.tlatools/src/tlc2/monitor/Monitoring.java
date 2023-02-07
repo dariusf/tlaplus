@@ -73,15 +73,16 @@ public class Monitoring {
                 .map(d -> d.getName().toString())
                 .collect(Collectors.toSet());
 
+        if (!topLevelDefs.isEmpty()) {
+            definitions = definitions.stream()
+                    .filter(d -> topLevelDefs.contains(d.getName().toString()))
+                    .collect(Collectors.toList());
+        }
+
+        // Definitions which translated successfully, so we don't generate other stuff for the failed ones
         Set<String> translatedDefs = new HashSet<>();
 
         String monitorFns = definitions.stream()
-                .filter(d -> {
-                    if (topLevelDefs.isEmpty()) {
-                        return true;
-                    }
-                    return topLevelDefs.contains(d.getName().toString());
-                })
                 .flatMap(d -> {
                     try {
                         if (d.getBody() instanceof SubstInNode) {

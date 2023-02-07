@@ -503,23 +503,54 @@
   
   const (
   	Initial = iota // special
+  	A
+  	A1
+  	B
+  	C
   	D
   	E
+  	F
+  	G
+  	H
+  	H1
+  	H2
+  	H3
   	H4
   	a
   	b
   	c
   	I1
+  	Sets
   )
   
   func (e EventType) String() string {
   	switch e {
   	case Initial:
   		return "Initial"
+  	case A:
+  		return "A"
+  	case A1:
+  		return "A1"
+  	case B:
+  		return "B"
+  	case C:
+  		return "C"
   	case D:
   		return "D"
   	case E:
   		return "E"
+  	case F:
+  		return "F"
+  	case G:
+  		return "G"
+  	case H:
+  		return "H"
+  	case H1:
+  		return "H1"
+  	case H2:
+  		return "H2"
+  	case H3:
+  		return "H3"
   	case H4:
   		return "H4"
   	case a:
@@ -530,6 +561,8 @@
   		return "c"
   	case I1:
   		return "I1"
+  	case Sets:
+  		return "Sets"
   	default:
   		panic(fmt.Sprintf("invalid %d", e))
   	}
@@ -591,12 +624,52 @@
   			if err := m.CheckInitial(i, Event{}, this); err != nil {
   				return err
   			}
+  		case A:
+  			if err := m.CheckA(i, prev, this); err != nil {
+  				return err
+  			}
+  		case A1:
+  			if err := m.CheckA1(i, prev, this); err != nil {
+  				return err
+  			}
+  		case B:
+  			if err := m.CheckB(i, prev, this); err != nil {
+  				return err
+  			}
+  		case C:
+  			if err := m.CheckC(i, prev, this); err != nil {
+  				return err
+  			}
   		case D:
   			if err := m.CheckD(i, prev, this); err != nil {
   				return err
   			}
   		case E:
   			if err := m.CheckE(i, prev, this); err != nil {
+  				return err
+  			}
+  		case F:
+  			if err := m.CheckF(this.params[0], i, prev, this); err != nil {
+  				return err
+  			}
+  		case G:
+  			if err := m.CheckG(i, prev, this); err != nil {
+  				return err
+  			}
+  		case H:
+  			if err := m.CheckH(i, prev, this); err != nil {
+  				return err
+  			}
+  		case H1:
+  			if err := m.CheckH1(i, prev, this); err != nil {
+  				return err
+  			}
+  		case H2:
+  			if err := m.CheckH2(i, prev, this); err != nil {
+  				return err
+  			}
+  		case H3:
+  			if err := m.CheckH3(i, prev, this); err != nil {
   				return err
   			}
   		case H4:
@@ -617,6 +690,10 @@
   			}
   		case I1:
   			if err := m.CheckI1(i, prev, this); err != nil {
+  				return err
+  			}
+  		case Sets:
+  			if err := m.CheckSets(i, prev, this); err != nil {
   				return err
   			}
   		}
@@ -647,13 +724,49 @@
   	return nil
   }
   
-  /* Action A cannot be translated because of: unknown top level declaration type */
+  func (monitor *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
-  /* Action A1 cannot be translated because of: unknown top level declaration type */
+  	// x < 0
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(0))) {
+  		return fail("precondition failed in A at %d; x < 0\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(0), prev, this)
+  	}
+  	// x' = x + 1
+  	if IsFalse(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1)))) {
+  		return fail("postcondition failed in A at %d; x' = x + 1\n\nlhs: this.state.x = %+v\nrhs: IntPlus(prev.state.x.(Int), integer(1)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, IntPlus(prev.state.x.(Int), integer(1)), prev, this)
+  	}
+  	return nil
+  }
   
-  /* Action B cannot be translated because of: unknown top level declaration type */
+  func (monitor *Monitor) CheckA1(trace_i int, prev Event, this Event) error {
   
-  /* Action C cannot be translated because of: unknown top level declaration type */
+  	// x < 0
+  	if IsFalse(IntLt(prev.state.x.(Int), integer(0))) {
+  		return fail("precondition failed in A1 at %d; x < 0\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(0), prev, this)
+  	}
+  	// x' = x + 1 \land x < 0
+  	if IsFalse(And(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))), IntLt(prev.state.x.(Int), integer(0)))) {
+  		return fail("precondition failed in A1 at %d; x' = x + 1 \\land x < 0\n\nlhs: Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))) = %+v\nrhs: IntLt(prev.state.x.(Int), integer(0)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))), IntLt(prev.state.x.(Int), integer(0)), prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckB(trace_i int, prev Event, this Event) error {
+  
+  	// UNCHANGED(x)
+  	if IsFalse(Eq(this.state.x, prev.state.x)) {
+  		return fail("precondition failed in B at %d; UNCHANGED(x)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckC(trace_i int, prev Event, this Event) error {
+  
+  	// Send(x)
+  	if IsFalse(Eq(prev.state.x, prev.state.x)) {
+  		return fail("precondition failed in C at %d; Send(x)\n\nlhs: prev.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
+  	}
+  	return nil
+  }
   
   func (monitor *Monitor) CheckD(trace_i int, prev Event, this Event) error {
   
@@ -681,24 +794,68 @@
   	return nil
   }
   
-  /* Action F cannot be translated because of: unknown top level declaration type */
+  func (monitor *Monitor) CheckF(z TLA, trace_i int, prev Event, this Event) error {
   
-  /* Action G cannot be translated because of: unknown top level declaration type */
+  	// TRUE
+  	if IsFalse(boolean(true)) {
+  		return fail("precondition failed in F at %d; TRUE\n\nlhs: \"<none>\" = %+v\nrhs: \"<none>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
+  	}
+  	return nil
+  }
   
-  /* Action H cannot be translated because of: unknown top level declaration type */
+  func (monitor *Monitor) CheckG(trace_i int, prev Event, this Event) error {
   
-  /* Action H1 cannot be translated because of: unknown top level declaration type */
+  	// [["a" |-> 1] EXCEPT !["a"] = 2]["a"] = 2
+  	if IsFalse(Eq(RecordIndex(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2))) {
+  		return fail("precondition failed in G at %d; [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2\n\nlhs: RecordIndex(Except(record(str(\"a\"), integer(1)), str(\"a\"), integer(2)), str(\"a\")) = %+v\nrhs: integer(2) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2), prev, this)
+  	}
+  	return nil
+  }
   
-  /* Action H2 cannot be translated because of: unknown top level declaration type */
+  func (monitor *Monitor) CheckH(trace_i int, prev Event, this Event) error {
   
-  /* Action H3 cannot be translated because of: unknown top level declaration type */
+  	// \A r \in {1, 2} : r = 1
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v0 TLA) Bool { return Eq(v0, integer(1)) })) {
+  		return fail("precondition failed in H at %d; \\A r \\in {1, 2} : r = 1\n\nlhs: set(integer(1), integer(2)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckH1(trace_i int, prev Event, this Event) error {
+  
+  	// \A s \in {1, 2} : \A r \in {3, 4} : r = s
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v1 TLA) Bool {
+  		return BoundedForall(set(integer(3), integer(4)), func(v2 TLA) Bool { return Eq(v2, v1) })
+  	})) {
+  		return fail("precondition failed in H1 at %d; \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s\n\nlhs: set(integer(1), integer(2)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckH2(trace_i int, prev Event, this Event) error {
+  
+  	// [ r \in RM |-> "a" ]["a"] = 1
+  	if IsFalse(Eq(RecordIndex(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1))) {
+  		return fail("precondition failed in H2 at %d; [ r \\in RM |-> \"a\" ][\"a\"] = 1\n\nlhs: RecordIndex(FnConstruct(set(str(\"s1\"), str(\"2\")), func(_ TLA) TLA { return str(\"a\") }), str(\"a\")) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1), prev, this)
+  	}
+  	return nil
+  }
+  
+  func (monitor *Monitor) CheckH3(trace_i int, prev Event, this Event) error {
+  
+  	// [ r \in RM |-> r ]["a"] = 1
+  	if IsFalse(Eq(RecordIndex(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return v4.(Set) }), str("a")), integer(1))) {
+  		return fail("precondition failed in H3 at %d; [ r \\in RM |-> r ][\"a\"] = 1\n\nlhs: RecordIndex(FnConstruct(set(str(\"s1\"), str(\"2\")), func(v4 TLA) TLA { return v4.(Set) }), str(\"a\")) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return v4.(Set) }), str("a")), integer(1), prev, this)
+  	}
+  	return nil
+  }
   
   func (monitor *Monitor) CheckH4(trace_i int, prev Event, this Event) error {
   
-  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v0 TLA) Bool { return Eq(v0, integer(1)) })) {
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v5 TLA) Bool { return Eq(v5, integer(1)) })) {
   
   		// (\A r \in {1, 2} : r = 1 \/ \A r \in {2, 3} : r = 2)
-  		if IsFalse(BoundedForall(set(integer(2), integer(3)), func(v1 TLA) Bool { return Eq(v1, integer(2)) })) {
+  		if IsFalse(BoundedForall(set(integer(2), integer(3)), func(v6 TLA) Bool { return Eq(v6, integer(2)) })) {
   			return fail("precondition failed in H4 at %d; (\\A r \\in {1, 2} : r = 1 \\/ \\A r \\in {2, 3} : r = 2)\n\nlhs: set(integer(2), integer(3)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(2), integer(3)), "<func>", prev, this)
   		}
   	}
@@ -706,7 +863,7 @@
   	return nil
   }
   
-  /* Action I cannot be translated because of: unknown top level declaration type */
+  /* Action I cannot be translated because of: ToTrace(CounterExample) */
   
   func (monitor *Monitor) Checka(trace_i int, prev Event, this Event) error {
   
@@ -747,7 +904,18 @@
   	return nil
   }
   
-  /* Action Sets cannot be translated because of: unknown top level declaration type */
+  func (monitor *Monitor) CheckSets(trace_i int, prev Event, this Event) error {
+  
+  	// {1, 2} \union {3} = {}
+  	if IsFalse(Eq(SetUnion(set(integer(1), integer(2)), set(integer(3))), set())) {
+  		return fail("precondition failed in Sets at %d; {1, 2} \\union {3} = {}\n\nlhs: SetUnion(set(integer(1), integer(2)), set(integer(3))) = %+v\nrhs: set() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetUnion(set(integer(1), integer(2)), set(integer(3))), set(), prev, this)
+  	}
+  	// 1 \notin {3}
+  	if IsFalse(SetNotIn(integer(1), set(integer(3)))) {
+  		return fail("precondition failed in Sets at %d; 1 \\notin {3}\n\nlhs: integer(1) = %+v\nrhs: set(integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, integer(1), set(integer(3)), prev, this)
+  	}
+  	return nil
+  }
   
   /*
   func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
@@ -826,13 +994,9 @@
   $ monitor_check Counter
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor Counter.tla
   parse ok
-  # command-line-arguments
-  ./Counter.go:401:6: prev declared but not used
-  [1]
+  compile ok
 
   $ monitor_check TwoPhaseCommitFull
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor TwoPhaseCommitFull.tla
   parse ok
-  # command-line-arguments
-  ./TwoPhaseCommitFull.go:408:6: prev declared but not used
-  [1]
+  compile ok
