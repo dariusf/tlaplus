@@ -1,7 +1,15 @@
 package %s
 
 import (
-    %s
+    // "encoding/json"
+    "sort"
+    "math"
+    "strconv"
+    "reflect"
+    "fmt"
+    "path"
+    "runtime"
+    "strings"
 )
 
 // TLA expressions
@@ -26,8 +34,15 @@ type Record struct {
 }
 
 func (s Record) String() string {
+	keys := []string{}
+	for k := range s.elements {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	ss := []string{}
-	for k, v := range s.elements {
+	for _, k := range keys {
+		v := s.elements[k]
 		ss = append(ss, fmt.Sprintf("%%s |-> %%s", k, v.String()))
 	}
 	return fmt.Sprintf("[%%s]", strings.Join(ss, ", "))
@@ -38,8 +53,15 @@ type Set struct {
 }
 
 func (s Set) String() string {
+	keys := []string{}
+	for k := range s.elements {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	ss := []string{}
-	for _, v := range s.elements {
+	for _, k := range keys {
+		v := s.elements[k]
 		ss = append(ss, v.String())
 	}
 	return fmt.Sprintf("{%%s}", strings.Join(ss, ", "))
@@ -93,7 +115,7 @@ func set(elts ...TLA) Set {
 
 func record(kvs ...TLA) Record {
 	res := map[string]TLA{}
-	for i := 0; i < len(kvs)/2; i += 2 {
+	for i := 0; i <= len(kvs)/2; i += 2 {
 		res[kvs[i].(String).value] = kvs[i+1]
 	}
 	return Record{elements: res}
@@ -296,15 +318,20 @@ func IsPrefix(prefix Seq, seq Seq) Bool {
 // panic instead of returning error
 var crash = true
 
-// this doesn't work for maps with non-string keys
-func hashjson(a any) string {
-    s, _ := json.Marshal(a)
-    return string(s)
+func hash(a TLA) string {
+	return a.String()
 }
 
-func hash(a any) string {
-    return fmt.Sprintf("%%+v", a)
-}
+// this does not guarantee keys are sorted, which is a problem since map traversal is nondet
+// func hash(a any) string {
+// 	return fmt.Sprintf("%%+v", a)
+// }
+
+// this doesn't work for maps with non-string keys
+// func hash(a any) string {
+// 	s, _ := json.Marshal(a)
+// 	return string(s)
+// }
 
 func thisFile() string {
 	_, file, _, ok := runtime.Caller(1)
@@ -380,7 +407,7 @@ type Monitor struct {
 	//constants Constants
 }
 
-func New(/* constants Constants */) Monitor {
+func NewMonitor(/* constants Constants */) Monitor {
 	return Monitor{
 		extra:  []Event{},
 		events: []Event{},

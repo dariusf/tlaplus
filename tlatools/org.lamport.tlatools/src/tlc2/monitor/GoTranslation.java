@@ -253,7 +253,7 @@ public class GoTranslation {
                     return goExpr("None()");
                 case "Append": {
                     GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
-                    GoExpr a2 = translateExpr(args.get(1), Type.SEQ);
+                    GoExpr a2 = translateExpr(args.get(1), null);
                     return goExpr("Append(%s, %s)", a1, a2);
                 }
                 case "ToSet": {

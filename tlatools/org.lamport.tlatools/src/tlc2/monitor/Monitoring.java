@@ -181,9 +181,6 @@ public class Monitoring {
                 })
                 .collect(Collectors.joining("\n"));
 
-        String imports = Stream.of("encoding/json", "math", "strconv", "reflect", "fmt", "path", "runtime", "strings").map(s -> "\"" + s + "\"")
-                .collect(Collectors.joining("\n"));
-
         String varAssignments = variables.stream().map(v ->
                         String.format("if v.state.%1$s != nil {\n" +
                                 "c.%1$s = v.state.%1$s\n" +
@@ -191,7 +188,7 @@ public class Monitoring {
                 .collect(Collectors.joining("\n"));
 
         String module = String.format(overallTemplate,
-                pkg, imports, varDecls, actionNames,
+                pkg, varDecls, actionNames,
                 stringSwitchCases,
 //                constantsFields,
                 checkSwitchCases, initialBody, monitorFns, varAssignments);
