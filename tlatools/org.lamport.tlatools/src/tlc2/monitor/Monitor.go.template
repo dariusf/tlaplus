@@ -115,7 +115,7 @@ func set(elts ...TLA) Set {
 
 func record(kvs ...TLA) Record {
 	res := map[string]TLA{}
-	for i := 0; i <= len(kvs)/2; i += 2 {
+	for i := 0; i < len(kvs); i += 2 {
 		res[kvs[i].(String).value] = kvs[i+1]
 	}
 	return Record{elements: res}

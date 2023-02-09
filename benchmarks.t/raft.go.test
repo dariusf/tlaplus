@@ -1,0 +1,30 @@
+func main() {
+	m := NewMonitor()
+
+	s1 := str("s1")
+	s2 := str("s2")
+	s3 := str("s3")
+	servers := set(s1, s2, s3)
+
+	s := State{
+		matchIndex:     FnConstruct(servers, func(i TLA) TLA { return FnConstruct(servers, func(j TLA) TLA { return integer(0) }) }),
+		log:            FnConstruct(servers, func(i TLA) TLA { return seq() }),
+		who:            str("none"),
+		state:          FnConstruct(servers, func(i TLA) TLA { return str("Follower") }),
+		actions:        seq(),
+		outbox:         FnConstruct(servers, func(i TLA) TLA { return seq() }),
+		inflight:       seq(),
+		commitIndex:    FnConstruct(servers, func(i TLA) TLA { return integer(0) }),
+		currentTerm:    FnConstruct(servers, func(i TLA) TLA { return integer(1) }),
+		votesResponded: FnConstruct(servers, func(i TLA) TLA { return set() }),
+		nextIndex:      FnConstruct(servers, func(i TLA) TLA { return FnConstruct(servers, func(j TLA) TLA { return integer(1) }) }),
+		votesGranted:   FnConstruct(servers, func(i TLA) TLA { return set() }),
+		votedFor:       FnConstruct(servers, func(i TLA) TLA { return str("none") }),
+		inbox:          FnConstruct(servers, func(i TLA) TLA { return seq() }),
+	}
+
+	m.CaptureState(s, Initial)
+
+	m.CheckTrace()
+	fmt.Println("ok!")
+}
