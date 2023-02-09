@@ -16,7 +16,6 @@ import static tlc2.monitor.Translate.*;
 
 public class GoTranslation {
 
-    private final Set<String> topLevelDefs;
     // User-defined operators
     private final Defns defns;
 
@@ -30,8 +29,7 @@ public class GoTranslation {
     // TODO boundVarNames being a mutable set could be problematic if there is shadowing
     public final Set<String> boundVarNames = new HashSet<>();
 
-    public GoTranslation(Set<String> topLevelDefs, Defns defns, Map<String, IValue> constants, Set<String> variables) {
-        this.topLevelDefs = topLevelDefs;
+    public GoTranslation(Defns defns, Map<String, IValue> constants, Set<String> variables) {
         this.defns = defns;
         this.constants = constants;
         this.variables = variables;
@@ -160,7 +158,12 @@ public class GoTranslation {
                     String params = Arrays.stream(opDef.getParams())
                             .map(p -> String.format("%s TLA", p.getName()))
                             .collect(Collectors.joining(", "));
+                    List<String> paramNames = Arrays.stream(opDef.getParams())
+                            .map(p -> p.getName().toString())
+                            .collect(Collectors.toList());
+                    boundVarNames.addAll(paramNames);
                     GoExpr body = translateExpr(opDef.getBody(), null);
+                    boundVarNames.removeAll(paramNames);
                     return goExpr("func(%s) TLA { return %s }", params, body);
                 default:
                     throw fail("unimplemented OpArgNode %s", name);
@@ -199,7 +202,7 @@ public class GoTranslation {
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
                     return goExpr("IntLt(%s, %s)", a1, a2);
                 }
-                case "<=": {
+                case "\\leq": {
                     GoExpr a1 = translateExpr(args.get(0), Type.INT);
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
                     return goExpr("IntLte(%s, %s)", a1, a2);
@@ -209,7 +212,7 @@ public class GoTranslation {
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
                     return goExpr("IntGt(%s, %s)", a1, a2);
                 }
-                case ">=": {
+                case "\\geq": {
                     GoExpr a1 = translateExpr(args.get(0), Type.INT);
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
                     return goExpr("IntGte(%s, %s)", a1, a2);
@@ -256,6 +259,19 @@ public class GoTranslation {
                     GoExpr a2 = translateExpr(args.get(1), null);
                     return goExpr("Append(%s, %s)", a1, a2);
                 }
+                case "\\o": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
+                    GoExpr a2 = translateExpr(args.get(1), Type.SEQ);
+                    return goExpr("AppendSeqs(%s, %s)", a1, a2);
+                }
+                case "Len": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
+                    return goExpr("Len(%s)", a1);
+                }
+                case "Cardinality": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.SET);
+                    return goExpr("Cardinality(%s)", a1);
+                }
                 case "ToSet": {
                     GoExpr a1 = translateExpr(args.get(0), Type.SEQ);
                     return goExpr("ToSet(%s)", a1);
@@ -263,9 +279,9 @@ public class GoTranslation {
                 case "$RcdSelect":
                 case "$FcnApply": {
                     // record indexing and field access r.a
-                    GoExpr map = translateExpr(args.get(0), Type.RECORD);
-                    GoExpr key = translateExpr(args.get(1), Type.STRING);
-                    return qualifyWithType(goExpr("RecordIndex(%s, %s)", map, key), typ);
+                    GoExpr map = translateExpr(args.get(0), null);
+                    GoExpr key = translateExpr(args.get(1), null);
+                    return qualifyWithType(goExpr("IndexInto(%s, %s)", map, key), typ);
                 }
                 case "$SetEnumerate": {
                     // {1, 2}
@@ -302,6 +318,14 @@ public class GoTranslation {
                             .get();
                 }
                 case "$ConjList":
+//                {
+//                    String v1 = fresh();
+//                    String v2 = fresh();
+//                    return args.stream().map(a -> translateExpr(a, Type.BOOL))
+//                            .reduce((a, b) -> goExpr(goBlock("%s := %s\n" +
+//                                    "%s := %s", v1, a, v2, b), "And(%s, %s)", v1, v2))
+//                            .get();
+//                }
                 case "\\land": {
                     return args.stream().map(a -> translateExpr(a, Type.BOOL))
                             .reduce((a, b) -> goExpr("And(%s, %s)", a, b))
@@ -368,7 +392,7 @@ public class GoTranslation {
                     GoExpr sset = translateExpr(set, null);
                     FormalParamNode var = op.getQuantSymbolLists().get(0);
 
-                    String k1 = fresh();
+                    String k1 = fresh(var.getName().toString());
 
                     boundVarNames.add(k1);
                     GoExpr body = translateExpr(substitute(cond, Map.of(var, tla(k1))), null);
@@ -422,6 +446,11 @@ public class GoTranslation {
                     GoExpr e = translateExpr(args.get(1), null);
                     return goExpr("Remove(%s, %s)", seq, e);
                 }
+                case "RemoveAt": {
+                    GoExpr seq = translateExpr(args.get(0), Type.SEQ);
+                    GoExpr i = translateExpr(args.get(1), Type.INT);
+                    return goExpr("RemoveAt(%s, %s)", seq, i);
+                }
                 case "SetToSeq": {
                     GoExpr seq = translateExpr(args.get(0), Type.SET);
                     return goExpr("SetToSeq(%s)", seq);
@@ -431,13 +460,23 @@ public class GoTranslation {
                     GoExpr seq = translateExpr(args.get(1), Type.SEQ);
                     return goExpr("IsPrefix(%s)", pre, seq);
                 }
+                case "SelectSeq": {
+                    GoExpr seq = translateExpr(args.get(0), Type.SEQ);
+                    GoExpr f = translateExpr(args.get(1), null);
+                    return goExpr("SelectSeq(%s, %s)", seq, f);
+                }
+                case "..": {
+                    GoExpr seq = translateExpr(args.get(0), Type.INT);
+                    GoExpr f = translateExpr(args.get(1), Type.INT);
+                    return goExpr("RangeIncl(%s, %s)", seq, f);
+                }
                 case "$IfThenElse": {
                     GoExpr i = translateExpr(args.get(0), null);
                     GoExpr t = translateExpr(args.get(1), null);
                     GoExpr e = translateExpr(args.get(2), null);
                     String v = fresh();
                     return goExpr(goBlock("var %s TLA\n" +
-                            "if %s {\n" +
+                            "if IsTrue(%s) {\n" +
                             "%s = %s\n" +
                             "} else {\n" +
                             "%s = %s\n" +
@@ -445,9 +484,8 @@ public class GoTranslation {
                 }
                 case "MapThenFoldSet":
                 case "FoldFunction":
-                case "RemoveAt":
                 case "IsInjective":
-                    throw fail("unimplemented");
+                    throw fail("unimplemented " + name);
                 default:
 
                     if (boundVarNames.contains(name)) {
@@ -462,7 +500,8 @@ public class GoTranslation {
 
                     // user-defined operator
                     Object userDefined = defns.get(name);
-                    if (userDefined instanceof MethodValue) {
+                    boolean isTLAPrim = userDefined instanceof MethodValue;
+                    if (isTLAPrim) {
                         String s = Eval.prettyPrint(op);
                         // we used to print a warning, but if the user never discovers the missing operator,
                         // it probably doesn't matter
@@ -471,8 +510,10 @@ public class GoTranslation {
                         // return goExpr("/* cannot be translated: %s */", s);
                         throw new CannotBeTranslatedException(s);
                     }
-                    if (userDefined != null) {
-                        return translateExpr(subst(op), null);
+                    boolean isUserDefinedOperator = userDefined != null;
+                    if (isUserDefinedOperator) {
+                        OpApplNode substituted = subst(op);
+                        return qualifyWithType(translateExpr(substituted, null), typ);
                     }
 
                     if (variables.contains(name) || isPrimed(op)) {
@@ -492,7 +533,14 @@ public class GoTranslation {
         if (typ == null) {
             return e;
         } else {
-            return goExpr("%s.(%s)", e, goTypeName(typ));
+            // return goExpr("%s.(%s)", e, goTypeName(typ));
+
+            // Ensure that casts work always, even on functions which
+            // return non-interface types like concrete structs (e.g. Seq).
+            // The alternative would be to give library functions weaker types,
+            // but that makes manually-written instrumentation code using those
+            // functions worse.
+            return goExpr("any(%s).(%s)", e, goTypeName(typ));
         }
     }
 

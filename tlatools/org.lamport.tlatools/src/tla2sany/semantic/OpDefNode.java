@@ -411,6 +411,12 @@ public class OpDefNode extends OpDefOrDeclNode
     }
   }
 
+  public OpDefNode astCopy() {
+      OpDefNode other = new OpDefNode(name);
+      other.params = this.params;
+      return other;
+  }
+
   /* Invoked in configuration.Configuration for built-in ops */
   public OpDefNode(UniqueString us, int k, int ar, FormalParamNode[] parms,
                    boolean localness, ExprNode exp, ModuleNode oModNode,

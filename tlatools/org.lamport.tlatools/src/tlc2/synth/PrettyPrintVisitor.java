@@ -95,12 +95,13 @@ public class PrettyPrintVisitor extends Visitor<String> {
             return String.format("(%s \\/ %s)",
                     node.getArgs()[0].accept(this),
                     node.getArgs()[1].accept(this));
-        } else if (op.equals(OP_bf.toString())) {
+        } else if (op.equals(OP_bf.toString()) || op.equals(OP_be.toString())) {
             // TODO assumes one bound variable
             String set = node.getBdedQuantBounds()[0].accept(this);
             String var = node.getQuantSymbolLists().get(0).getName().toString();
             String cond = node.getArgs()[0].accept(this);
-            return String.format("\\A %s \\in %s : %s", var, set, cond);
+            String operator = op.equals(OP_bf.toString()) ? "A" : "E";
+            return String.format("\\%s %s \\in %s : %s", operator, var, set, cond);
         } else if (op.equals(OP_fc.toString())) {
             String set = node.getBdedQuantBounds()[0].accept(this);
             String var = node.getQuantSymbolLists().get(0).getName().toString();
@@ -134,8 +135,8 @@ public class PrettyPrintVisitor extends Visitor<String> {
             return String.format("%s'", node.getArgs()[0].accept(this));
         }
         if (op.charAt(0) == '$') {
-//            throw new UnsupportedOperationException("case unimplemented: " + op);
-            throw new CannotBeTranslatedException("case unimplemented: " + op);
+//            throw new UnsupportedOperationException("PrettyPrintVisitor: case unimplemented: " + op);
+            throw new CannotBeTranslatedException("PrettyPrintVisitor: case unimplemented: " + op);
         }
         String args = Arrays.stream(node.getArgs()).map(n -> n.accept(this))
                 .collect(Collectors.joining(", "));

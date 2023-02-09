@@ -91,7 +91,7 @@ public class Monitoring {
                         }
 //                Set<String> letBoundNames = new HashSet<>();
                         // TODO move this into GoTranslation
-                        GoTranslation translation = new GoTranslation(topLevelDefs, defns, constants, declaredVariableNames);
+                        GoTranslation translation = new GoTranslation(defns, constants, declaredVariableNames);
 
                         // inline all the let bindings
 //                GoBlock letBindings = goBlock("");
@@ -147,7 +147,7 @@ public class Monitoring {
 
         GoBlock initialBody;
         {
-            GoTranslation translation = new GoTranslation(topLevelDefs, defns, constants, declaredVariableNames);
+            GoTranslation translation = new GoTranslation(defns, constants, declaredVariableNames);
             initialBody = translation.translateInitial(initialState);
         }
 
@@ -220,7 +220,7 @@ public class Monitoring {
             String name = ((OpDefNode) d).getName().toString();
             List<String> extra = List.of("TC", "TCConsistent", "SoupSize", "TargetLength", "TargetA", "ConstrB", "TargetCommit", "TargetAbort");
             if (name.contains("TypeOK") || name.contains("Spec") || name.contains("vars") ||
-                    name.contains("Next") || name.contains("Init")) {
+                    name.contains("Next") || name.endsWith("Init")) {
                 // Init is ignored because it's already availale.
                 // we should get the actions from Next but we just keep everything left instead.
                 return false;

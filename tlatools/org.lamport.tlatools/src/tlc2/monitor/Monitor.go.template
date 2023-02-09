@@ -139,6 +139,18 @@ func Append(a Seq, b TLA) Seq {
 	return Seq{elements: append(a.elements, b)}
 }
 
+func AppendSeqs(a Seq, b Seq) Seq {
+	return Seq{elements: append(a.elements, b.elements...)}
+}
+
+func Len(a Seq) Int {
+	return integer(len(a.elements))
+}
+
+func Cardinality(a Set) Int {
+	return integer(len(a.elements))
+}
+
 func SetUnion(a Set, b Set) Set {
 	res := map[string]TLA{}
 	for k, v := range a.elements {
@@ -161,6 +173,24 @@ func SetNotIn(a TLA, b Set) Bool {
 
 func RecordIndex(a Record, b String) TLA {
 	return a.elements[b.value]
+}
+
+func TLAIndex(i int) int {
+	return i - 1
+}
+
+func SeqIndex(a Seq, b Int) TLA {
+	return a.elements[TLAIndex(b.value)]
+}
+
+func IndexInto(a TLA, b TLA) TLA {
+    a1, ok1 := a.(Seq)
+    b1, ok2 := b.(Int)
+    if ok1 && ok2 {
+        return SeqIndex(a1, b1)
+    } else {
+        return RecordIndex(a.(Record), b.(String))
+    }
 }
 
 func IntPlus(a Int, b Int) Int {
@@ -278,6 +308,16 @@ func Remove(s Seq, e TLA) Seq {
     return seq(res...)
 }
 
+func RemoveAt(s Seq, i Int) Seq {
+    res := []TLA{}
+    for j, v := range s.elements {
+        if TLAIndex(i.value) != j {
+            res = append(res, v)
+        }
+    }
+    return seq(res...)
+}
+
 func SetToSeq(set Set) Seq {
     res := []TLA{}
     for _, v := range set.elements {
@@ -286,7 +326,7 @@ func SetToSeq(set Set) Seq {
     return seq(res...)
 }
 
-func Min(set Set) TLA {
+func Min(set Set) Int {
     res := math.MaxInt
     for _, v := range set.elements {
         if v.(Int).value < res {
@@ -296,7 +336,7 @@ func Min(set Set) TLA {
     return integer(res)
 }
 
-func Max(set Set) TLA {
+func Max(set Set) Int {
     res := math.MinInt
     for _, v := range set.elements {
         if v.(Int).value > res {
@@ -313,6 +353,24 @@ func IsPrefix(prefix Seq, seq Seq) Bool {
 	    }
 	}
 	return boolean(true)
+}
+
+func SelectSeq(s Seq, f func(TLA) TLA) Seq {
+    res := []TLA{}
+    for _, v := range s.elements {
+        if IsTrue(f(v)) {
+            res = append(res, v)
+        }
+    }
+    return seq(res...)
+}
+
+func RangeIncl(lower Int, upper Int) Set {
+    res := []TLA{}
+    for i := lower.value; i <= upper.value; i++ {
+        res = append(res, integer(i))
+    }
+    return set(res...)
 }
 
 // panic instead of returning error

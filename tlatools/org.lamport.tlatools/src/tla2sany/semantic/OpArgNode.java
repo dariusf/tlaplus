@@ -60,6 +60,10 @@ public class OpArgNode extends ExprOrOpArgNode {
     this.mn        = mn;
   }
 
+  public void setOp(SymbolNode op) {
+    this.op = op;
+  }
+
   public final SymbolNode   getOp()        { return this.op; }
 
   public final int          getArity()     { return this.arity; }
@@ -165,6 +169,10 @@ public class OpArgNode extends ExprOrOpArgNode {
 
   @Override
   public ExprOrOpArgNode astCopy() {
-    throw new UnsupportedOperationException("not yet implemented");
+    OpArgNode other = new OpArgNode(name);
+    other.op = this.op;
+    other.arity = this.arity;
+    other.mn = this.mn;
+    return other;
   }
 }

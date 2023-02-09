@@ -69,6 +69,18 @@ public class Translate {
      * If no substitution is performed, guarantees substitute(n, subs) == n
      */
     public static <T extends SemanticNode> T substitute(T node, Map<FormalParamNode, ExprOrOpArgNode> subs) {
+
+        // substitute inside lambda bodies, in case they close over variables
+        if (node instanceof OpArgNode) {
+            OpArgNode oan = (OpArgNode) node;
+            OpArgNode res = (OpArgNode) oan.astCopy();
+            OpDefNode def = (OpDefNode) oan.getOp();
+            OpDefNode def1 = def.astCopy();
+            def1.setBody(substitute(def.getBody(), subs));
+            res.setOp(def1);
+            return (T) res;
+        }
+
         if (!(node instanceof OpApplNode)) {
             return node;
         }
@@ -96,8 +108,8 @@ public class Translate {
 //                            return e.getValue();
 //                        }
 //                    }
-                    if (a instanceof OpApplNode) {
-                        return substitute((OpApplNode) a, subs);
+                    if (a instanceof OpApplNode || a instanceof OpArgNode) {
+                        return substitute(a, subs);
                     }
                     return a;
                 })
