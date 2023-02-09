@@ -14,7 +14,7 @@ test () {
 }
 
 alias c=compile
-alias t=test
+alias te=test
 alias d='dune promote'
 
 tlatools() {
