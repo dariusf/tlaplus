@@ -57,14 +57,27 @@ public class GoTranslation {
      */
     public GoBlock translateTopLevel(String action, ExprOrOpArgNode op) {
 
-//        if (op instanceof LetInNode) {
-//        }
+        GoBlock topLevelLetBindings = goBlock("");
 
-        if (!(op instanceof OpApplNode)) {
-//            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
-            GoExpr expr = translateExpr(op, null);
-            return failureMessage(action, op, expr, "check");
+        if (op instanceof LetInNode) {
+                while (op instanceof LetInNode) {
+                    LetInNode let = (LetInNode) op;
+                    for (OpDefNode letLet : let.getLets()) {
+                        // TODO assume there are no local operator definitions
+                        String letVar = letLet.getName().toString();
+                        boundVarNames.add(letVar);
+                        topLevelLetBindings = topLevelLetBindings.seq(goBlock("var %s TLA = %s",
+                                letVar, translateExpr(letLet.getBody(), null)));
+                    }
+                    op = let.getBody();
+                }
         }
+
+//        if (!(op instanceof OpApplNode)) {
+////            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
+//            GoExpr expr = translateExpr(op, null);
+//            return failureMessage(action, op, expr, "check");
+//        }
 
         UniqueString opName = ((OpApplNode) op).getOperator().getName();
         List<ExprOrOpArgNode> args = operatorArgs(op);
@@ -73,8 +86,8 @@ public class GoTranslation {
         String cond = isPost ? "postcondition" : "precondition";
 
         if (opName.equals(OP_cl)) {
-            return args.stream().map(a -> translateTopLevel(action, a))
-                    .reduce(GoBlock::seq).get();
+            return topLevelLetBindings.seq(args.stream().map(a -> translateTopLevel(action, a))
+                    .reduce(GoBlock::seq).get());
         }
 
         if (opName.equals(OP_dl)) {
@@ -87,7 +100,7 @@ public class GoTranslation {
             for (int i = last - 1; i >= 0; i--) {
                 res = goBlock("if IsFalse(%s) {\n%s\n}\n", disjuncts.get(i), res);
             }
-            return res;
+            return topLevelLetBindings.seq(res);
         }
 
         if (opName.equals(OP_rfs)) {
@@ -96,7 +109,7 @@ public class GoTranslation {
 
         // expression
         GoExpr expr = translateExpr(op, null);
-        return failureMessage(action, op, expr, cond);
+        return topLevelLetBindings.seq(failureMessage(action, op, expr, cond));
     }
 
     public static String escape(String s) {
