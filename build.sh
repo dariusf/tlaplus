@@ -7,14 +7,14 @@ compile() {
   ant -f $tlaroot/tlatools/org.lamport.tlatools/customBuild.xml -Dtest.skip=true compile dist
 }
 
-test () {
+test1() {
   set -x
   rm benchmarks.t/*.go
   dune test
 }
 
 alias c=compile
-alias te=test
+alias t=test1
 alias d='dune promote'
 
 tlatools() {
