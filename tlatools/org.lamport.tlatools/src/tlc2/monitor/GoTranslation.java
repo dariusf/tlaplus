@@ -136,8 +136,8 @@ public class GoTranslation {
         return goBlock("// %9$s\n" +
                         "if IsFalse(%1$s) {\n" +
                         "return fail(\"%2$s failed in %3$s at %%d; %4$s\\n\\n" +
-                        "lhs: %5$s = %%+v\\n" +
-                        "rhs: %6$s = %%+v\\n\\n" +
+                        "lhs: %5$s\\n\\n= %%+v\\n\\n" +
+                        "rhs: %6$s\\n\\n= %%+v\\n\\n" +
                         "prev: %%+v\\n\\n" +
                         "this: %%+v\"" +
                         ", trace_i, %7$s, %8$s, prev, this)\n}",
@@ -244,6 +244,11 @@ public class GoTranslation {
                     GoExpr a1 = translateExpr(args.get(0), Type.INT);
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
                     return goExpr("IntMul(%s, %s)", a1, a2);
+                }
+                case "\\div": {
+                    GoExpr a1 = translateExpr(args.get(0), Type.INT);
+                    GoExpr a2 = translateExpr(args.get(1), Type.INT);
+                    return goExpr("IntDiv(%s, %s)", a1, a2);
                 }
                 case "=": {
                     GoExpr a1 = translateExpr(args.get(0), null);

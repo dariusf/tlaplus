@@ -13,3 +13,5 @@ monitor_check_show() {
   monitor_check "$@"
   gofmt $1.go || cat $1.go
 }
+
+alias g='go run raft.go 2>&1 | less'

@@ -217,6 +217,10 @@ func IntMul(a Int, b Int) Int {
 	return Int{value: a.value * b.value}
 }
 
+func IntDiv(a Int, b Int) Int {
+	return Int{value: a.value / b.value}
+}
+
 func IntLt(a Int, b Int) Bool {
 	return boolean(a.value < b.value)
 }
@@ -313,8 +317,8 @@ func FoldSeq(f func(TLA, TLA) TLA, base TLA, seq Seq) TLA {
 func Remove(s Seq, e TLA) Seq {
     res := []TLA{}
     for _, v := range s.elements {
-        if IsTrue(Eq(v, e)) {
-            res = append(res, e)
+        if IsFalse(Eq(v, e)) {
+            res = append(res, v)
         }
     }
     return seq(res...)

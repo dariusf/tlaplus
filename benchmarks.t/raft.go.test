@@ -55,7 +55,7 @@ func main() {
 	s.outbox = Except(s.outbox.(Record), s1, seq())
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), seq(s2rv)))
 	s.who = str("Network")
-	m.CaptureState(s, NetworkTakeMessage)
+	m.CaptureState(s, NetworkTakeMessage, s1)
 
 	// second RV
 	s3rv := record(
@@ -75,14 +75,14 @@ func main() {
 	s.outbox = Except(s.outbox.(Record), s1, seq())
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), seq(s3rv)))
 	s.who = str("Network")
-	m.CaptureState(s, NetworkTakeMessage)
+	m.CaptureState(s, NetworkTakeMessage, s1)
 
 	// receive rv 2
-	s.inbox = Except(s.outbox.(Record), s2, seq(s2rv))
+	s.inbox = Except(s.inbox.(Record), s2, seq(s2rv))
 	s.inflight = seq(s3rv)
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessageSlow"), s2rv))
 	s.who = str("Network")
-	m.CaptureState(s, NetworkDeliverMessageSlow)
+	m.CaptureState(s, NetworkDeliverMessageSlow, s2, integer(1))
 
 	s.currentTerm = Except(s.currentTerm.(Record), s2, integer(2))
 	s.actions = Append(s.actions.(Seq), seq(str("UpdateTerm"), s2, s1, s2rv))
@@ -92,20 +92,88 @@ func main() {
 
 	s2rvr := record(
 		str("mtype"), str("RequestVoteResponse"),
-		str("mterm"), integer(1),
+		str("mterm"), integer(2),
 		str("mvoteGranted"), boolean(true),
 		str("msource"), s2,
 		str("mdest"), s1,
 	)
 	s.votedFor = Except(s.votedFor.(Record), s2, s1)
-	s.inbox = Except(s.outbox.(Record), s2, seq())
+	s.inbox = Except(s.inbox.(Record), s2, seq())
 	s.outbox = Except(s.outbox.(Record), s2, seq(s2rvr))
 	s.who = s2
+	s.actions = Append(s.actions.(Seq), seq(str("HandleRequestVoteRequest"), s2, s1, s2rv))
 	m.CaptureState(s, HandleRequestVoteRequest, s2, s1, s2rv)
 
+	s.inflight = seq(s3rv, s2rvr)
+	s.outbox = Except(s.outbox.(Record), s2, seq())
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), seq(s2rvr)))
+	s.who = str("Network")
+	m.CaptureState(s, NetworkTakeMessage, s2)
+
 	// receive rv 3
+	s.inbox = Except(s.inbox.(Record), s3, seq(s3rv))
+	s.inflight = seq(s2rvr)
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessageSlow"), s3rv))
+	s.who = str("Network")
+	m.CaptureState(s, NetworkDeliverMessageSlow, s3, integer(1))
+
+	s.currentTerm = Except(s.currentTerm.(Record), s3, integer(2))
+	s.actions = Append(s.actions.(Seq), seq(str("UpdateTerm"), s3, s1, s3rv))
+	s.who = s3
+	// already follower and voted for none
+	m.CaptureState(s, UpdateTerm, s3, s1, s3rv)
+
+	s3rvr := record(
+		str("mtype"), str("RequestVoteResponse"),
+		str("mterm"), integer(2),
+		str("mvoteGranted"), boolean(true),
+		str("msource"), s3,
+		str("mdest"), s1,
+	)
+	s.votedFor = Except(s.votedFor.(Record), s3, s1)
+	s.inbox = Except(s.inbox.(Record), s3, seq())
+	s.outbox = Except(s.outbox.(Record), s3, seq(s3rvr))
+	s.who = s3
+	s.actions = Append(s.actions.(Seq), seq(str("HandleRequestVoteRequest"), s3, s1, s3rv))
+	m.CaptureState(s, HandleRequestVoteRequest, s3, s1, s3rv)
+
+	s.inflight = seq(s2rvr, s3rvr)
+	s.outbox = Except(s.outbox.(Record), s3, seq())
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), seq(s3rvr)))
+	s.who = str("Network")
+	m.CaptureState(s, NetworkTakeMessage, s3)
+
+	s.inbox = Except(s.inbox.(Record), s1, seq(s2rvr))
+	s.inflight = seq(s3rvr)
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessageSlow"), s2rvr))
+	s.who = str("Network")
+	m.CaptureState(s, NetworkDeliverMessageSlow, s1, integer(1))
+
+	s.inbox = Except(s.inbox.(Record), s1, seq(s2rvr, s3rvr))
+	s.inflight = seq()
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessageSlow"), s3rvr))
+	s.who = str("Network")
+	m.CaptureState(s, NetworkDeliverMessageSlow, s1, integer(1))
+
+	// receive rvr messages
+	s.inbox = Except(s.inbox.(Record), s1, seq(s3rvr))
+	s.votesResponded = Except(s.votesResponded.(Record), s1, set(s2))
+	s.votesGranted = Except(s.votesGranted.(Record), s1, set(s2))
+	s.actions = Append(s.actions.(Seq), seq(str("HandleRequestVoteResponse"), s1, s2, s2rvr))
+	s.who = s1
+	m.CaptureState(s, HandleRequestVoteResponse, s1, s2, s2rvr)
+
+	s.inbox = Except(s.inbox.(Record), s1, seq())
+	s.votesResponded = Except(s.votesResponded.(Record), s1, set(s2, s3))
+	s.votesGranted = Except(s.votesGranted.(Record), s1, set(s2, s3))
+	s.actions = Append(s.actions.(Seq), seq(str("HandleRequestVoteResponse"), s1, s3, s3rvr))
+	s.who = s1
+	m.CaptureState(s, HandleRequestVoteResponse, s1, s3, s3rvr)
 
 	// s1 becomes leader
+	s.state = Except(s.state.(Record), s1, str("Leader"))
+	s.actions = Append(s.actions.(Seq), seq(str("BecomeLeader"), s1))
+	m.CaptureState(s, BecomeLeader, s1)
 
 	m.CheckTrace()
 	fmt.Println("ok!")

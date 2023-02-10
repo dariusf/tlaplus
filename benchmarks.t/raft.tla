@@ -836,9 +836,9 @@ NetworkDelivery ==
   /\ LogAction(<<"Network">>)
   /\ LogActor("Network")
 
-NetworkTakeMessage ==
-  /\ \E s \in Server : outbox[s] /= <<>>
-  /\ outbox' = [s \in Server |-> <<>>]
+NetworkTakeMessage(s) ==
+  /\ outbox[s] /= <<>>
+  /\ outbox' = [s1 \in Server |-> <<>>]
   /\ inflight' = inflight \o MsgsIn(outbox)
   /\ UNCHANGED inbox
   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
@@ -856,16 +856,15 @@ NetworkDeliverMessage ==
   /\ LogActor("Network")
 
 \* this delivers only one message at a time, which corresponds to what impls see
-NetworkDeliverMessageSlow ==
+NetworkDeliverMessageSlow(r, i) ==
   /\ inflight /= <<>>
-  /\ \E r \in Server : \E i \in 1..Len(inflight) :
-    /\ inflight[i].mdest = r
-    /\ inbox' = [inbox EXCEPT ![r] = Append(inbox[r], inflight[i])]
-    /\ inflight' = RemoveAt(inflight, i)
-    /\ LogAction(<<"NetworkDeliverMessageSlow", inflight[i]>>)
-    /\ LogActor("Network")
-    /\ UNCHANGED outbox
-    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
+  /\ inflight[i].mdest = r
+  /\ inbox' = [inbox EXCEPT ![r] = Append(inbox[r], inflight[i])]
+  /\ inflight' = RemoveAt(inflight, i)
+  /\ LogAction(<<"NetworkDeliverMessageSlow", inflight[i]>>)
+  /\ LogActor("Network")
+  /\ UNCHANGED outbox
+  /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
 
 ----
 \* Defines how the variables may transition.
@@ -887,9 +886,10 @@ Next == \*/\
           \*  \/ \E m \in Receivable : DuplicateMessage(m)
           \*  \/ \E m \in Receivable : DropMessage(m)
           \*  \/ NetworkDelivery
-           \/ NetworkTakeMessage
+           \/ \E s \in Server : NetworkTakeMessage(s)
            \* \/ NetworkDeliverMessage
-           \/ NetworkDeliverMessageSlow
+           \/ \E r \in Server : \E i \in 1..Len(inflight) :
+             NetworkDeliverMessageSlow(r, i)
            \* History variable that tracks every log ever:
         \* /\ allLogs' = allLogs \cup {log[i] : i \in Server}
 
