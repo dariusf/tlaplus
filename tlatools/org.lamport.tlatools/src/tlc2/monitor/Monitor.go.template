@@ -106,6 +106,10 @@ func str(s string) String {
 }
 
 func set(elts ...TLA) Set {
+	// avoid nil slice vs empty slice shenanigans
+	if len(elts) == 0 {
+		elts = []TLA{}
+	}
 	res := map[string]TLA{}
 	for _, v := range elts {
 		res[hash(v)] = v
@@ -114,6 +118,10 @@ func set(elts ...TLA) Set {
 }
 
 func record(kvs ...TLA) Record {
+	// avoid nil slice vs empty slice shenanigans
+	if len(kvs) == 0 {
+		kvs = []TLA{}
+	}
 	res := map[string]TLA{}
 	for i := 0; i < len(kvs); i += 2 {
 		res[kvs[i].(String).value] = kvs[i+1]
@@ -122,6 +130,10 @@ func record(kvs ...TLA) Record {
 }
 
 func seq(elts ...TLA) Seq {
+	// avoid nil slice vs empty slice shenanigans
+	if len(elts) == 0 {
+		elts = []TLA{}
+	}
 	return Seq{elements: elts}
 }
 

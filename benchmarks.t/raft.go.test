@@ -84,6 +84,12 @@ func main() {
 	s.who = str("Network")
 	m.CaptureState(s, NetworkDeliverMessageSlow)
 
+	s.currentTerm = Except(s.currentTerm.(Record), s2, integer(2))
+	s.actions = Append(s.actions.(Seq), seq(str("UpdateTerm"), s2, s1, s2rv))
+	s.who = s2
+	// already follower and voted for none
+	m.CaptureState(s, UpdateTerm, s2, s1, s2rv)
+
 	s2rvr := record(
 		str("mtype"), str("RequestVoteResponse"),
 		str("mterm"), integer(1),
