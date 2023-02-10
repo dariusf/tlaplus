@@ -73,11 +73,11 @@ public class GoTranslation {
                 }
         }
 
-//        if (!(op instanceof OpApplNode)) {
-////            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
-//            GoExpr expr = translateExpr(op, null);
-//            return failureMessage(action, op, expr, "check");
-//        }
+        if (!(op instanceof OpApplNode)) {
+//            throw fail("translateTopLevel: not OpApplNode: " + Eval.prettyPrint(op));
+            GoExpr expr = translateExpr(op, null);
+            return failureMessage(action, op, expr, "check");
+        }
 
         UniqueString opName = ((OpApplNode) op).getOperator().getName();
         List<ExprOrOpArgNode> args = operatorArgs(op);

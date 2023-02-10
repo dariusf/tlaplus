@@ -160,18 +160,19 @@
 
   $ monitor_check_show Stress
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor Stress.tla
-  865 lines
+  988 lines
   parse ok
   compile ok
   package monitoring
   
   import (
-  	"encoding/json"
+  	// "encoding/json"
   	"fmt"
   	"math"
   	"path"
   	"reflect"
   	"runtime"
+  	"sort"
   	"strconv"
   	"strings"
   )
@@ -198,8 +199,15 @@
   }
   
   func (s Record) String() string {
+  	keys := []string{}
+  	for k := range s.elements {
+  		keys = append(keys, k)
+  	}
+  	sort.Strings(keys)
+  
   	ss := []string{}
-  	for k, v := range s.elements {
+  	for _, k := range keys {
+  		v := s.elements[k]
   		ss = append(ss, fmt.Sprintf("%s |-> %s", k, v.String()))
   	}
   	return fmt.Sprintf("[%s]", strings.Join(ss, ", "))
@@ -210,8 +218,15 @@
   }
   
   func (s Set) String() string {
+  	keys := []string{}
+  	for k := range s.elements {
+  		keys = append(keys, k)
+  	}
+  	sort.Strings(keys)
+  
   	ss := []string{}
-  	for _, v := range s.elements {
+  	for _, k := range keys {
+  		v := s.elements[k]
   		ss = append(ss, v.String())
   	}
   	return fmt.Sprintf("{%s}", strings.Join(ss, ", "))
@@ -256,6 +271,10 @@
   }
   
   func set(elts ...TLA) Set {
+  	// avoid nil slice vs empty slice shenanigans
+  	if len(elts) == 0 {
+  		elts = []TLA{}
+  	}
   	res := map[string]TLA{}
   	for _, v := range elts {
   		res[hash(v)] = v
@@ -264,14 +283,22 @@
   }
   
   func record(kvs ...TLA) Record {
+  	// avoid nil slice vs empty slice shenanigans
+  	if len(kvs) == 0 {
+  		kvs = []TLA{}
+  	}
   	res := map[string]TLA{}
-  	for i := 0; i < len(kvs)/2; i += 2 {
+  	for i := 0; i < len(kvs); i += 2 {
   		res[kvs[i].(String).value] = kvs[i+1]
   	}
   	return Record{elements: res}
   }
   
   func seq(elts ...TLA) Seq {
+  	// avoid nil slice vs empty slice shenanigans
+  	if len(elts) == 0 {
+  		elts = []TLA{}
+  	}
   	return Seq{elements: elts}
   }
   
@@ -287,6 +314,18 @@
   
   func Append(a Seq, b TLA) Seq {
   	return Seq{elements: append(a.elements, b)}
+  }
+  
+  func AppendSeqs(a Seq, b Seq) Seq {
+  	return Seq{elements: append(a.elements, b.elements...)}
+  }
+  
+  func Len(a Seq) Int {
+  	return integer(len(a.elements))
+  }
+  
+  func Cardinality(a Set) Int {
+  	return integer(len(a.elements))
   }
   
   func SetUnion(a Set, b Set) Set {
@@ -313,6 +352,24 @@
   	return a.elements[b.value]
   }
   
+  func TLAIndex(i int) int {
+  	return i - 1
+  }
+  
+  func SeqIndex(a Seq, b Int) TLA {
+  	return a.elements[TLAIndex(b.value)]
+  }
+  
+  func IndexInto(a TLA, b TLA) TLA {
+  	a1, ok1 := a.(Seq)
+  	b1, ok2 := b.(Int)
+  	if ok1 && ok2 {
+  		return SeqIndex(a1, b1)
+  	} else {
+  		return RecordIndex(a.(Record), b.(String))
+  	}
+  }
+  
   func IntPlus(a Int, b Int) Int {
   	return integer(a.value + b.value)
   }
@@ -323,6 +380,10 @@
   
   func IntMul(a Int, b Int) Int {
   	return Int{value: a.value * b.value}
+  }
+  
+  func IntDiv(a Int, b Int) Int {
+  	return Int{value: a.value / b.value}
   }
   
   func IntLt(a Int, b Int) Bool {
@@ -421,8 +482,18 @@
   func Remove(s Seq, e TLA) Seq {
   	res := []TLA{}
   	for _, v := range s.elements {
-  		if IsTrue(Eq(v, e)) {
-  			res = append(res, e)
+  		if IsFalse(Eq(v, e)) {
+  			res = append(res, v)
+  		}
+  	}
+  	return seq(res...)
+  }
+  
+  func RemoveAt(s Seq, i Int) Seq {
+  	res := []TLA{}
+  	for j, v := range s.elements {
+  		if TLAIndex(i.value) != j {
+  			res = append(res, v)
   		}
   	}
   	return seq(res...)
@@ -436,7 +507,7 @@
   	return seq(res...)
   }
   
-  func Min(set Set) TLA {
+  func Min(set Set) Int {
   	res := math.MaxInt
   	for _, v := range set.elements {
   		if v.(Int).value < res {
@@ -446,7 +517,7 @@
   	return integer(res)
   }
   
-  func Max(set Set) TLA {
+  func Max(set Set) Int {
   	res := math.MinInt
   	for _, v := range set.elements {
   		if v.(Int).value > res {
@@ -465,18 +536,41 @@
   	return boolean(true)
   }
   
+  func SelectSeq(s Seq, f func(TLA) TLA) Seq {
+  	res := []TLA{}
+  	for _, v := range s.elements {
+  		if IsTrue(f(v)) {
+  			res = append(res, v)
+  		}
+  	}
+  	return seq(res...)
+  }
+  
+  func RangeIncl(lower Int, upper Int) Set {
+  	res := []TLA{}
+  	for i := lower.value; i <= upper.value; i++ {
+  		res = append(res, integer(i))
+  	}
+  	return set(res...)
+  }
+  
   // panic instead of returning error
   var crash = true
   
-  // this doesn't work for maps with non-string keys
-  func hashjson(a any) string {
-  	s, _ := json.Marshal(a)
-  	return string(s)
+  func hash(a TLA) string {
+  	return a.String()
   }
   
-  func hash(a any) string {
-  	return fmt.Sprintf("%+v", a)
-  }
+  // this does not guarantee keys are sorted, which is a problem since map traversal is nondet
+  // func hash(a any) string {
+  // 	return fmt.Sprintf("%+v", a)
+  // }
+  
+  // this doesn't work for maps with non-string keys
+  // func hash(a any) string {
+  // 	s, _ := json.Marshal(a)
+  // 	return string(s)
+  // }
   
   func thisFile() string {
   	_, file, _, ok := runtime.Caller(1)
@@ -610,7 +704,7 @@
   	//constants Constants
   }
   
-  func New( /* constants Constants */ ) Monitor {
+  func NewMonitor( /* constants Constants */ ) Monitor {
   	return Monitor{
   		extra:  []Event{},
   		events: []Event{},
@@ -734,7 +828,7 @@
   
   	// x = 1
   	if IsFalse(Eq(this.state.x, integer(1))) {
-  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, integer(1), prev, this)
+  		return fail("precondition failed in initial at %d; x = 1\n\nlhs: this.state.x\n\n= %+v\n\nrhs: integer(1)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, integer(1), prev, this)
   	}
   	return nil
   }
@@ -742,12 +836,13 @@
   func (monitor *Monitor) CheckA(trace_i int, prev Event, this Event) error {
   
   	// x < 0
-  	if IsFalse(IntLt(prev.state.x.(Int), integer(0))) {
-  		return fail("precondition failed in A at %d; x < 0\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(0), prev, this)
+  	if IsFalse(IntLt(any(prev.state.x).(Int), integer(0))) {
+  		return fail("precondition failed in A at %d; x < 0\n\nlhs: any(prev.state.x).(Int)\n\n= %+v\n\nrhs: integer(0)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(Int), integer(0), prev, this)
   	}
+  
   	// x' = x + 1
-  	if IsFalse(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1)))) {
-  		return fail("postcondition failed in A at %d; x' = x + 1\n\nlhs: this.state.x = %+v\nrhs: IntPlus(prev.state.x.(Int), integer(1)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, IntPlus(prev.state.x.(Int), integer(1)), prev, this)
+  	if IsFalse(Eq(this.state.x, IntPlus(any(prev.state.x).(Int), integer(1)))) {
+  		return fail("postcondition failed in A at %d; x' = x + 1\n\nlhs: this.state.x\n\n= %+v\n\nrhs: IntPlus(any(prev.state.x).(Int), integer(1))\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, IntPlus(any(prev.state.x).(Int), integer(1)), prev, this)
   	}
   	return nil
   }
@@ -755,12 +850,13 @@
   func (monitor *Monitor) CheckA1(trace_i int, prev Event, this Event) error {
   
   	// x < 0
-  	if IsFalse(IntLt(prev.state.x.(Int), integer(0))) {
-  		return fail("precondition failed in A1 at %d; x < 0\n\nlhs: prev.state.x.(Int) = %+v\nrhs: integer(0) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x.(Int), integer(0), prev, this)
+  	if IsFalse(IntLt(any(prev.state.x).(Int), integer(0))) {
+  		return fail("precondition failed in A1 at %d; x < 0\n\nlhs: any(prev.state.x).(Int)\n\n= %+v\n\nrhs: integer(0)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, any(prev.state.x).(Int), integer(0), prev, this)
   	}
+  
   	// x' = x + 1 \land x < 0
-  	if IsFalse(And(Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))), IntLt(prev.state.x.(Int), integer(0)))) {
-  		return fail("precondition failed in A1 at %d; x' = x + 1 \\land x < 0\n\nlhs: Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))) = %+v\nrhs: IntLt(prev.state.x.(Int), integer(0)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.x, IntPlus(prev.state.x.(Int), integer(1))), IntLt(prev.state.x.(Int), integer(0)), prev, this)
+  	if IsFalse(And(Eq(this.state.x, IntPlus(any(prev.state.x).(Int), integer(1))), IntLt(any(prev.state.x).(Int), integer(0)))) {
+  		return fail("precondition failed in A1 at %d; x' = x + 1 \\land x < 0\n\nlhs: Eq(this.state.x, IntPlus(any(prev.state.x).(Int), integer(1)))\n\n= %+v\n\nrhs: IntLt(any(prev.state.x).(Int), integer(0))\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Eq(this.state.x, IntPlus(any(prev.state.x).(Int), integer(1))), IntLt(any(prev.state.x).(Int), integer(0)), prev, this)
   	}
   	return nil
   }
@@ -769,15 +865,17 @@
   
   	// UNCHANGED(x)
   	if IsFalse(Eq(this.state.x, prev.state.x)) {
-  		return fail("precondition failed in B at %d; UNCHANGED(x)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
+  		return fail("precondition failed in B at %d; UNCHANGED(x)\n\nlhs: this.state.x\n\n= %+v\n\nrhs: prev.state.x\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
   	}
+  
   	// UNCHANGED(vars)
   	if IsFalse(Eq(this.state.x, prev.state.x)) {
-  		return fail("precondition failed in B at %d; UNCHANGED(vars)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
+  		return fail("precondition failed in B at %d; UNCHANGED(vars)\n\nlhs: this.state.x\n\n= %+v\n\nrhs: prev.state.x\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
   	}
+  
   	// UNCHANGED(<<x>>)
   	if IsFalse(Eq(this.state.x, prev.state.x)) {
-  		return fail("precondition failed in B at %d; UNCHANGED(<<x>>)\n\nlhs: this.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
+  		return fail("precondition failed in B at %d; UNCHANGED(<<x>>)\n\nlhs: this.state.x\n\n= %+v\n\nrhs: prev.state.x\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, this.state.x, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -786,7 +884,7 @@
   
   	// Send(x)
   	if IsFalse(Eq(prev.state.x, prev.state.x)) {
-  		return fail("precondition failed in C at %d; Send(x)\n\nlhs: prev.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
+  		return fail("precondition failed in C at %d; Send(x)\n\nlhs: prev.state.x\n\n= %+v\n\nrhs: prev.state.x\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -795,7 +893,7 @@
   
   	// Send(y)
   	if IsFalse(Eq(prev.state.x, y)) {
-  		return fail("precondition failed in SendM at %d; Send(y)\n\nlhs: prev.state.x = %+v\nrhs: y = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, y, prev, this)
+  		return fail("precondition failed in SendM at %d; Send(y)\n\nlhs: prev.state.x\n\n= %+v\n\nrhs: y\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, y, prev, this)
   	}
   	return nil
   }
@@ -804,7 +902,7 @@
   
   	// SendM(x)
   	if IsFalse(Eq(prev.state.x, prev.state.x)) {
-  		return fail("precondition failed in C1 at %d; SendM(x)\n\nlhs: prev.state.x = %+v\nrhs: prev.state.x = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
+  		return fail("precondition failed in C1 at %d; SendM(x)\n\nlhs: prev.state.x\n\n= %+v\n\nrhs: prev.state.x\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, prev.state.x, prev.state.x, prev, this)
   	}
   	return nil
   }
@@ -815,7 +913,7 @@
   
   		// ((x = 1 /\ x' = 2) \/ (x /= 1 /\ x' = 3))
   		if IsFalse(And(Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)))) {
-  			return fail("precondition failed in D at %d; ((x = 1 /\\ x' = 2) \\/ (x /= 1 /\\ x' = 3))\n\nlhs: Neq(prev.state.x, integer(1)) = %+v\nrhs: Eq(this.state.x, integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)), prev, this)
+  			return fail("precondition failed in D at %d; ((x = 1 /\\ x' = 2) \\/ (x /= 1 /\\ x' = 3))\n\nlhs: Neq(prev.state.x, integer(1))\n\n= %+v\n\nrhs: Eq(this.state.x, integer(3))\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)), prev, this)
   		}
   	}
   
@@ -828,7 +926,7 @@
   
   		// ((x = 1 /\ x' = 2) \/ (x /= 1 /\ x' = 3))
   		if IsFalse(And(Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)))) {
-  			return fail("precondition failed in E at %d; ((x = 1 /\\ x' = 2) \\/ (x /= 1 /\\ x' = 3))\n\nlhs: Neq(prev.state.x, integer(1)) = %+v\nrhs: Eq(this.state.x, integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)), prev, this)
+  			return fail("precondition failed in E at %d; ((x = 1 /\\ x' = 2) \\/ (x /= 1 /\\ x' = 3))\n\nlhs: Neq(prev.state.x, integer(1))\n\n= %+v\n\nrhs: Eq(this.state.x, integer(3))\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, Neq(prev.state.x, integer(1)), Eq(this.state.x, integer(3)), prev, this)
   		}
   	}
   
@@ -839,7 +937,7 @@
   
   	// TRUE
   	if IsFalse(boolean(true)) {
-  		return fail("precondition failed in F at %d; TRUE\n\nlhs: \"<none>\" = %+v\nrhs: \"<none>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
+  		return fail("precondition failed in F at %d; TRUE\n\nlhs: \"<none>\"\n\n= %+v\n\nrhs: \"<none>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
   	}
   	return nil
   }
@@ -847,8 +945,8 @@
   func (monitor *Monitor) CheckG(trace_i int, prev Event, this Event) error {
   
   	// [["a" |-> 1] EXCEPT !["a"] = 2]["a"] = 2
-  	if IsFalse(Eq(RecordIndex(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2))) {
-  		return fail("precondition failed in G at %d; [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2\n\nlhs: RecordIndex(Except(record(str(\"a\"), integer(1)), str(\"a\"), integer(2)), str(\"a\")) = %+v\nrhs: integer(2) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2), prev, this)
+  	if IsFalse(Eq(IndexInto(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2))) {
+  		return fail("precondition failed in G at %d; [[\"a\" |-> 1] EXCEPT ![\"a\"] = 2][\"a\"] = 2\n\nlhs: IndexInto(Except(record(str(\"a\"), integer(1)), str(\"a\"), integer(2)), str(\"a\"))\n\n= %+v\n\nrhs: integer(2)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, IndexInto(Except(record(str("a"), integer(1)), str("a"), integer(2)), str("a")), integer(2), prev, this)
   	}
   	return nil
   }
@@ -856,8 +954,8 @@
   func (monitor *Monitor) CheckH(trace_i int, prev Event, this Event) error {
   
   	// \A r \in {1, 2} : r = 1
-  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v0 TLA) Bool { return Eq(v0, integer(1)) })) {
-  		return fail("precondition failed in H at %d; \\A r \\in {1, 2} : r = 1\n\nlhs: set(integer(1), integer(2)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v0_r TLA) Bool { return Eq(v0_r, integer(1)) })) {
+  		return fail("precondition failed in H at %d; \\A r \\in {1, 2} : r = 1\n\nlhs: set(integer(1), integer(2))\n\n= %+v\n\nrhs: \"<func>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
   	}
   	return nil
   }
@@ -865,10 +963,10 @@
   func (monitor *Monitor) CheckH1(trace_i int, prev Event, this Event) error {
   
   	// \A s \in {1, 2} : \A r \in {3, 4} : r = s
-  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v1 TLA) Bool {
-  		return BoundedForall(set(integer(3), integer(4)), func(v2 TLA) Bool { return Eq(v2, v1) })
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v1_s TLA) Bool {
+  		return BoundedForall(set(integer(3), integer(4)), func(v2_r TLA) Bool { return Eq(v2_r, v1_s) })
   	})) {
-  		return fail("precondition failed in H1 at %d; \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s\n\nlhs: set(integer(1), integer(2)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
+  		return fail("precondition failed in H1 at %d; \\A s \\in {1, 2} : \\A r \\in {3, 4} : r = s\n\nlhs: set(integer(1), integer(2))\n\n= %+v\n\nrhs: \"<func>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(1), integer(2)), "<func>", prev, this)
   	}
   	return nil
   }
@@ -876,8 +974,8 @@
   func (monitor *Monitor) CheckH2(trace_i int, prev Event, this Event) error {
   
   	// [ r \in RM |-> "a" ]["a"] = 1
-  	if IsFalse(Eq(RecordIndex(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1))) {
-  		return fail("precondition failed in H2 at %d; [ r \\in RM |-> \"a\" ][\"a\"] = 1\n\nlhs: RecordIndex(FnConstruct(set(str(\"s1\"), str(\"2\")), func(_ TLA) TLA { return str(\"a\") }), str(\"a\")) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1), prev, this)
+  	if IsFalse(Eq(IndexInto(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1))) {
+  		return fail("precondition failed in H2 at %d; [ r \\in RM |-> \"a\" ][\"a\"] = 1\n\nlhs: IndexInto(FnConstruct(set(str(\"s1\"), str(\"2\")), func(_ TLA) TLA { return str(\"a\") }), str(\"a\"))\n\n= %+v\n\nrhs: integer(1)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, IndexInto(FnConstruct(set(str("s1"), str("2")), func(_ TLA) TLA { return str("a") }), str("a")), integer(1), prev, this)
   	}
   	return nil
   }
@@ -885,19 +983,19 @@
   func (monitor *Monitor) CheckH3(trace_i int, prev Event, this Event) error {
   
   	// [ r \in RM |-> r ]["a"] = 1
-  	if IsFalse(Eq(RecordIndex(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return v4.(Set) }), str("a")), integer(1))) {
-  		return fail("precondition failed in H3 at %d; [ r \\in RM |-> r ][\"a\"] = 1\n\nlhs: RecordIndex(FnConstruct(set(str(\"s1\"), str(\"2\")), func(v4 TLA) TLA { return v4.(Set) }), str(\"a\")) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, RecordIndex(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return v4.(Set) }), str("a")), integer(1), prev, this)
+  	if IsFalse(Eq(IndexInto(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return any(v4).(Set) }), str("a")), integer(1))) {
+  		return fail("precondition failed in H3 at %d; [ r \\in RM |-> r ][\"a\"] = 1\n\nlhs: IndexInto(FnConstruct(set(str(\"s1\"), str(\"2\")), func(v4 TLA) TLA { return any(v4).(Set) }), str(\"a\"))\n\n= %+v\n\nrhs: integer(1)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, IndexInto(FnConstruct(set(str("s1"), str("2")), func(v4 TLA) TLA { return any(v4).(Set) }), str("a")), integer(1), prev, this)
   	}
   	return nil
   }
   
   func (monitor *Monitor) CheckH4(trace_i int, prev Event, this Event) error {
   
-  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v5 TLA) Bool { return Eq(v5, integer(1)) })) {
+  	if IsFalse(BoundedForall(set(integer(1), integer(2)), func(v5_r TLA) Bool { return Eq(v5_r, integer(1)) })) {
   
   		// (\A r \in {1, 2} : r = 1 \/ \A r \in {2, 3} : r = 2)
-  		if IsFalse(BoundedForall(set(integer(2), integer(3)), func(v6 TLA) Bool { return Eq(v6, integer(2)) })) {
-  			return fail("precondition failed in H4 at %d; (\\A r \\in {1, 2} : r = 1 \\/ \\A r \\in {2, 3} : r = 2)\n\nlhs: set(integer(2), integer(3)) = %+v\nrhs: \"<func>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(2), integer(3)), "<func>", prev, this)
+  		if IsFalse(BoundedForall(set(integer(2), integer(3)), func(v6_r TLA) Bool { return Eq(v6_r, integer(2)) })) {
+  			return fail("precondition failed in H4 at %d; (\\A r \\in {1, 2} : r = 1 \\/ \\A r \\in {2, 3} : r = 2)\n\nlhs: set(integer(2), integer(3))\n\n= %+v\n\nrhs: \"<func>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, set(integer(2), integer(3)), "<func>", prev, this)
   		}
   	}
   
@@ -910,7 +1008,7 @@
   
   	// 1
   	if IsFalse(integer(1)) {
-  		return fail("check failed in a at %d; 1\n\nlhs: \"<none>\" = %+v\nrhs: \"<none>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
+  		return fail("check failed in a at %d; 1\n\nlhs: \"<none>\"\n\n= %+v\n\nrhs: \"<none>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
   	}
   	return nil
   }
@@ -919,7 +1017,7 @@
   
   	// 1
   	if IsFalse(integer(1)) {
-  		return fail("check failed in b at %d; 1\n\nlhs: \"<none>\" = %+v\nrhs: \"<none>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
+  		return fail("check failed in b at %d; 1\n\nlhs: \"<none>\"\n\n= %+v\n\nrhs: \"<none>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
   	}
   	return nil
   }
@@ -928,19 +1026,19 @@
   
   	// 1
   	if IsFalse(integer(1)) {
-  		return fail("check failed in c at %d; 1\n\nlhs: \"<none>\" = %+v\nrhs: \"<none>\" = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
+  		return fail("check failed in c at %d; 1\n\nlhs: \"<none>\"\n\n= %+v\n\nrhs: \"<none>\"\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, "<none>", "<none>", prev, this)
   	}
   	return nil
   }
   
   func (monitor *Monitor) CheckI1(trace_i int, prev Event, this Event) error {
   
-  	var c TLA = integer(1)
   	var a TLA = integer(1)
   	var b TLA = integer(1)
-  	// LET a == 1 b == 1 IN LET c == 1 IN a + b + c = 1
-  	if IsFalse(Eq(IntPlus(IntPlus(a.(Int), b.(Int)), c.(Int)), integer(1))) {
-  		return fail("check failed in I1 at %d; LET a == 1 b == 1 IN LET c == 1 IN a + b + c = 1\n\nlhs: IntPlus(IntPlus(a.(Int), b.(Int)), c.(Int)) = %+v\nrhs: integer(1) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, IntPlus(IntPlus(a.(Int), b.(Int)), c.(Int)), integer(1), prev, this)
+  	var c TLA = integer(1)
+  	// a + b + c = 1
+  	if IsFalse(Eq(IntPlus(IntPlus(any(a).(Int), any(b).(Int)), any(c).(Int)), integer(1))) {
+  		return fail("precondition failed in I1 at %d; a + b + c = 1\n\nlhs: IntPlus(IntPlus(any(a).(Int), any(b).(Int)), any(c).(Int))\n\n= %+v\n\nrhs: integer(1)\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, IntPlus(IntPlus(any(a).(Int), any(b).(Int)), any(c).(Int)), integer(1), prev, this)
   	}
   	return nil
   }
@@ -949,11 +1047,12 @@
   
   	// {1, 2} \union {3} = {}
   	if IsFalse(Eq(SetUnion(set(integer(1), integer(2)), set(integer(3))), set())) {
-  		return fail("precondition failed in Sets at %d; {1, 2} \\union {3} = {}\n\nlhs: SetUnion(set(integer(1), integer(2)), set(integer(3))) = %+v\nrhs: set() = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetUnion(set(integer(1), integer(2)), set(integer(3))), set(), prev, this)
+  		return fail("precondition failed in Sets at %d; {1, 2} \\union {3} = {}\n\nlhs: SetUnion(set(integer(1), integer(2)), set(integer(3)))\n\n= %+v\n\nrhs: set()\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, SetUnion(set(integer(1), integer(2)), set(integer(3))), set(), prev, this)
   	}
+  
   	// 1 \notin {3}
   	if IsFalse(SetNotIn(integer(1), set(integer(3)))) {
-  		return fail("precondition failed in Sets at %d; 1 \\notin {3}\n\nlhs: integer(1) = %+v\nrhs: set(integer(3)) = %+v\n\nprev: %+v\n\nthis: %+v", trace_i, integer(1), set(integer(3)), prev, this)
+  		return fail("precondition failed in Sets at %d; 1 \\notin {3}\n\nlhs: integer(1)\n\n= %+v\n\nrhs: set(integer(3))\n\n= %+v\n\nprev: %+v\n\nthis: %+v", trace_i, integer(1), set(integer(3)), prev, this)
   	}
   	return nil
   }
@@ -1034,18 +1133,18 @@
 
   $ monitor_check Counter
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor Counter.tla
-  556 lines
+  653 lines
   parse ok
   compile ok
 
   $ monitor_check TwoPhaseCommitFull
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor TwoPhaseCommitFull.tla
-  1068 lines
+  1261 lines
   parse ok
   compile ok
 
   $ monitor_check raft
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor raft.tla
-  1086 lines
+  1762 lines
   parse ok
   compile ok
