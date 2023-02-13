@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 
+# this file is meant to be sourced
+
 tlaroot=${tlaroot-.}
 tla2tools=${tla2tools-$tlaroot/tlatools/org.lamport.tlatools/dist/tla2tools.jar}
+
+startup() {
+  ls $tla2tools > /dev/null 2>&1 || { echo 'tla2tools not found. please set tlaroot'; unset tlaroot; unset tla2tools; return 1; }
+  echo tla2tools at $tla2tools
+}
+
+startup
 
 compile() {
   ant -f $tlaroot/tlatools/org.lamport.tlatools/customBuild.xml -Dtest.skip=true compile dist
@@ -16,6 +25,7 @@ test1() {
 alias c=compile
 alias t=test1
 alias d='dune promote'
+alias g='go run raft.go 2>&1 | less'
 
 tlatools() {
   name=$1
