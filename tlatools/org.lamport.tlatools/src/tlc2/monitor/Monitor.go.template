@@ -481,8 +481,8 @@ type Monitor struct {
 	//constants Constants
 }
 
-func NewMonitor(/* constants Constants */) Monitor {
-	return Monitor{
+func NewMonitor(/* constants Constants */) *Monitor {
+	return &Monitor{
 		extra:  []Event{},
 		events: []Event{},
 		//constants: constants,
