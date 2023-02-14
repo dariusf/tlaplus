@@ -42,9 +42,8 @@ public class GoTranslation {
             GoExpr expr = goExpr("Eq(this.state.%s, %s)",
                     e.getKey().toString(), val);
             return failureMessage("initial",
-                    String.format("%s = %s",
-                            e.getKey(), Eval.prettyPrint(e.getValue())),
-                    String.format("this.state.%s", e.getKey().toString()), val.expr,
+                    String.format("%s = %s", e.getKey(), Eval.prettyPrint(e.getValue())),
+                    List.of(String.format("this.state.%s", e.getKey().toString()), val.expr),
                     expr, "precondition");
         }).reduce(GoBlock::seq).get();
     }
@@ -60,17 +59,17 @@ public class GoTranslation {
         GoBlock topLevelLetBindings = goBlock("");
 
         if (op instanceof LetInNode) {
-                while (op instanceof LetInNode) {
-                    LetInNode let = (LetInNode) op;
-                    for (OpDefNode letLet : let.getLets()) {
-                        // TODO assume there are no local operator definitions
-                        String letVar = letLet.getName().toString();
-                        boundVarNames.add(letVar);
-                        topLevelLetBindings = topLevelLetBindings.seq(goBlock("var %s TLA = %s",
-                                letVar, translateExpr(letLet.getBody(), null)));
-                    }
-                    op = let.getBody();
+            while (op instanceof LetInNode) {
+                LetInNode let = (LetInNode) op;
+                for (OpDefNode letLet : let.getLets()) {
+                    // TODO assume there are no local operator definitions
+                    String letVar = letLet.getName().toString();
+                    boundVarNames.add(letVar);
+                    topLevelLetBindings = topLevelLetBindings.seq(goBlock("var %s TLA = %s",
+                            letVar, translateExpr(letLet.getBody(), null)));
                 }
+                op = let.getBody();
+            }
         }
 
         if (!(op instanceof OpApplNode)) {
@@ -116,39 +115,45 @@ public class GoTranslation {
         return s.replaceAll("\\\\", "\\\\\\\\").replaceAll("\"", "\\\\\"");
     }
 
+    public static List<String> findSubexprs(GoExpr expr) {
+        List<String> res = new ArrayList<>();
+        expr.subexprs.forEach(e -> {
+            res.add(e.expr);
+            // TODO the problem with this is it may get exprs with free vars
+            // res.addAll(findSubexprs(e));
+        });
+        return res;
+    }
+
     public static GoBlock failureMessage(String action, ExprOrOpArgNode op, GoExpr expr, String cond) {
-        return failureMessage(action, Eval.prettyPrint(op),
-                expr.subexprs.size() > 0 ? expr.subexprs.get(0).expr : "\"<none>\"",
-                expr.subexprs.size() > 1 ? expr.subexprs.get(1).expr : "\"<none>\"",
-                expr, cond);
+        return failureMessage(action, Eval.prettyPrint(op), findSubexprs(expr), expr, cond);
     }
 
     /**
      * Lower-level function, for cases where we didn't translate from an OpApplNode, e.g. the initial state
      */
-    public static GoBlock failureMessage(String action, String op, String lhs, String rhs, GoExpr expr, String cond) {
-        if (lhs.startsWith("func")) {
-            lhs = "\"<func>\"";
-        }
-        if (rhs.startsWith("func")) {
-            rhs = "\"<func>\"";
-        }
-        return goBlock("// %9$s\n" +
-                        "if IsFalse(%1$s) {\n" +
-                        "return fail(\"%2$s failed in %3$s at %%d; %4$s\\n\\n" +
-                        "lhs: %5$s\\n\\n= %%+v\\n\\n" +
-                        "rhs: %6$s\\n\\n= %%+v\\n\\n" +
-                        "prev: %%+v\\n\\n" +
-                        "this: %%+v\"" +
-                        ", trace_i, %7$s, %8$s, prev, this)\n}",
+    public static GoBlock failureMessage(String action, String op, List<String> subexprs, GoExpr expr, String cond) {
+        String fmt = subexprs.stream()
+                .map(s -> s.startsWith("func") ? "\"<func>\"" : s)
+                .map(s -> String.format("%s = %%+v", s))
+                .map(GoTranslation::escape)
+                .collect(Collectors.joining("\\n\\n"));
+        String args = subexprs.stream()
+                .map(s -> s.startsWith("func") ? "\"<func>\"" : s)
+                .collect(Collectors.joining(", "));
+
+        return goBlock("// %s\n" +
+                        "if IsFalse(%s) {\n" +
+                        "return fail(\"%s failed in %s at %%d; %s\\n\\n" +
+                        "%s\"" +
+                        ", trace_i, %s)\n}",
+                op,
                 expr,
                 cond,
                 action,
                 escape(op),
-                escape(lhs), escape(rhs),
-                lhs, rhs,
-                op
-        );
+                fmt,
+                args);
     }
 
 
