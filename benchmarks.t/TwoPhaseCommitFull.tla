@@ -102,7 +102,7 @@ CSendAbort(r) ==
   /\ Len(tmAborted) > 0
   /\ tmDecision /= "commit"
   /\ tmDecision' = "abort"
-  /\ r \notin tmAborted
+  /\ r \notin ToSet(tmAborted)
   /\ Send([type |-> "Abort", mdest |-> r, msource |-> "coordinator"])
   /\ UNCHANGED <<rmState>>
   /\ UNCHANGED <<tmPrepared, tmCommitted, tmAborted>>
@@ -192,10 +192,62 @@ TC == INSTANCE TCommit
 TCConsistent == TC!TCConsistent
 TCSpec == TC!TCSpec
 
-ConstrBounded == TLCGet("level") < 20
+ConstrBounded == TLCGet("level") < 50
+
+DesiredHist == <<
+\* phase 1
+    <<"CSendPrepare", "r1">>
+    , <<"CSendPrepare", "r2">>
+    , <<"NetworkTakeMessage", [type |-> "Prepare", mdest |-> "r2", msource |-> "coordinator"]>>
+    , <<"NetworkTakeMessage", [type |-> "Prepare", mdest |-> "r1", msource |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Prepare", mdest |-> "r1", msource |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Prepare", mdest |-> "r2", msource |-> "coordinator"]>>
+    , <<"PHandlePrepare", "r1", "prepared">>
+    , <<"PHandlePrepare", "r2", "prepared">>
+    , <<"NetworkTakeMessage", [type |-> "Prepared", msource |-> "r1", mdest |-> "coordinator"]>>
+    , <<"NetworkTakeMessage", [type |-> "Prepared", msource |-> "r2", mdest |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Prepared", msource |-> "r1", mdest |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Prepared", msource |-> "r2", mdest |-> "coordinator"]>>
+    , <<"CReceivePrepare", "r1">>
+    , <<"CReceivePrepare", "r2">>
+
+\* phase 2
+    , <<"CSendCommit", "r2">>
+    , <<"CSendCommit", "r1">>
+    , <<"NetworkTakeMessage", [type |-> "Commit", mdest |-> "r2", msource |-> "coordinator"]>>
+    , <<"NetworkTakeMessage", [type |-> "Commit", mdest |-> "r1", msource |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Commit", mdest |-> "r1", msource |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Commit", mdest |-> "r2", msource |-> "coordinator"]>>
+
+    , <<"PHandleCommit", "r1">>
+    , <<"PHandleCommit", "r2">>
+
+    , <<"NetworkTakeMessage", [type |-> "Committed", msource |-> "r2", mdest |-> "coordinator"]>>
+    , <<"NetworkTakeMessage", [type |-> "Committed", msource |-> "r1", mdest |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Committed", msource |-> "r1", mdest |-> "coordinator"]>>
+    , <<"NetworkDeliverMessage", [type |-> "Committed", msource |-> "r2", mdest |-> "coordinator"]>>
+
+    , <<"CReceiveCommit", "r1">>
+    , <<"CReceiveCommit", "r2">>
+  >>
+
+ConstrHist ==
+  \* level 1 is the initial state, and at that point actions is empty
+  LET i == TLCGet("level") - 1 IN
+  1 <= i /\ i <= Len(DesiredHist) =>
+    actions[i] = DesiredHist[i]
+
+TargetHist == ~
+  LET i == TLCGet("level") - 1 IN
+  /\ i = Len(DesiredHist)
+  /\ actions[i] = DesiredHist[i]
 
 TargetLength == ~
-  /\ TLCGet("level") > 6
+  /\ TLCGet("level") > 4
+
+TargetInterm == ~
+  /\ Len(tmCommitted) > 0
+  \* /\ Len(tmPrepared) > 0
 
 TargetCommit == ~
   /\ ToSet(tmCommitted) = RM

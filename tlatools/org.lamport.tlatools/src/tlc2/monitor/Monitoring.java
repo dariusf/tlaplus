@@ -45,6 +45,72 @@ public class Monitoring {
         }
     }
 
+    public static Stream<String> translateDef(OpDefNode d,
+                                              Set<String> translatedDefs,
+                                              Defns defns,
+                                              Map<String, IValue> constants,
+                                              Set<String> declaredVariableNames) {
+        try {
+            if (d.getBody() instanceof SubstInNode) {
+                // INSTANCE declarations are one instance of this
+                return Stream.of();
+            }
+//                Set<String> letBoundNames = new HashSet<>();
+            // TODO move this into GoTranslation
+            GoTranslation translation = new GoTranslation(defns, constants, declaredVariableNames);
+
+            // inline all the let bindings
+//                GoBlock letBindings = goBlock("");
+//                ExprNode defBody = d.getBody();
+//                while (defBody instanceof LetInNode) {
+//                    LetInNode let = (LetInNode) defBody;
+//                    for (OpDefNode letLet : let.getLets()) {
+//                        // TODO assume there are no local operator definitions
+//                        String letVar = letLet.getName().toString();
+//                        translation.boundVarNames.add(letVar);
+//                        letBindings = letBindings.seq(goBlock("var %s TLA = %s",
+//                                letVar, translation.translateExpr(letLet.getBody(), null)));
+//                    }
+//                    defBody = let.getBody();
+//                }
+
+//                if (!(defBody instanceof OpApplNode)) {
+//                    // TODO let bindings show up BOTH as top-level operator definitions and as LetInNodes.
+//                    //  From a quick glance at their state, there doesn't seem to be a way to filter them out.
+//                    //  We ignore them as there is code above for inlining them.
+//                    String m = String.format("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
+//                    throw new CannotBeTranslatedException(m);
+//                }
+            String params = translateParams(d, (i, p) -> String.format("%s TLA", p.getName().toString()))
+                    .collect(Collectors.joining(", "));
+            if (!params.isEmpty()) {
+                params += ", ";
+            }
+
+            List<String> paramNames = translateParams(d, (i, p) -> p.getName().toString())
+                    .collect(Collectors.toList());
+
+            translation.boundVarNames.addAll(paramNames);
+            GoBlock body = translation.translateTopLevel(d.getName().toString(), d.getBody());
+            translation.boundVarNames.removeAll(paramNames);
+
+            String a = String.format("func (monitor *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
+                            "%s\n" +
+                            "return nil\n" +
+                            "}",
+                    d.getName(),
+                    params,
+//                        letBindings.seq(body)
+                    body
+            );
+            translatedDefs.add(d.getName().toString());
+            return Stream.of(a);
+        } catch (CannotBeTranslatedException e) {
+            return Stream.of(String.format("/* Action %s cannot be translated because of: %s */",
+                    d.getName(), e.getMessage()));
+        }
+    }
+
     public static void translate(Defns defns, Map<String, IValue> constants, Map<UniqueString, IValue> initialState, ModuleNode rootModule) throws Exception {
 
         String overallTemplate = Objects.requireNonNull(getResourceFileAsString("tlc2/monitor/Monitor.go.template"));
@@ -67,6 +133,13 @@ public class Monitoring {
                 .map(d -> (OpDefNode) d)
                 .collect(Collectors.toList());
 
+        // Add some definitions found in used modules
+        definitions.addAll(rootModule.getExtendedModuleSet().stream()
+                .filter(m -> m.getName().toString().equals("InboxOutbox"))
+                .flatMap(m -> m.getDefinitions().stream()
+                        .map(d -> (OpDefNode) d))
+                .collect(Collectors.toList()));
+
         TLDefVisitor tldVisitor = new TLDefVisitor();
         Set<String> topLevelDefs = definitions.stream()
                 .filter(d -> d.getBody().accept(tldVisitor))
@@ -83,67 +156,8 @@ public class Monitoring {
         Set<String> translatedDefs = new HashSet<>();
 
         String monitorFns = definitions.stream()
-                .flatMap(d -> {
-                    try {
-                        if (d.getBody() instanceof SubstInNode) {
-                            // INSTANCE declarations are one instance of this
-                            return Stream.of();
-                        }
-//                Set<String> letBoundNames = new HashSet<>();
-                        // TODO move this into GoTranslation
-                        GoTranslation translation = new GoTranslation(defns, constants, declaredVariableNames);
-
-                        // inline all the let bindings
-//                GoBlock letBindings = goBlock("");
-//                ExprNode defBody = d.getBody();
-//                while (defBody instanceof LetInNode) {
-//                    LetInNode let = (LetInNode) defBody;
-//                    for (OpDefNode letLet : let.getLets()) {
-//                        // TODO assume there are no local operator definitions
-//                        String letVar = letLet.getName().toString();
-//                        translation.boundVarNames.add(letVar);
-//                        letBindings = letBindings.seq(goBlock("var %s TLA = %s",
-//                                letVar, translation.translateExpr(letLet.getBody(), null)));
-//                    }
-//                    defBody = let.getBody();
-//                }
-
-//                if (!(defBody instanceof OpApplNode)) {
-//                    // TODO let bindings show up BOTH as top-level operator definitions and as LetInNodes.
-//                    //  From a quick glance at their state, there doesn't seem to be a way to filter them out.
-//                    //  We ignore them as there is code above for inlining them.
-//                    String m = String.format("%s is not an OpApplNode but an %s", d.getName(), d.getBody().getClass().getSimpleName());
-//                    throw new CannotBeTranslatedException(m);
-//                }
-                        String params = translateParams(d, (i, p) -> String.format("%s TLA", p.getName().toString()))
-                                .collect(Collectors.joining(", "));
-                        if (!params.isEmpty()) {
-                            params += ", ";
-                        }
-
-                        List<String> paramNames = translateParams(d, (i, p) -> p.getName().toString())
-                                .collect(Collectors.toList());
-
-                        translation.boundVarNames.addAll(paramNames);
-                        GoBlock body = translation.translateTopLevel(d.getName().toString(), d.getBody());
-                        translation.boundVarNames.removeAll(paramNames);
-
-                        String a = String.format("func (monitor *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
-                                        "%s\n" +
-                                        "return nil\n" +
-                                        "}",
-                                d.getName(),
-                                params,
-//                        letBindings.seq(body)
-                                body
-                        );
-                        translatedDefs.add(d.getName().toString());
-                        return Stream.of(a);
-                    } catch (CannotBeTranslatedException e) {
-                        return Stream.of(String.format("/* Action %s cannot be translated because of: %s */",
-                                d.getName(), e.getMessage()));
-                    }
-                }).collect(Collectors.joining("\n\n"));
+                .flatMap(d -> translateDef(d, translatedDefs, defns, constants, declaredVariableNames))
+                .collect(Collectors.joining("\n\n"));
 
         GoBlock initialBody;
         {

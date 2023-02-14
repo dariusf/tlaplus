@@ -1,105 +1,176 @@
 func main() {
 	m := NewMonitor()
 
+	r1 := str("r1")
+	r2 := str("r2")
+	coordinator := str("coordinator")
+
 	s := State{
-		who:             str("none"),
-		lastMsgReceived: seq(),
-		tmCommitted:     seq(),
-		lastMsgSent:     seq(),
-		tmPrepared:      seq(),
-		msgs:            set(),
-		tmAborted:       seq(),
-		rmState:         record(str("r1"), str("working"), str("r2"), str("working")),
+		// monitoring
+		who:     seq(),
+		actions: seq(),
+		// inbox/outbox
+		inflight: seq(),
+		inbox: record(
+			r1, seq(),
+			r2, seq(),
+			coordinator, seq(),
+		),
+		outbox: record(
+			r1, seq(),
+			r2, seq(),
+			coordinator, seq(),
+		),
+		// model
+		tmAborted:   seq(),
+		tmCommitted: seq(),
+		tmPrepared:  seq(),
+		tmDecision:  str("none"),
+		rmState: record(
+			r1, str("working"),
+			r2, str("working"),
+		),
 	}
 
 	m.CaptureState(s, Initial)
 
-	r1 := str("r1")
-	r2 := str("r2")
-
 	// coordinator
-	r1prepare := record(str("type"), str("Prepare"), str("rm"), r1)
-	s.lastMsgSent = seq(r1prepare)
-	s.msgs = set(r1prepare)
-	s.who = str("coordinator")
+	mdest := str("mdest")
+	msource := str("msource")
+	typ := str("type")
+	prepare := str("Prepare")
+
+	r1prepare := record(typ, prepare, msource, coordinator, mdest, r1)
+	s.outbox = Except(s.outbox.(Record), coordinator, seq(r1prepare))
+	s.who = coordinator
+	s.actions = Append(s.actions.(Seq), seq(str("CSendPrepare"), r1))
 	m.CaptureState(s, CSendPrepare, r1)
 
-	r2prepare := record(str("type"), str("Prepare"), str("rm"), r2)
-	s.lastMsgSent = seq(r2prepare)
-	s.msgs = SetUnion(s.msgs.(Set), set(r2prepare))
-	s.who = str("coordinator")
+	r2prepare := record(typ, prepare, msource, coordinator, mdest, r2)
+	s.outbox = Except(s.outbox.(Record), coordinator, seq(r1prepare, r2prepare))
+	s.who = coordinator
+	s.actions = Append(s.actions.(Seq), seq(str("CSendPrepare"), r2))
 	m.CaptureState(s, CSendPrepare, r2)
 
-	// participants
-	r2prepared := record(str("type"), str("Prepared"), str("rm"), r2)
-	s.msgs = SetUnion(s.msgs.(Set), set(r2prepared))
-	s.who = r2
-	s.rmState = Except(s.rmState.(Record), r2, str("prepared"))
-	m.CaptureState(s, PHandlePrepare, r2)
+	s.outbox = Except(s.outbox.(Record), coordinator, seq(r2prepare))
+	s.inflight = seq(r1prepare)
+	s.who = str("Network")
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1prepare))
+	m.CaptureState(s, NetworkTakeMessage, coordinator)
 
-	r1prepared := record(str("type"), str("Prepared"), str("rm"), r1)
-	s.msgs = SetUnion(s.msgs.(Set), set(r1prepared))
-	s.who = r1
-	s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
-	m.CaptureState(s, PHandlePrepare, r1)
+	s.outbox = Except(s.outbox.(Record), coordinator, seq())
+	s.inflight = seq(r1prepare, r2prepare)
+	s.who = str("Network")
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1prepare))
+	m.CaptureState(s, NetworkTakeMessage, coordinator)
 
-	// coordinator
-	s.lastMsgReceived = seq(r1prepared)
-	s.lastMsgSent = seq()
-	s.tmPrepared = Append(s.tmPrepared.(Seq), r1)
-	s.msgs = SetUnion(s.msgs.(Set), set(r1prepared))
-	s.who = str("coordinator")
-	s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
-	m.CaptureState(s, CReceivePrepare, r1)
+	s.inflight = seq(r2prepare)
+	s.inbox = Except(s.inbox.(Record), r1, seq(r1prepare))
+	s.who = str("Network")
+	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1prepare))
+	m.CaptureState(s, NetworkDeliverMessage, r1)
 
-	s.lastMsgReceived = seq(r2prepared)
-	s.lastMsgSent = seq()
-	s.tmPrepared = Append(s.tmPrepared.(Seq), r2)
-	s.msgs = SetUnion(s.msgs.(Set), set(r2prepared))
-	s.who = str("coordinator")
-	s.rmState = Except(s.rmState.(Record), r2, str("prepared"))
-	m.CaptureState(s, CReceivePrepare, r2)
+	// prepared := str("Prepared")
+	// // committed := str("Committed")
+	// // aborted := str("Aborted")
+	// // abort := str("Abort")
+	// // commit := str("Commit")
 
-	// commit
-	r1commit := record(str("type"), str("Commit"), str("rm"), r1)
-	s.lastMsgReceived = seq()
-	s.lastMsgSent = seq(r1commit)
-	s.msgs = SetUnion(s.msgs.(Set), set(r1commit))
-	s.who = str("coordinator")
-	m.CaptureState(s, CSendCommit, r1)
+	// r1prepared := record(typ, prepared, mdest, coordinator, msource, r1)
+	// s.inbox = Except(s.inbox.(Record), r1, seq())
+	// s.outbox = Except(s.outbox.(Record), r1, seq(r1prepared))
+	// s.who = r1
+	// s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
+	// s.actions = Append(s.actions.(Seq), seq(str("PHandlePrepare"), r1))
+	// m.CaptureState(s, PHandlePrepare, r1)
 
-	r2commit := record(str("type"), str("Commit"), str("rm"), r2)
-	s.lastMsgReceived = seq()
-	s.lastMsgSent = seq(r2commit)
-	s.msgs = SetUnion(s.msgs.(Set), set(r2commit))
-	s.who = str("coordinator")
-	m.CaptureState(s, CSendCommit, r2)
+	// // r2
+	// s.inbox = Except(s.inbox.(Record), r2, seq(r2prepare))
+	// s.inflight = seq()
+	// s.who = str("Network")
+	// s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2prepare))
+	// m.CaptureState(s, NetworkDeliverMessage, r2)
 
-	// participants ack commit
-	r2committed := record(str("type"), str("Committed"), str("rm"), r2)
-	s.msgs = SetUnion(s.msgs.(Set), set(r2committed))
-	s.who = r2
-	s.rmState = Except(s.rmState.(Record), r2, str("committed"))
-	m.CaptureState(s, PHandleCommit, r2)
+	// r2prepared := record(typ, prepared, mdest, coordinator, msource, r2)
+	// s.inbox = Except(s.inbox.(Record), r2, seq())
+	// s.outbox = Except(s.outbox.(Record), r2, seq(r2prepared))
+	// s.who = r2
+	// s.rmState = Except(s.rmState.(Record), r2, str("prepared"))
+	// s.actions = Append(s.actions.(Seq), seq(str("PHandlePrepare"), r2))
+	// m.CaptureState(s, PHandlePrepare, r2)
 
-	r1committed := record(str("type"), str("Committed"), str("rm"), r1)
-	s.msgs = SetUnion(s.msgs.(Set), set(r1committed))
-	s.who = r1
-	s.rmState = Except(s.rmState.(Record), r1, str("committed"))
-	m.CaptureState(s, PHandleCommit, r1)
+	// // network
 
-	// receive commit
-	s.lastMsgReceived = seq(r1committed)
-	s.lastMsgSent = seq()
-	s.who = str("coordinator")
-	s.tmCommitted = Append(s.tmCommitted.(Seq), r1)
-	m.CaptureState(s, CReceiveCommit, r1)
+	// s.outbox = Except(s.outbox.(Record), r2, seq())
+	// s.outbox = Except(s.outbox.(Record), r1, seq())
+	// s.inflight = seq(r2prepared, r1prepared)
+	// s.who = str("Network")
+	// s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), seq(r2prepared, r1prepared)))
+	// m.CaptureState(s, NetworkTakeMessage, r2)
 
-	s.lastMsgReceived = seq(r2committed)
-	s.lastMsgSent = seq()
-	s.who = str("coordinator")
-	s.tmCommitted = Append(s.tmCommitted.(Seq), r2)
-	m.CaptureState(s, CReceiveCommit, r2)
+	// r1prepared := record(str("type"), str("Prepared"), str("rm"), r1)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r1prepared))
+	// s.who = r1
+	// s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
+	// m.CaptureState(s, PHandlePrepare, r1)
+
+	// // coordinator
+	// s.lastMsgReceived = seq(r1prepared)
+	// s.lastMsgSent = seq()
+	// s.tmPrepared = Append(s.tmPrepared.(Seq), r1)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r1prepared))
+	// s.who = str("coordinator")
+	// s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
+	// m.CaptureState(s, CReceivePrepare, r1)
+
+	// s.lastMsgReceived = seq(r2prepared)
+	// s.lastMsgSent = seq()
+	// s.tmPrepared = Append(s.tmPrepared.(Seq), r2)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r2prepared))
+	// s.who = str("coordinator")
+	// s.rmState = Except(s.rmState.(Record), r2, str("prepared"))
+	// m.CaptureState(s, CReceivePrepare, r2)
+
+	// // commit
+	// r1commit := record(str("type"), str("Commit"), str("rm"), r1)
+	// s.lastMsgReceived = seq()
+	// s.lastMsgSent = seq(r1commit)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r1commit))
+	// s.who = str("coordinator")
+	// m.CaptureState(s, CSendCommit, r1)
+
+	// r2commit := record(str("type"), str("Commit"), str("rm"), r2)
+	// s.lastMsgReceived = seq()
+	// s.lastMsgSent = seq(r2commit)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r2commit))
+	// s.who = str("coordinator")
+	// m.CaptureState(s, CSendCommit, r2)
+
+	// // participants ack commit
+	// r2committed := record(str("type"), str("Committed"), str("rm"), r2)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r2committed))
+	// s.who = r2
+	// s.rmState = Except(s.rmState.(Record), r2, str("committed"))
+	// m.CaptureState(s, PHandleCommit, r2)
+
+	// r1committed := record(str("type"), str("Committed"), str("rm"), r1)
+	// s.msgs = SetUnion(s.msgs.(Set), set(r1committed))
+	// s.who = r1
+	// s.rmState = Except(s.rmState.(Record), r1, str("committed"))
+	// m.CaptureState(s, PHandleCommit, r1)
+
+	// // receive commit
+	// s.lastMsgReceived = seq(r1committed)
+	// s.lastMsgSent = seq()
+	// s.who = str("coordinator")
+	// s.tmCommitted = Append(s.tmCommitted.(Seq), r1)
+	// m.CaptureState(s, CReceiveCommit, r1)
+
+	// s.lastMsgReceived = seq(r2committed)
+	// s.lastMsgSent = seq()
+	// s.who = str("coordinator")
+	// s.tmCommitted = Append(s.tmCommitted.(Seq), r2)
+	// m.CaptureState(s, CReceiveCommit, r2)
 
 	m.CheckTrace()
 	fmt.Println("ok!")

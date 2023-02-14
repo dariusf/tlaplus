@@ -11,8 +11,8 @@ CONSTANT Server
 MsgsIn(box) == FoldSeq(LAMBDA c,t: box[c] \o t, <<>>, SetToSeq(Server))
 
 SendM(sender, m) ==
-  /\ \A i \in 1..Len(inflight) : inflight[i] /= m
-  /\ \A i \in 1..Len(outbox[sender]) : outbox[sender][i] /= m
+  \* /\ \A i \in 1..Len(inflight) : inflight[i] /= m
+  \* /\ \A i \in 1..Len(outbox[sender]) : outbox[sender][i] /= m
   /\ outbox' = [outbox EXCEPT ![sender] = Append(outbox[sender], m)]
 
 RecvM(recipient, m) ==
@@ -47,12 +47,13 @@ Reply(res, req) ==
 
 NetworkTakeMessage(sender) ==
   /\ outbox[sender] /= <<>>
-  /\ outbox' = [s1 \in Server |-> <<>>]
-  /\ inflight' = inflight \o MsgsIn(outbox)
-  /\ UNCHANGED inbox
-  \* /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-  /\ LogAction(<<"NetworkTakeMessage", MsgsIn(outbox)>>)
-  /\ LogActor("Network")
+  /\ \E i \in 1..Len(outbox[sender]) :
+    /\ outbox[sender][i].msource = sender
+    /\ outbox' = [outbox EXCEPT ![sender] = RemoveAt(outbox[sender], i)]
+    /\ inflight' = Append(inflight, outbox[sender][i])
+    /\ LogAction(<<"NetworkTakeMessage", outbox[sender][i]>>)
+    /\ LogActor("Network")
+    /\ UNCHANGED inbox
 
 NetworkDeliverMessage(recipient) ==
   /\ inflight /= <<>>
@@ -63,9 +64,11 @@ NetworkDeliverMessage(recipient) ==
     /\ LogAction(<<"NetworkDeliverMessage", inflight[i]>>)
     /\ LogActor("Network")
     /\ UNCHANGED outbox
-    \* /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
 
 \* tractable model checking
-SoupSize == Len(inflight) <= 2
+SoupSize ==
+  /\ Len(inflight) <= 3
+  /\ \A s \in Server : Len(outbox[s]) <= 1
+  /\ \A s \in Server : Len(inbox[s]) <= 1
 
 =============================================================================
