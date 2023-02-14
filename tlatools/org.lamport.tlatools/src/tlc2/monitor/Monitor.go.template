@@ -389,6 +389,16 @@ func RangeIncl(lower Int, upper Int) Set {
     return set(res...)
 }
 
+func d(a TLA) Bool {
+	// fmt.Printf("%%#v = %%+v\n", a, a)
+	fmt.Printf("%%+v\n", a)
+	return a.(Bool)
+}
+
+func dAnd(a Bool, b Bool) Bool {
+	return d(And(a, b))
+}
+
 // panic instead of returning error
 var crash = true
 
