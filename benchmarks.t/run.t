@@ -1,5 +1,6 @@
 
-  $ source ../build.sh; tla2tools=../tlatools/org.lamport.tlatools/dist/tla2tools.jar
+  $ tlaroot=.. source ../build.sh
+  tla2tools at ../tlatools/org.lamport.tlatools/dist/tla2tools.jar
 
   $ pluscal -label Par.tla | make_det
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans -label Par.tla
@@ -704,8 +705,8 @@
   	//constants Constants
   }
   
-  func NewMonitor( /* constants Constants */ ) Monitor {
-  	return Monitor{
+  func NewMonitor( /* constants Constants */ ) *Monitor {
+  	return &Monitor{
   		extra:  []Event{},
   		events: []Event{},
   		//constants: constants,
@@ -1139,7 +1140,7 @@
 
   $ monitor_check TwoPhaseCommitFull
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor TwoPhaseCommitFull.tla
-  1261 lines
+  1105 lines
   parse ok
   compile ok
 

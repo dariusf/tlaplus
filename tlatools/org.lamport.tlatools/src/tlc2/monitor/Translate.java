@@ -115,13 +115,23 @@ public class Translate {
                 })
                 .toArray(ExprOrOpArgNode[]::new);
 
-        boolean unchanged = IntStream.range(0, args.length).allMatch(i -> args[i] == body.getArgs()[i]);
+        ExprNode[] ranges = Arrays.stream(body.getBdedQuantBounds()).map(a -> {
+            if (a instanceof OpApplNode) {
+                return substitute(a, subs);
+            }
+            return a;
+        }).toArray(ExprNode[]::new);
+
+        boolean unchanged = IntStream.range(0, args.length).allMatch(i -> args[i] == body.getArgs()[i]) &&
+                IntStream.range(0, ranges.length).allMatch(i -> ranges[i] == body.getBdedQuantBounds()[i]);
+
         if (unchanged) {
             return node;
         }
 
         OpApplNode res = body.astCopy();
         res.setArgs(args);
+        res.setBdedQuantBounds(ranges);
         // System.out.printf("sub %s => %s%n", Eval.prettyPrint(body), Eval.prettyPrint(res));
 
         // this is essentially (OpApplNode) res and is safe due to the checks above

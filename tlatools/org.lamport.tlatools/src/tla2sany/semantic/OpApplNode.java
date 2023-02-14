@@ -401,6 +401,10 @@ public class OpApplNode extends ExprNode implements ExploreNode {
    */
   public final ExprNode[] getBdedQuantBounds() { return this.ranges; }
 
+  public final void setBdedQuantBounds(ExprNode[] expr) {
+    this.ranges = expr;
+  }
+
   private final ExprOrOpArgNode getArg(SymbolNode param) {
     /***********************************************************************
     * If param is a formal parameter of this node's operator, then return  *
