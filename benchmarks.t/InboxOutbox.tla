@@ -45,25 +45,36 @@ Reply(res, req) ==
   /\ SendM(res.msource, res)
   /\ UNCHANGED inflight
 
-NetworkTakeMessage(sender) ==
-  /\ outbox[sender] /= <<>>
-  /\ \E i \in 1..Len(outbox[sender]) :
-    /\ outbox[sender][i].msource = sender
-    /\ outbox' = [outbox EXCEPT ![sender] = RemoveAt(outbox[sender], i)]
-    /\ inflight' = Append(inflight, outbox[sender][i])
-    /\ LogAction(<<"NetworkTakeMessage", outbox[sender][i]>>)
-    /\ LogActor("Network")
-    /\ UNCHANGED inbox
+NetworkTakeMessage(msg) ==
+  /\ msg \in ToSet(outbox[msg.msource])
+  /\ outbox' = [outbox EXCEPT ![msg.msource] = Remove(outbox[msg.msource], msg)]
+  /\ inflight' = Append(inflight, msg)
+  /\ LogAction(<<"NetworkTakeMessage", msg>>)
+  /\ LogActor("Network")
+  /\ UNCHANGED inbox
 
-NetworkDeliverMessage(recipient) ==
-  /\ inflight /= <<>>
-  /\ \E i \in 1..Len(inflight) :
-    /\ inflight[i].mdest = recipient
-    /\ inbox' = [inbox EXCEPT ![recipient] = Append(inbox[recipient], inflight[i])]
-    /\ inflight' = RemoveAt(inflight, i)
-    /\ LogAction(<<"NetworkDeliverMessage", inflight[i]>>)
-    /\ LogActor("Network")
-    /\ UNCHANGED outbox
+NetworkDeliverMessage(msg) ==
+  /\ msg \in ToSet(inflight)
+  /\ inflight' = Remove(inflight, msg)
+  /\ inbox' = [inbox EXCEPT ![msg.mdest] = Append(inbox[msg.mdest], msg)]
+  /\ LogAction(<<"NetworkDeliverMessage", msg>>)
+  /\ LogActor("Network")
+  /\ UNCHANGED outbox
+
+NetworkTakeMessageProjected(msg) ==
+  /\ msg \in ToSet(outbox[msg.msource])
+  /\ UNCHANGED inflight
+  /\ outbox' = [outbox EXCEPT ![msg.msource] = Remove(outbox[msg.msource], msg)]
+  /\ LogAction(<<"NetworkTakeMessage", msg>>)
+  /\ LogActor("Network")
+  /\ UNCHANGED inbox
+
+NetworkDeliverMessageProjected(msg) ==
+  /\ UNCHANGED inflight
+  /\ inbox' = [inbox EXCEPT ![msg.mdest] = Append(inbox[msg.mdest], msg)]
+  /\ LogAction(<<"NetworkDeliverMessage", msg>>)
+  /\ LogActor("Network")
+  /\ UNCHANGED outbox
 
 \* tractable model checking
 SoupSize ==

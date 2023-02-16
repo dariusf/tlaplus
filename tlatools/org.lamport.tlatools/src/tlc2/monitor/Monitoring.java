@@ -137,7 +137,9 @@ public class Monitoring {
         definitions.addAll(rootModule.getExtendedModuleSet().stream()
                 .filter(m -> m.getName().toString().equals("InboxOutbox"))
                 .flatMap(m -> m.getDefinitions().stream()
-                        .map(d -> (OpDefNode) d))
+                        .map(d -> (OpDefNode) d)
+                        .filter(d -> d.getName().toString().endsWith("Projected")))
+                // .map(d -> ((OpDefNode) d).setBody()))
                 .collect(Collectors.toList()));
 
         TLDefVisitor tldVisitor = new TLDefVisitor();

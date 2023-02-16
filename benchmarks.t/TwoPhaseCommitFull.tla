@@ -168,11 +168,18 @@ TPNext ==
     \/ CSendPrepare(r) \/ PHandlePrepare(r) \/ CReceivePrepare(r)
     \/ CSendCommit(r) \/ PHandleCommit(r) \/ CReceiveCommit(r)
     \/ CSendAbort(r) \/ PHandleAbort(r) \/ CReceiveAbort(r)
-  \/ \E r \in (RM \union {"coordinator"}) :
+  \/ \E i \in 1..Len(inflight) :
+    /\ NetworkDeliverMessage(inflight[i])
     /\ UNCHANGED vars
-    /\
-      \/ NetworkTakeMessage(r)
-      \/ NetworkDeliverMessage(r)
+  \/ \E r \in RM \union {"coordinator"} : \E i \in 1..Len(outbox[r]) :
+    /\ NetworkTakeMessage(outbox[r][i])
+    /\ UNCHANGED vars
+    
+  \* \/ \E r \in (RM \union {"coordinator"}) :
+  \*   /\ UNCHANGED vars
+  \*   /\
+  \*     \/ NetworkTakeMessage(r)
+  \*     \/ NetworkDeliverMessage(r)
 
 TPSpecF == [][TPNext]_<<vars, monitoringVars, inboxOutboxVars>> /\ TPInit
 

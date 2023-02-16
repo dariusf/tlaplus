@@ -55,65 +55,72 @@ func main() {
 	s.inflight = seq(r1prepare)
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1prepare))
-	m.CaptureState(s, NetworkTakeMessage, coordinator)
+	m.CaptureState(s, NetworkTakeMessage, r1prepare)
 
 	s.outbox = Except(s.outbox.(Record), coordinator, seq())
 	s.inflight = seq(r1prepare, r2prepare)
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2prepare))
-	m.CaptureState(s, NetworkTakeMessage, coordinator)
+	m.CaptureState(s, NetworkTakeMessage, r2prepare)
 
-	s.inflight = seq(r2prepare)
-	s.inbox = Except(s.inbox.(Record), r1, seq(r1prepare))
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1prepare))
-	m.CaptureState(s, NetworkDeliverMessage, r1)
+	project := true
+	if !project {
+		s.inflight = seq(r2prepare)
+		s.inbox = Except(s.inbox.(Record), r1, seq(r1prepare))
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1prepare))
+		m.CaptureState(s, NetworkDeliverMessage, r1)
 
-	s.inflight = seq()
-	s.inbox = Except(s.inbox.(Record), r2, seq(r2prepare))
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2prepare))
-	m.CaptureState(s, NetworkDeliverMessage, r2)
+		s.inflight = seq()
+		s.inbox = Except(s.inbox.(Record), r2, seq(r2prepare))
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2prepare))
+		m.CaptureState(s, NetworkDeliverMessage, r2)
+	}
 
 	r1prepared := record(typ, str("Prepared"), mdest, coordinator, msource, r1)
-	s.inbox = Except(s.inbox.(Record), r1, seq())
-	s.outbox = Except(s.outbox.(Record), r1, seq(r1prepared))
-	s.who = r1
-	s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
-	s.actions = Append(s.actions.(Seq), seq(str("PHandlePrepare"), r1, str("prepared")))
-	m.CaptureState(s, PHandlePrepare, r1)
+	if !project {
+		s.inbox = Except(s.inbox.(Record), r1, seq())
+		s.outbox = Except(s.outbox.(Record), r1, seq(r1prepared))
+		s.who = r1
+		s.rmState = Except(s.rmState.(Record), r1, str("prepared"))
+		s.actions = Append(s.actions.(Seq), seq(str("PHandlePrepare"), r1, str("prepared")))
+		m.CaptureState(s, PHandlePrepare, r1)
+	}
 
 	r2prepared := record(typ, str("Prepared"), mdest, coordinator, msource, r2)
-	s.inbox = Except(s.inbox.(Record), r2, seq())
-	s.outbox = Except(s.outbox.(Record), r2, seq(r2prepared))
-	s.who = r2
-	s.rmState = Except(s.rmState.(Record), r2, str("prepared"))
-	s.actions = Append(s.actions.(Seq), seq(str("PHandlePrepare"), r2, str("prepared")))
-	m.CaptureState(s, PHandlePrepare, r2)
+	if !project {
+		s.inbox = Except(s.inbox.(Record), r2, seq())
+		s.outbox = Except(s.outbox.(Record), r2, seq(r2prepared))
+		s.who = r2
+		s.rmState = Except(s.rmState.(Record), r2, str("prepared"))
+		s.actions = Append(s.actions.(Seq), seq(str("PHandlePrepare"), r2, str("prepared")))
+		m.CaptureState(s, PHandlePrepare, r2)
 
-	s.outbox = Except(s.outbox.(Record), r1, seq())
-	s.inflight = seq(r1prepared)
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1prepared))
-	m.CaptureState(s, NetworkTakeMessage, r1)
+		s.outbox = Except(s.outbox.(Record), r1, seq())
+		s.inflight = seq(r1prepared)
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1prepared))
+		m.CaptureState(s, NetworkTakeMessage, r1)
 
-	s.outbox = Except(s.outbox.(Record), r2, seq())
-	s.inflight = seq(r1prepared, r2prepared)
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2prepared))
-	m.CaptureState(s, NetworkTakeMessage, r2)
+		s.outbox = Except(s.outbox.(Record), r2, seq())
+		s.inflight = seq(r1prepared, r2prepared)
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2prepared))
+		m.CaptureState(s, NetworkTakeMessage, r2)
+	}
 
 	s.inflight = seq(r2prepared)
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1prepared))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1prepared))
-	m.CaptureState(s, NetworkDeliverMessage, coordinator)
+	m.CaptureState(s, NetworkDeliverMessage, r1prepared)
 
 	s.inflight = seq()
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1prepared, r2prepared))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2prepared))
-	m.CaptureState(s, NetworkDeliverMessage, coordinator)
+	m.CaptureState(s, NetworkDeliverMessage, r2prepared)
 
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r2prepared))
 	s.actions = Append(s.actions.(Seq), seq(str("CReceivePrepare"), r1))
@@ -144,65 +151,71 @@ func main() {
 	s.inflight = seq(r1commit)
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1commit))
-	m.CaptureState(s, NetworkTakeMessage, coordinator)
+	m.CaptureState(s, NetworkTakeMessage, r1commit)
 
 	s.outbox = Except(s.outbox.(Record), coordinator, seq())
 	s.inflight = seq(r1commit, r2commit)
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2commit))
-	m.CaptureState(s, NetworkTakeMessage, coordinator)
+	m.CaptureState(s, NetworkTakeMessage, r2commit)
 
-	s.inflight = seq(r2commit)
-	s.inbox = Except(s.inbox.(Record), r1, seq(r1commit))
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1commit))
-	m.CaptureState(s, NetworkDeliverMessage, r1)
+	if !project {
+		s.inflight = seq(r2commit)
+		s.inbox = Except(s.inbox.(Record), r1, seq(r1commit))
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1commit))
+		m.CaptureState(s, NetworkDeliverMessage, r1)
 
-	s.inflight = seq()
-	s.inbox = Except(s.inbox.(Record), r2, seq(r2commit))
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2commit))
-	m.CaptureState(s, NetworkDeliverMessage, r2)
+		s.inflight = seq()
+		s.inbox = Except(s.inbox.(Record), r2, seq(r2commit))
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2commit))
+		m.CaptureState(s, NetworkDeliverMessage, r2)
+	}
 
 	r1committed := record(typ, str("Committed"), mdest, coordinator, msource, r1)
-	s.inbox = Except(s.inbox.(Record), r1, seq())
-	s.outbox = Except(s.outbox.(Record), r1, seq(r1committed))
-	s.who = r1
-	s.rmState = Except(s.rmState.(Record), r1, str("committed"))
-	s.actions = Append(s.actions.(Seq), seq(str("PHandleCommit"), r1))
-	m.CaptureState(s, PHandleCommit, r1)
+	if !project {
+		s.inbox = Except(s.inbox.(Record), r1, seq())
+		s.outbox = Except(s.outbox.(Record), r1, seq(r1committed))
+		s.who = r1
+		s.rmState = Except(s.rmState.(Record), r1, str("committed"))
+		s.actions = Append(s.actions.(Seq), seq(str("PHandleCommit"), r1))
+		m.CaptureState(s, PHandleCommit, r1)
+	}
 
 	r2committed := record(typ, str("Committed"), mdest, coordinator, msource, r2)
-	s.inbox = Except(s.inbox.(Record), r2, seq())
-	s.outbox = Except(s.outbox.(Record), r2, seq(r2committed))
-	s.who = r2
-	s.rmState = Except(s.rmState.(Record), r2, str("committed"))
-	s.actions = Append(s.actions.(Seq), seq(str("PHandleCommit"), r2))
-	m.CaptureState(s, PHandleCommit, r2)
+	if !project {
+		s.inbox = Except(s.inbox.(Record), r2, seq())
+		s.outbox = Except(s.outbox.(Record), r2, seq(r2committed))
+		s.who = r2
+		s.rmState = Except(s.rmState.(Record), r2, str("committed"))
+		s.actions = Append(s.actions.(Seq), seq(str("PHandleCommit"), r2))
+		m.CaptureState(s, PHandleCommit, r2)
 
-	s.outbox = Except(s.outbox.(Record), r1, seq())
-	s.inflight = seq(r1committed)
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1committed))
-	m.CaptureState(s, NetworkTakeMessage, r1)
+		s.outbox = Except(s.outbox.(Record), r1, seq())
+		s.inflight = seq(r1committed)
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1committed))
+		m.CaptureState(s, NetworkTakeMessage, r1)
 
-	s.outbox = Except(s.outbox.(Record), r2, seq())
-	s.inflight = seq(r1committed, r2committed)
-	s.who = str("Network")
-	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2committed))
-	m.CaptureState(s, NetworkTakeMessage, r2)
+		s.outbox = Except(s.outbox.(Record), r2, seq())
+		s.inflight = seq(r1committed, r2committed)
+		s.who = str("Network")
+		s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2committed))
+		m.CaptureState(s, NetworkTakeMessage, r2)
+	}
 
 	s.inflight = seq(r2committed)
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1committed))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1committed))
-	m.CaptureState(s, NetworkDeliverMessage, coordinator)
+	m.CaptureState(s, NetworkDeliverMessage, r1committed)
 
 	s.inflight = seq()
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1committed, r2committed))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2committed))
-	m.CaptureState(s, NetworkDeliverMessage, coordinator)
+	m.CaptureState(s, NetworkDeliverMessage, r2committed)
 
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r2committed))
 	s.actions = Append(s.actions.(Seq), seq(str("CReceiveCommit"), r1))
