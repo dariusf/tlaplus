@@ -45,6 +45,14 @@ public class Monitoring {
         }
     }
 
+    public static String removeProjected(String name) {
+        if (name.endsWith("Projected")) {
+            int l = name.length() - "Projected".length();
+            return name.substring(0, l);
+        }
+        return name;
+    }
+
     public static Stream<String> translateDef(OpDefNode d,
                                               Set<String> translatedDefs,
                                               Defns defns,
@@ -91,14 +99,14 @@ public class Monitoring {
                     .collect(Collectors.toList());
 
             translation.boundVarNames.addAll(paramNames);
-            GoBlock body = translation.translateTopLevel(d.getName().toString(), d.getBody());
+            GoBlock body = translation.translateTopLevel(removeProjected(d.getName().toString()), d.getBody());
             translation.boundVarNames.removeAll(paramNames);
 
             String a = String.format("func (monitor *Monitor) Check%s(%strace_i int, prev Event, this Event) error {\n" +
                             "%s\n" +
                             "return nil\n" +
                             "}",
-                    d.getName(),
+                    removeProjected(d.getName().toString()),
                     params,
 //                        letBindings.seq(body)
                     body
@@ -173,11 +181,13 @@ public class Monitoring {
         String actionNames = definitions.stream()
                 .filter(d -> translatedDefs.contains(d.getName().toString()))
                 .map(d -> d.getName().toString())
+                .map(Monitoring::removeProjected)
                 .collect(Collectors.joining("\n"));
 
         String stringSwitchCases = definitions.stream()
                 .filter(d -> translatedDefs.contains(d.getName().toString()))
                 .map(d -> d.getName().toString())
+                .map(Monitoring::removeProjected)
                 .map(d -> String.format("case %1$s:\nreturn \"%1$s\"", d))
                 .collect(Collectors.joining("\n"));
 
@@ -192,7 +202,7 @@ public class Monitoring {
                                     "if err := m.Check%1$s(%2$si, prev, this); err != nil {\n" +
                                     "return err\n" +
                                     "}",
-                            d.getName(),
+                            removeProjected(d.getName().toString()),
                             params);
                 })
                 .collect(Collectors.joining("\n"));

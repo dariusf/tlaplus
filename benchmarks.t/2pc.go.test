@@ -51,19 +51,23 @@ func main() {
 	s.actions = Append(s.actions.(Seq), seq(str("CSendPrepare"), r2))
 	m.CaptureState(s, CSendPrepare, r2)
 
+	project := true
 	s.outbox = Except(s.outbox.(Record), coordinator, seq(r2prepare))
-	s.inflight = seq(r1prepare)
+	if !project {
+		s.inflight = seq(r1prepare)
+	}
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1prepare))
 	m.CaptureState(s, NetworkTakeMessage, r1prepare)
 
 	s.outbox = Except(s.outbox.(Record), coordinator, seq())
-	s.inflight = seq(r1prepare, r2prepare)
+	if !project {
+		s.inflight = seq(r1prepare, r2prepare)
+	}
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2prepare))
 	m.CaptureState(s, NetworkTakeMessage, r2prepare)
 
-	project := true
 	if !project {
 		s.inflight = seq(r2prepare)
 		s.inbox = Except(s.inbox.(Record), r1, seq(r1prepare))
@@ -110,13 +114,17 @@ func main() {
 		m.CaptureState(s, NetworkTakeMessage, r2)
 	}
 
-	s.inflight = seq(r2prepared)
+	if !project {
+		s.inflight = seq(r2prepared)
+	}
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1prepared))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1prepared))
 	m.CaptureState(s, NetworkDeliverMessage, r1prepared)
 
-	s.inflight = seq()
+	if !project {
+		s.inflight = seq()
+	}
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1prepared, r2prepared))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2prepared))
@@ -148,13 +156,17 @@ func main() {
 	m.CaptureState(s, CSendCommit, r2)
 
 	s.outbox = Except(s.outbox.(Record), coordinator, seq(r2commit))
-	s.inflight = seq(r1commit)
+	if !project {
+		s.inflight = seq(r1commit)
+	}
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r1commit))
 	m.CaptureState(s, NetworkTakeMessage, r1commit)
 
 	s.outbox = Except(s.outbox.(Record), coordinator, seq())
-	s.inflight = seq(r1commit, r2commit)
+	if !project {
+		s.inflight = seq(r1commit, r2commit)
+	}
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkTakeMessage"), r2commit))
 	m.CaptureState(s, NetworkTakeMessage, r2commit)
@@ -205,13 +217,17 @@ func main() {
 		m.CaptureState(s, NetworkTakeMessage, r2)
 	}
 
-	s.inflight = seq(r2committed)
+	if !project {
+		s.inflight = seq(r2committed)
+	}
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1committed))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r1committed))
 	m.CaptureState(s, NetworkDeliverMessage, r1committed)
 
-	s.inflight = seq()
+	if !project {
+		s.inflight = seq()
+	}
 	s.inbox = Except(s.inbox.(Record), coordinator, seq(r1committed, r2committed))
 	s.who = str("Network")
 	s.actions = Append(s.actions.(Seq), seq(str("NetworkDeliverMessage"), r2committed))
