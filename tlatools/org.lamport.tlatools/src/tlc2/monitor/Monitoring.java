@@ -176,6 +176,7 @@ public class Monitoring {
         }
 
         String pkg = "monitoring";
+        pkg = "server"; // committer
         String varDecls = variables.stream().map(v -> String.format("%s TLA", v.getName())).collect(Collectors.joining("\n"));
 
         String actionNames = definitions.stream()

@@ -7,7 +7,7 @@ VARIABLES actions, who
 monitoringVars == <<actions, who>>
 InitMonitoring ==
   /\ actions = <<>>
-  /\ who = None
+  /\ who = "none"
 
 LogAction(a) ==
   /\ actions' = Append(actions, a)

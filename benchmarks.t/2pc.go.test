@@ -7,7 +7,7 @@ func main() {
 
 	s := State{
 		// monitoring
-		who:     seq(),
+		who:     str("none"),
 		actions: seq(),
 		// inbox/outbox
 		inflight: seq(),
