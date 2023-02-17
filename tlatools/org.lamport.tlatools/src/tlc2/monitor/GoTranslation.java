@@ -160,10 +160,10 @@ public class GoTranslation {
     public GoExpr translateExpr(ExprOrOpArgNode fml, Type typ) {
         // constants
         if (fml instanceof StringNode) {
-            return goExpr("str(\"" + ((StringNode) fml).getRep().toString() + "\")");
+            return goExpr("Str(\"" + ((StringNode) fml).getRep().toString() + "\")");
         }
         if (fml instanceof NumeralNode) {
-            return goExpr("integer(%d)", ((NumeralNode) fml).val());
+            return goExpr("Int(%d)", ((NumeralNode) fml).val());
         }
 
         // things which only appear as arguments, like lambdas
@@ -212,9 +212,9 @@ public class GoTranslation {
             List<ExprOrOpArgNode> args = operatorArgs(fml);
             switch (name) {
                 case "TRUE":
-                    return goExpr("boolean(true)");
+                    return goExpr("Bool(true)");
                 case "FALSE":
-                    return goExpr("boolean(false)");
+                    return goExpr("Bool(false)");
                 case "<": {
                     GoExpr a1 = translateExpr(args.get(0), Type.INT);
                     GoExpr a2 = translateExpr(args.get(1), Type.INT);
@@ -311,14 +311,14 @@ public class GoTranslation {
                     List<GoExpr> args1 = args.stream()
                             .map(a -> translateExpr(a, null))
                             .collect(Collectors.toList());
-                    return goExpr("set(%s)", joinGoExpr(args1, ", "));
+                    return goExpr("Set(%s)", joinGoExpr(args1, ", "));
                 }
                 case "$Tuple": {
                     // <<>>
                     List<GoExpr> exprs = args.stream()
                             .map(a -> translateExpr(a, null))
                             .map(a -> goExpr("%s", a)).collect(Collectors.toList());
-                    return goExpr("seq(%s)", joinGoExpr(exprs, ", "));
+                    return goExpr("Seq(%s)", joinGoExpr(exprs, ", "));
                 }
                 case "$RcdConstructor":
                     // [a |-> 1, b |-> 2]
@@ -333,7 +333,7 @@ public class GoTranslation {
                             throw fail("unexpected");
                         }
                     }).collect(Collectors.toList());
-                    return goExpr("record(%s)", joinGoExpr(all, ", "));
+                    return goExpr("Rec(%s)", joinGoExpr(all, ", "));
                 case "$DisjList":
                 case "\\or": {
                     return args.stream().map(a -> translateExpr(a, Type.BOOL))
@@ -421,7 +421,7 @@ public class GoTranslation {
                     GoExpr body = translateExpr(substitute(cond, Map.of(var, tla(k1))), null);
                     boundVarNames.remove(k1);
                     // ensure this is a separate subexpression
-                    GoExpr func = goExpr("func(%s TLA) Bool { return %s }", k1, body);
+                    GoExpr func = goExpr("func(%s TLA) Boolean { return %s }", k1, body);
                     return goExpr("%s(%s, %s)", name.substring(1), sset, func);
                 }
                 case "UNCHANGED": {
@@ -598,19 +598,19 @@ public class GoTranslation {
      */
     public static GoExpr translateValue(IValue v) {
         if (v instanceof StringValue) {
-            return goExpr("str(\"" + ((StringValue) v).getVal() + "\")");
+            return goExpr("Str(\"" + ((StringValue) v).getVal() + "\")");
         } else if (v instanceof IntValue) {
-            return goExpr("integer(%s)", v.toString());
+            return goExpr("Int(%s)", v.toString());
         } else if (v instanceof SetEnumValue) {
             List<GoExpr> args = toList(((SetEnumValue) v).elems).stream()
                     .map(a -> translateValue(a))
                     .collect(Collectors.toList());
-            return goExpr("set(%s)", joinGoExpr(args, ", "));
+            return goExpr("Set(%s)", joinGoExpr(args, ", "));
         } else if (v instanceof TupleValue) {
             List<GoExpr> exprs = Arrays.stream(((TupleValue) v).elems)
                     .map(a -> translateValue(a))
                     .collect(Collectors.toList());
-            return goExpr("seq(%s)", joinGoExpr(exprs, ", "));
+            return goExpr("Seq(%s)", joinGoExpr(exprs, ", "));
         } else if (v instanceof FcnRcdValue) {
             // record literals, like [r1 |-> "working"]
             List<GoExpr> res = new ArrayList<>();
@@ -619,7 +619,7 @@ public class GoTranslation {
                         translateValue(((FcnRcdValue) v).domain[i]),
                         translateValue(((FcnRcdValue) v).values[i])));
             }
-            return goExpr("record(%s)", goExprJoin(", ", res));
+            return goExpr("Rec(%s)", goExprJoin(", ", res));
         }
         throw fail("invalid type of value " + v.getClass().getSimpleName());
     }
@@ -698,17 +698,17 @@ public class GoTranslation {
     static String goTypeName(Type typ) {
         switch (typ) {
             case INT:
-                return "Int";
+                return "Integer";
             case STRING:
                 return "String";
             case BOOL:
-                return "Bool";
+                return "Boolean";
             case RECORD:
                 return "Record";
             case SET:
-                return "Set";
+                return "Set_";
             case SEQ:
-                return "Seq";
+                return "Sequence";
         }
         throw fail("goTypeName: unhandled " + typ);
     }

@@ -19,11 +19,11 @@ type TLA interface {
 	String() string
 }
 
-type Seq struct {
+type Sequence struct {
 	elements []TLA
 }
 
-func (s Seq) String() string {
+func (s Sequence) String() string {
 	ss := []string{}
 	for _, v := range s.elements {
 		ss = append(ss, v.String())
@@ -50,11 +50,11 @@ func (s Record) String() string {
 	return fmt.Sprintf("[%%s]", strings.Join(ss, ", "))
 }
 
-type Set struct {
+type Set_ struct {
 	elements map[string]TLA
 }
 
-func (s Set) String() string {
+func (s Set_) String() string {
 	keys := []string{}
 	for k := range s.elements {
 		keys = append(keys, k)
@@ -69,19 +69,19 @@ func (s Set) String() string {
 	return fmt.Sprintf("{%%s}", strings.Join(ss, ", "))
 }
 
-type Int struct {
+type Integer struct {
 	value int
 }
 
-func (s Int) String() string {
+func (s Integer) String() string {
 	return fmt.Sprintf("%%d", s.value)
 }
 
-type Bool struct {
+type Boolean struct {
 	value bool
 }
 
-func (b Bool) String() string {
+func (b Boolean) String() string {
 	return strconv.FormatBool(b.value)
 }
 
@@ -95,19 +95,19 @@ func (s String) String() string {
 
 // smart constructors
 
-func boolean(b bool) Bool {
-	return Bool{value: b}
+func Bool(b bool) Boolean {
+	return Boolean{value: b}
 }
 
-func integer(n int) Int {
-	return Int{value: n}
+func Int(n int) Integer {
+	return Integer{value: n}
 }
 
-func str(s string) String {
+func Str(s string) String {
 	return String{value: s}
 }
 
-func set(elts ...TLA) Set {
+func Set(elts ...TLA) Set_ {
 	// avoid nil slice vs empty slice shenanigans
 	if len(elts) == 0 {
 		elts = []TLA{}
@@ -116,10 +116,10 @@ func set(elts ...TLA) Set {
 	for _, v := range elts {
 		res[hash(v)] = v
 	}
-	return Set{elements: res}
+	return Set_{elements: res}
 }
 
-func record(kvs ...TLA) Record {
+func Rec(kvs ...TLA) Record {
 	// avoid nil slice vs empty slice shenanigans
 	if len(kvs) == 0 {
 		kvs = []TLA{}
@@ -131,41 +131,41 @@ func record(kvs ...TLA) Record {
 	return Record{elements: res}
 }
 
-func seq(elts ...TLA) Seq {
+func Seq(elts ...TLA) Sequence {
 	// avoid nil slice vs empty slice shenanigans
 	if len(elts) == 0 {
 		elts = []TLA{}
 	}
-	return Seq{elements: elts}
+	return Sequence{elements: elts}
 }
 
 // library
 
-func Some(a TLA) Seq {
-	return seq(a)
+func Some(a TLA) Sequence {
+	return Seq(a)
 }
 
-func None() Seq {
-	return seq()
+func None() Sequence {
+	return Seq()
 }
 
-func Append(a Seq, b TLA) Seq {
-	return Seq{elements: append(a.elements, b)}
+func Append(a Sequence, b TLA) Sequence {
+	return Sequence{elements: append(a.elements, b)}
 }
 
-func AppendSeqs(a Seq, b Seq) Seq {
-	return Seq{elements: append(a.elements, b.elements...)}
+func AppendSeqs(a Sequence, b Sequence) Sequence {
+	return Sequence{elements: append(a.elements, b.elements...)}
 }
 
-func Len(a Seq) Int {
-	return integer(len(a.elements))
+func Len(a Sequence) Integer {
+	return Int(len(a.elements))
 }
 
-func Cardinality(a Set) Int {
-	return integer(len(a.elements))
+func Cardinality(a Set_) Integer {
+	return Int(len(a.elements))
 }
 
-func SetUnion(a Set, b Set) Set {
+func SetUnion(a Set_, b Set_) Set_ {
 	res := map[string]TLA{}
 	for k, v := range a.elements {
 		res[k] = v
@@ -173,16 +173,16 @@ func SetUnion(a Set, b Set) Set {
 	for k, v := range b.elements {
 		res[k] = v
 	}
-	return Set{elements: res}
+	return Set_{elements: res}
 }
 
-func SetIn(a TLA, b Set) Bool {
+func SetIn(a TLA, b Set_) Boolean {
 	_, ok := b.elements[hash(a)]
-	return boolean(ok)
+	return Bool(ok)
 }
 
-func SetNotIn(a TLA, b Set) Bool {
-	return boolean(!SetIn(a, b).value)
+func SetNotIn(a TLA, b Set_) Boolean {
+	return Bool(!SetIn(a, b).value)
 }
 
 func RecordIndex(a Record, b String) TLA {
@@ -193,86 +193,86 @@ func TLAIndex(i int) int {
 	return i - 1
 }
 
-func SeqIndex(a Seq, b Int) TLA {
+func SequenceIndex(a Sequence, b Integer) TLA {
 	return a.elements[TLAIndex(b.value)]
 }
 
 func IndexInto(a TLA, b TLA) TLA {
-    a1, ok1 := a.(Seq)
-    b1, ok2 := b.(Int)
+    a1, ok1 := a.(Sequence)
+    b1, ok2 := b.(Integer)
     if ok1 && ok2 {
-        return SeqIndex(a1, b1)
+        return SequenceIndex(a1, b1)
     } else {
         return RecordIndex(a.(Record), b.(String))
     }
 }
 
-func IntPlus(a Int, b Int) Int {
-	return integer(a.value + b.value)
+func IntPlus(a Integer, b Integer) Integer {
+	return Int(a.value + b.value)
 }
 
-func IntMinus(a Int, b Int) Int {
-	return integer(a.value - b.value)
+func IntMinus(a Integer, b Integer) Integer {
+	return Int(a.value - b.value)
 }
 
-func IntMul(a Int, b Int) Int {
-	return Int{value: a.value * b.value}
+func IntMul(a Integer, b Integer) Integer {
+	return Integer{value: a.value * b.value}
 }
 
-func IntDiv(a Int, b Int) Int {
-	return Int{value: a.value / b.value}
+func IntDiv(a Integer, b Integer) Integer {
+	return Integer{value: a.value / b.value}
 }
 
-func IntLt(a Int, b Int) Bool {
-	return boolean(a.value < b.value)
+func IntLt(a Integer, b Integer) Boolean {
+	return Bool(a.value < b.value)
 }
 
-func IntLte(a Int, b Int) Bool {
-	return boolean(a.value <= b.value)
+func IntLte(a Integer, b Integer) Boolean {
+	return Bool(a.value <= b.value)
 }
 
-func IntGt(a Int, b Int) Bool {
-	return boolean(a.value > b.value)
+func IntGt(a Integer, b Integer) Boolean {
+	return Bool(a.value > b.value)
 }
 
-func IntGte(a Int, b Int) Bool {
-	return boolean(a.value >= b.value)
+func IntGte(a Integer, b Integer) Boolean {
+	return Bool(a.value >= b.value)
 }
 
-func Eq(a TLA, b TLA) Bool {
-	return boolean(reflect.DeepEqual(a, b))
+func Eq(a TLA, b TLA) Boolean {
+	return Bool(reflect.DeepEqual(a, b))
 }
 
-func Not(b Bool) Bool {
-	return boolean(!b.value)
+func Not(b Boolean) Boolean {
+	return Bool(!b.value)
 }
 
-func Neq(a TLA, b TLA) Bool {
+func Neq(a TLA, b TLA) Boolean {
 	return Not(Eq(a, b))
 }
 
-func And(a Bool, b Bool) Bool {
-	return boolean(a.value && b.value)
+func And(a Boolean, b Boolean) Boolean {
+	return Bool(a.value && b.value)
 }
 
-func Or(a Bool, b Bool) Bool {
-	return boolean(a.value || b.value)
+func Or(a Boolean, b Boolean) Boolean {
+	return Bool(a.value || b.value)
 }
 
 func IsFalse(a TLA) bool {
-	return !a.(Bool).value
+	return !a.(Boolean).value
 }
 
 func IsTrue(a TLA) bool {
 	return !IsFalse(a)
 }
 
-func ToSet(s Seq) Set {
+func ToSet(s Sequence) Set_ {
     res := map[string]TLA{}
     for _, v := range s.elements {
         res[hash(v)] = v
     }
-    return Set{elements: res}
+    return Set_{elements: res}
 }
 
 func Except(r Record, k String, v TLA) Record {
@@ -284,120 +284,120 @@ func Except(r Record, k String, v TLA) Record {
     return Record{elements: res}
 }
 
-func BoundedForall(set Set, f func(TLA) Bool) Bool {
+func BoundedForall(s Set_, f func(TLA) Boolean) Boolean {
     res := true
-    for _, v := range set.elements {
+    for _, v := range s.elements {
         res = res && IsTrue(f(v))
     }
-    return Bool{value: res}
+    return Boolean{value: res}
 }
 
-func BoundedExists(set Set, f func(TLA) Bool) Bool {
+func BoundedExists(s Set_, f func(TLA) Boolean) Boolean {
     res := false
-    for _, v := range set.elements {
+    for _, v := range s.elements {
         res = res || IsTrue(f(v))
     }
-    return Bool{value: res}
+    return Boolean{value: res}
 }
 
-func FnConstruct(set Set, f func(TLA) TLA) Record {
+func FnConstruct(s Set_, f func(TLA) TLA) Record {
     res := map[string]TLA{}
-    for _, v := range set.elements {
+    for _, v := range s.elements {
         res[v.(String).value] = f(v)
     }
     return Record{elements: res}
 }
 
-func FoldSeq(f func(TLA, TLA) TLA, base TLA, seq Seq) TLA {
+func FoldSeq(f func(TLA, TLA) TLA, base TLA, Seq Sequence) TLA {
     res := base
-    for _, v := range seq.elements {
+    for _, v := range Seq.elements {
         res = f(v, res)
     }
     return res
 }
 
-func Remove(s Seq, e TLA) Seq {
+func Remove(s Sequence, e TLA) Sequence {
     res := []TLA{}
     for _, v := range s.elements {
         if IsFalse(Eq(v, e)) {
             res = append(res, v)
         }
     }
-    return seq(res...)
+    return Seq(res...)
 }
 
-func RemoveAt(s Seq, i Int) Seq {
+func RemoveAt(s Sequence, i Integer) Sequence {
     res := []TLA{}
     for j, v := range s.elements {
         if TLAIndex(i.value) != j {
             res = append(res, v)
         }
     }
-    return seq(res...)
+    return Seq(res...)
 }
 
-func SetToSeq(set Set) Seq {
+func SetToSeq(s Set_) Sequence {
     res := []TLA{}
-    for _, v := range set.elements {
+    for _, v := range s.elements {
         res = append(res, v)
     }
-    return seq(res...)
+    return Seq(res...)
 }
 
-func Min(set Set) Int {
+func Min(s Set_) Integer {
     res := math.MaxInt
-    for _, v := range set.elements {
-        if v.(Int).value < res {
-            res = v.(Int).value
+    for _, v := range s.elements {
+        if v.(Integer).value < res {
+            res = v.(Integer).value
         }
     }
-    return integer(res)
+    return Int(res)
 }
 
-func Max(set Set) Int {
+func Max(s Set_) Integer {
     res := math.MinInt
-    for _, v := range set.elements {
-        if v.(Int).value > res {
-            res = v.(Int).value
+    for _, v := range s.elements {
+        if v.(Integer).value > res {
+            res = v.(Integer).value
         }
     }
-    return integer(res)
+    return Int(res)
 }
 
-func IsPrefix(prefix Seq, seq Seq) Bool {
+func IsPrefix(prefix Sequence, Seq Sequence) Boolean {
 	for i := 0; i < len(prefix.elements); i++ {
-	    if IsFalse(Eq(prefix.elements[i], seq.elements[i])) {
-	        return boolean(false)
+	    if IsFalse(Eq(prefix.elements[i], Seq.elements[i])) {
+	        return Bool(false)
 	    }
 	}
-	return boolean(true)
+	return Bool(true)
 }
 
-func SelectSeq(s Seq, f func(TLA) TLA) Seq {
+func SelectSequence(s Sequence, f func(TLA) TLA) Sequence {
     res := []TLA{}
     for _, v := range s.elements {
         if IsTrue(f(v)) {
             res = append(res, v)
         }
     }
-    return seq(res...)
+    return Seq(res...)
 }
 
-func RangeIncl(lower Int, upper Int) Set {
+func RangeIncl(lower Integer, upper Integer) Set_ {
     res := []TLA{}
     for i := lower.value; i <= upper.value; i++ {
-        res = append(res, integer(i))
+        res = append(res, Int(i))
     }
-    return set(res...)
+    return Set(res...)
 }
 
-func d(a TLA) Bool {
+func d(a TLA) Boolean {
 	// fmt.Printf("%%#v = %%+v\n", a, a)
 	fmt.Printf("%%+v\n", a)
-	return a.(Bool)
+	return a.(Boolean)
 }
 
-func dAnd(a Bool, b Bool) Bool {
+func dAnd(a Boolean, b Boolean) Boolean {
 	return d(And(a, b))
 }
 
