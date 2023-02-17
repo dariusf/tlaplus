@@ -1,5 +1,7 @@
 package %s
 
+// GENERATED CODE, DO NOT EDIT DIRECTLY
+
 import (
     // "encoding/json"
     "sort"
