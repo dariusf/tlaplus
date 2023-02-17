@@ -5,40 +5,40 @@
 \* This work is licensed under the Creative Commons Attribution-4.0
 \* International License https://creativecommons.org/licenses/by/4.0/
 
-EXTENDS Naturals, FiniteSets, Sequences, TLC, TLCExt, Json
+EXTENDS Naturals, FiniteSets, Sequences, TLC, TLCExt, Json, InboxOutbox, Monitoring
 
-ToSet(s) == { s[i] : i \in DOMAIN s }
+\* ToSet(s) == { s[i] : i \in DOMAIN s }
 
-MapThenFoldSet(op(_,_), base, f(_), choose(_), S) ==
-  LET iter[s \in SUBSET S] ==
-        IF s = {} THEN base
-        ELSE LET x == choose(s)
-             IN  op(f(x), iter[s \ {x}])
-  IN  iter[S]
+\* MapThenFoldSet(op(_,_), base, f(_), choose(_), S) ==
+\*   LET iter[s \in SUBSET S] ==
+\*         IF s = {} THEN base
+\*         ELSE LET x == choose(s)
+\*              IN  op(f(x), iter[s \ {x}])
+\*   IN  iter[S]
 
 
-FoldFunction(op(_,_), base, fun) ==
-  MapThenFoldSet(op, base, LAMBDA i : fun[i], LAMBDA s: CHOOSE x \in s : TRUE, DOMAIN fun)
+\* FoldFunction(op(_,_), base, fun) ==
+\*   MapThenFoldSet(op, base, LAMBDA i : fun[i], LAMBDA s: CHOOSE x \in s : TRUE, DOMAIN fun)
 
-FoldSeq(op(_, _), base, seq) == 
-  FoldFunction(op, base, seq)
+\* FoldSeq(op(_, _), base, seq) == 
+\*   FoldFunction(op, base, seq)
 
-Remove(s, e) ==
-    SelectSeq(s, LAMBDA t: t # e)
+\* Remove(s, e) ==
+\*     SelectSeq(s, LAMBDA t: t # e)
 
-RemoveAt(s, i) == 
-  SubSeq(s, 1, i-1) \o SubSeq(s, i+1, Len(s))
+\* RemoveAt(s, i) == 
+\*   SubSeq(s, 1, i-1) \o SubSeq(s, i+1, Len(s))
 
-IsPrefix(s, t) ==
-  Len(s) <= Len(t) /\ SubSeq(s, 1, Len(s)) = SubSeq(t, 1, Len(s))
+\* IsPrefix(s, t) ==
+\*   Len(s) <= Len(t) /\ SubSeq(s, 1, Len(s)) = SubSeq(t, 1, Len(s))
 
-IsInjective(f) == \A a,b \in DOMAIN f : f[a] = f[b] => a = b
+\* IsInjective(f) == \A a,b \in DOMAIN f : f[a] = f[b] => a = b
 
-SetToSeq(S) == 
-  CHOOSE f \in [1..Cardinality(S) -> S] : IsInjective(f)
+\* SetToSeq(S) == 
+\*   CHOOSE f \in [1..Cardinality(S) -> S] : IsInjective(f)
 
 \* The set of server IDs
-CONSTANTS Server
+\* CONSTANTS Server
 
 \* The set of requests that can go into the log
 CONSTANTS Value
@@ -61,19 +61,19 @@ CONSTANTS Value
 \* mapping Message to Nat.
 \* VARIABLE messages
 
-VARIABLES outbox, inbox
-VARIABLES inflight
+\* VARIABLES outbox, inbox
+\* VARIABLES inflight
 
 \* VARIABLES s1Outbox, s1Inbox
 \* VARIABLES s2Outbox, s2Inbox
 \* VARIABLES s3Outbox, s3Inbox
 
-commVars == <<
-  \* s1Outbox, s1Inbox
-  \* , s2Outbox, s2Inbox
-  \* , s3Outbox, s3Inbox
-  outbox, inbox, inflight
->>
+\* commVars == <<
+\*   \* s1Outbox, s1Inbox
+\*   \* , s2Outbox, s2Inbox
+\*   \* , s3Outbox, s3Inbox
+\*   outbox, inbox, inflight
+\* >>
 
 \* Receivable == s1Inbox \union s2Inbox \union s3Inbox
 \* Sendable == s1Outbox \union s2Outbox \union s3Outbox
@@ -81,16 +81,16 @@ commVars == <<
 \* Receivable == ToSet(s1Inbox) \union ToSet(s2Inbox) \union ToSet(s3Inbox)
 \* Sendable == ToSet(s1Outbox) \union ToSet(s2Outbox) \union ToSet(s3Outbox)
 
-MsgsIn(box) == FoldSeq(LAMBDA c,t: box[c] \o t, <<>>, SetToSeq(Server))
+\* MsgsIn(box) == FoldSeq(LAMBDA c,t: box[c] \o t, <<>>, SetToSeq(Server))
 
 \* Receivable == s1Inbox \o s2Inbox \o s3Inbox
 \* Sendable == s1Outbox \o s2Outbox \o s3Outbox
 
 \* inboxVars == <<s1Inbox, s2Inbox, s3Inbox>>
-inboxVars == <<inbox>>
+\* inboxVars == <<inbox>>
 
 \* outboxVars == <<s1Outbox, s2Outbox, s3Outbox>>
-outboxVars == <<outbox>>
+\* outboxVars == <<outbox>>
 
 \* A history variable used in the proof. This would not be present in an
 \* implementation.
@@ -105,7 +105,7 @@ outboxVars == <<outbox>>
 \* VARIABLE allLogs
 
 \* VARIABLE lastComm
-VARIABLE who
+\* VARIABLE who
 
 ----
 \* The following variables are all per server (functions with domain Server).
@@ -141,7 +141,7 @@ VARIABLE votesGranted
 \* VARIABLE voterLog
 candidateVars == <<votesResponded, votesGranted>>
 
-VARIABLE actions
+\* VARIABLE actions
 
 \* The following variables are used only on leaders:
 \* The next entry to send to each follower.
@@ -169,21 +169,21 @@ vars == <<serverVars, candidateVars, leaderVars, logVars>>
 \* The term of the last entry in a log, or 0 if the log is empty.
 LastTerm(xlog) == IF Len(xlog) = 0 THEN 0 ELSE xlog[Len(xlog)].term
 
-\* Helper for Send and Reply. Given a message m and bag of messages, return a
-\* new bag of messages with one more m in it.
-WithMessage(m, msgs) ==
-    IF m \in DOMAIN msgs THEN
-        [msgs EXCEPT ![m] = msgs[m] + 1]
-    ELSE
-        msgs @@ (m :> 1)
+\* \* Helper for Send and Reply. Given a message m and bag of messages, return a
+\* \* new bag of messages with one more m in it.
+\* WithMessage(m, msgs) ==
+\*     IF m \in DOMAIN msgs THEN
+\*         [msgs EXCEPT ![m] = msgs[m] + 1]
+\*     ELSE
+\*         msgs @@ (m :> 1)
 
-\* Helper for Discard and Reply. Given a message m and bag of messages, return
-\* a new bag of messages with one less m in it.
-WithoutMessage(m, msgs) ==
-    IF m \in DOMAIN msgs THEN
-        [msgs EXCEPT ![m] = msgs[m] - 1]
-    ELSE
-        msgs
+\* \* Helper for Discard and Reply. Given a message m and bag of messages, return
+\* \* a new bag of messages with one less m in it.
+\* WithoutMessage(m, msgs) ==
+\*     IF m \in DOMAIN msgs THEN
+\*         [msgs EXCEPT ![m] = msgs[m] - 1]
+\*     ELSE
+\*         msgs
 
 \* SendM(sender, m) ==
 \*   IF sender = "s1" THEN
@@ -202,14 +202,14 @@ WithoutMessage(m, msgs) ==
 \*     /\ s3Outbox' = Append(s3Outbox, m)
 \*     \* /\ s3Outbox' = s3Outbox \union {m}
 
-SendM(sender, m) ==
-  outbox' = [outbox EXCEPT ![sender] = Append(outbox[sender], m)]
+\* SendM(sender, m) ==
+\*   outbox' = [outbox EXCEPT ![sender] = Append(outbox[sender], m)]
 
-\* Add a message to the bag of messages.
-Send(m) ==
-  SendM(m.msource, m)
-  \* /\ messages' = WithMessage(m, messages)
-  \* /\ lastComm' = <<[who |-> m.msource, msg |-> m]>>
+\* \* Add a message to the bag of messages.
+\* Send(m) ==
+\*   SendM(m.msource, m)
+\*   \* /\ messages' = WithMessage(m, messages)
+\*   \* /\ lastComm' = <<[who |-> m.msource, msg |-> m]>>
 
 InSeq(x, xs) == x \in ToSet(xs)
 
@@ -257,36 +257,36 @@ DuplicateMsg(m) ==
 \*     /\ m \in ToSet(s3Inbox)
 \*     /\ s3Inbox' = Remove(s3Inbox, m)
 
-RecvM(recipient, m) ==
-  /\ m \in ToSet(inbox[recipient])
-  /\ inbox' = [inbox EXCEPT ![recipient] = Remove(inbox[recipient], m)]
+\* RecvM(recipient, m) ==
+\*   /\ m \in ToSet(inbox[recipient])
+\*   /\ inbox' = [inbox EXCEPT ![recipient] = Remove(inbox[recipient], m)]
 
-\* Remove a message from the bag of messages. Used when a server is done
-\* processing a message.
-Discard(m) ==
-  RecvM(m.mdest, m)
-  \* /\ messages' = WithoutMessage(m, messages)
-  \* /\ lastComm' = <<[who |-> m.mdest, msg |-> m]>>
+\* \* Remove a message from the bag of messages. Used when a server is done
+\* \* processing a message.
+\* Discard(m) ==
+\*   RecvM(m.mdest, m)
+\*   \* /\ messages' = WithoutMessage(m, messages)
+\*   \* /\ lastComm' = <<[who |-> m.mdest, msg |-> m]>>
 
-\* Combination of Send and Discard
-Reply(response, request) ==
-  /\ Discard(request)
-  /\ Send(response)
-  \* /\ messages' = WithoutMessage(request, WithMessage(response, messages))
-  \* /\ lastComm' = <<[who |-> request.mdest, msg |-> request], [who |-> response.msource, msg |-> response]>>
+\* \* Combination of Send and Discard
+\* Reply(response, request) ==
+\*   /\ Discard(request)
+\*   /\ Send(response)
+\*   \* /\ messages' = WithoutMessage(request, WithMessage(response, messages))
+\*   \* /\ lastComm' = <<[who |-> request.mdest, msg |-> request], [who |-> response.msource, msg |-> response]>>
 
 \* Return the minimum value from a set, or undefined if the set is empty.
 Min(s) == CHOOSE x \in s : \A y \in s : x <= y
 \* Return the maximum value from a set, or undefined if the set is empty.
 Max(s) == CHOOSE x \in s : \A y \in s : x >= y
 
-LogAction(a) ==
-  /\ actions' = Append(actions, a)
-  \* /\ actions' = a
+\* LogAction(a) ==
+\*   /\ actions' = Append(actions, a)
+\*   \* /\ actions' = a
 
-LogActor(w) ==
-  /\ who' = w
-  \* /\ who' = Append(who, w)
+\* LogActor(w) ==
+\*   /\ who' = w
+\*   \* /\ who' = Append(who, w)
 
 ----
 \* Define initial values for all variables
@@ -356,7 +356,7 @@ Restart(i) ==
     \* /\ who' = i
     /\ UNCHANGED <<currentTerm, votedFor, log>>
     \* /\ UNCHANGED <<lastComm>>
-    /\ UNCHANGED commVars
+    /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"Restart", i>>)
     /\ LogActor(i)
 
@@ -373,7 +373,7 @@ Initialize(i) ==
   /\ UNCHANGED <<state, votedFor>>
   /\ UNCHANGED <<commitIndex>>
   /\ UNCHANGED <<candidateVars, leaderVars>>
-  /\ UNCHANGED <<commVars>>
+  /\ UNCHANGED <<inboxOutboxVars>>
   /\ LogAction(<<"Initialize", i>>)
   /\ LogActor(i)
 
@@ -395,7 +395,7 @@ Timeout(i) == /\ state[i] \in {"Follower", "Candidate"}
               \* /\ voterLog'       = [voterLog EXCEPT ![i] = [j \in {} |-> <<>>]]
               \* /\ who' = i
               /\ UNCHANGED <<leaderVars, logVars>>
-              /\ UNCHANGED commVars
+              /\ UNCHANGED <<inboxOutboxVars>>
               \* /\ UNCHANGED <<lastComm>>
               /\ LogAction(<<"Timeout", i>>)
               /\ LogActor(i)
@@ -413,8 +413,6 @@ RequestVote(i, j) ==
     /\ who' = i
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
     \* /\ UNCHANGED Receivable
-    /\ UNCHANGED <<inboxVars>>
-    /\ UNCHANGED <<inflight>>
     /\ LogAction(<<"RequestVote", i, j>>)
     /\ LogActor(i)
 
@@ -460,8 +458,6 @@ AppendEntries(i, j) ==
                 msource        |-> i,
                 mdest          |-> j])
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-    /\ UNCHANGED <<inboxVars>>
-    /\ UNCHANGED <<inflight>>
     /\ LogAction(<<"AppendEntries", i>>)
     /\ LogActor(i)
 
@@ -486,7 +482,7 @@ BecomeLeader(i) ==
     \*                        ]}
     /\ UNCHANGED <<currentTerm, votedFor, candidateVars, logVars>>
     \* /\ UNCHANGED <<lastComm>>
-    /\ UNCHANGED commVars
+    /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"BecomeLeader", i>>)
     /\ LogActor(i)
 
@@ -501,7 +497,7 @@ ClientRequest(i, v) ==
     /\ UNCHANGED <<serverVars, candidateVars,
                    leaderVars, commitIndex>>
     \* /\ UNCHANGED <<lastComm>>
-    /\ UNCHANGED commVars
+    /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"ClientRequest", i, v>>)
     /\ LogActor(i)
 
@@ -531,7 +527,7 @@ AdvanceCommitIndex(i) ==
        IN commitIndex' = [commitIndex EXCEPT ![i] = newCommitIndex]
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, log>>
     \* /\ UNCHANGED <<lastComm>>
-    /\ UNCHANGED commVars
+    /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"AdvanceCommitIndex", i>>)
     /\ LogActor(i)
 
@@ -576,8 +572,6 @@ SelfVote(i) ==
            mvoteGranted |-> TRUE,
            msource      |-> i,
            mdest        |-> i])
-  /\ UNCHANGED <<inboxVars>>
-  /\ UNCHANGED <<inflight>>
   /\ UNCHANGED <<state, currentTerm, candidateVars, leaderVars, logVars>>
   /\ LogAction(<<"SelfVote", i>>)
   /\ LogActor(i)
@@ -608,8 +602,6 @@ HandleRequestVoteResponse(i, j, m) ==
     /\ Discard(m)
     \* /\ who' = i
     /\ UNCHANGED <<serverVars, votedFor, leaderVars, logVars>>
-    /\ UNCHANGED <<outboxVars>>
-    /\ UNCHANGED <<inflight>>
     /\ LogAction(<<"HandleRequestVoteResponse", i, j, m>>)
     /\ LogActor(i)
 
@@ -645,7 +637,7 @@ HandleAppendEntriesRequest(i, j, m) ==
              /\ state' = [state EXCEPT ![i] = "Follower"]
              /\ UNCHANGED <<currentTerm, votedFor, logVars>>
             \*  /\ UNCHANGED <<lastComm>>
-             /\ UNCHANGED commVars
+             /\ UNCHANGED <<inboxOutboxVars>>
           \/ \* accept request
              /\ m.mterm = currentTerm[i]
              /\ state[i] = "Follower"
@@ -682,7 +674,7 @@ HandleAppendEntriesRequest(i, j, m) ==
                           IN log' = [log EXCEPT ![i] = new]
                        /\ UNCHANGED <<serverVars, commitIndex>>
                       \*  /\ UNCHANGED <<lastComm>>
-                       /\ UNCHANGED commVars
+                       /\ UNCHANGED <<inboxOutboxVars>>
                    \/ \* no conflict: append entry
                        /\ m.mentries /= << >>
                        /\ Len(log[i]) = m.mprevLogIndex
@@ -701,7 +693,7 @@ HandleAppendEntriesRequest(i, j, m) ==
                        \* allow sending a reply
                        \* /\ UNCHANGED commVars
                        /\
-                        \/ UNCHANGED commVars
+                        \/ UNCHANGED <<inboxOutboxVars>>
                         \/
                           /\ UNCHANGED inflight
                           /\ Reply([mtype           |-> "AppendEntriesResponse",
@@ -727,8 +719,6 @@ HandleAppendEntriesResponse(i, j, m) ==
           /\ UNCHANGED <<matchIndex>>
     /\ Discard(m)
     /\ UNCHANGED <<serverVars, candidateVars, logVars>>
-    /\ UNCHANGED outboxVars
-    /\ UNCHANGED <<inflight>>
     /\ LogAction(<<"HandleAppendEntriesResponse", i, j, m>>)
     /\ LogActor(i)
 
@@ -742,7 +732,7 @@ UpdateTerm(i, j, m) ==
        \* messages is unchanged so m can be processed further.
     /\ UNCHANGED <<candidateVars, leaderVars, logVars>>
     \* /\ UNCHANGED <<lastComm>>
-    /\ UNCHANGED commVars
+    /\ UNCHANGED <<inboxOutboxVars>>
     \* /\ UNCHANGED actions
     /\ LogAction(<<"UpdateTerm", i, j, m>>)
     /\ LogActor(i)
@@ -753,14 +743,12 @@ DropStaleResponse(i, j, m) ==
     \* /\ who' = i
     /\ Discard(m)
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-    /\ UNCHANGED outboxVars
-    /\ UNCHANGED <<inflight>>
     /\ UNCHANGED actions
     /\ LogAction(<<"DropStaleResponse", i, j, m>>)
     /\ LogActor(i)
 
 \* Receive a message.
-Receive(m) ==
+ReceiveMsg(m) ==
     LET i == m.mdest
         j == m.msource
     IN \* Any RPC with a newer term causes the recipient to advance
@@ -787,8 +775,8 @@ DuplicateMessage(m) ==
     \* /\ Send(m)
     /\ DuplicateMsg(m)
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-    /\ UNCHANGED <<outboxVars>>
-    /\ UNCHANGED <<inflight>>
+    /\ UNCHANGED outbox
+    /\ UNCHANGED inflight
     /\ LogAction(<<"DuplicateMessage", m>>)
     /\ LogActor("Network")
 
@@ -796,8 +784,6 @@ DuplicateMessage(m) ==
 DropMessage(m) ==
     /\ Discard(m)
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-    /\ UNCHANGED <<outboxVars>>
-    /\ UNCHANGED <<inflight>>
     /\ LogAction(<<"DropMessage", m>>)
     /\ LogActor("Network")
 
@@ -825,71 +811,73 @@ DropMessage(m) ==
 \*   /\ LogAction("Network")
 
 \* deliver everything at once
-\* this is unused
-NetworkDelivery ==
-  /\ \E s \in Server : outbox[s] /= <<>>
-  /\ outbox' = [s \in Server |-> <<>>]
-  /\ inbox' = [s \in Server |-> inbox[s] \o SelectSeq(MsgsIn(outbox), LAMBDA m : m.mdest = s)]
-  /\ UNCHANGED inflight
-  /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-  \* we don't capture args here, but it's unlikely we'll have to repair this
-  /\ LogAction(<<"Network">>)
-  /\ LogActor("Network")
+\* NetworkDelivery ==
+\*   /\ \E s \in Server : outbox[s] /= <<>>
+\*   /\ outbox' = [s \in Server |-> <<>>]
+\*   /\ inbox' = [s \in Server |-> inbox[s] \o SelectSeq(MsgsIn(outbox), LAMBDA m : m.mdest = s)]
+\*   /\ UNCHANGED inflight
+\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
+\*   \* we don't capture args here, but it's unlikely we'll have to repair this
+\*   /\ LogAction(<<"Network">>)
+\*   /\ LogActor("Network")
 
-NetworkTakeMessage(s) ==
-  /\ outbox[s] /= <<>>
-  /\ outbox' = [s1 \in Server |-> <<>>]
-  /\ inflight' = inflight \o MsgsIn(outbox)
-  /\ UNCHANGED inbox
-  /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-  /\ LogAction(<<"NetworkTakeMessage", MsgsIn(outbox)>>)
-  /\ LogActor("Network")
+\* NetworkTakeMessage(s) ==
+\*   /\ outbox[s] /= <<>>
+\*   /\ outbox' = [s1 \in Server |-> <<>>]
+\*   /\ inflight' = inflight \o MsgsIn(outbox)
+\*   /\ UNCHANGED inbox
+\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
+\*   /\ LogAction(<<"NetworkTakeMessage", MsgsIn(outbox)>>)
+\*   /\ LogActor("Network")
 
 \* this is unused
-NetworkDeliverMessage ==
-  /\ inflight /= <<>>
-  /\ inbox' = [s \in Server |-> SelectSeq(inflight, LAMBDA m : m.mdest = s)]
-  /\ inflight' = <<>>
-  /\ UNCHANGED outbox
-  /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-  /\ LogAction(<<"NetworkDeliverMessage">>)
-  /\ LogActor("Network")
+\* NetworkDeliverMessage ==
+\*   /\ inflight /= <<>>
+\*   /\ inbox' = [s \in Server |-> SelectSeq(inflight, LAMBDA m : m.mdest = s)]
+\*   /\ inflight' = <<>>
+\*   /\ UNCHANGED outbox
+\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
+\*   /\ LogAction(<<"NetworkDeliverMessage">>)
+\*   /\ LogActor("Network")
 
 \* this delivers only one message at a time, which corresponds to what impls see
-NetworkDeliverMessageSlow(r, i) ==
-  /\ inflight /= <<>>
-  /\ inflight[i].mdest = r
-  /\ inbox' = [inbox EXCEPT ![r] = Append(inbox[r], inflight[i])]
-  /\ inflight' = RemoveAt(inflight, i)
-  /\ LogAction(<<"NetworkDeliverMessageSlow", inflight[i]>>)
-  /\ LogActor("Network")
-  /\ UNCHANGED outbox
-  /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
+\* NetworkDeliverMessageSlow(r, i) ==
+\*   /\ inflight /= <<>>
+\*   /\ inflight[i].mdest = r
+\*   /\ inbox' = [inbox EXCEPT ![r] = Append(inbox[r], inflight[i])]
+\*   /\ inflight' = RemoveAt(inflight, i)
+\*   /\ LogAction(<<"NetworkDeliverMessageSlow", inflight[i]>>)
+\*   /\ LogActor("Network")
+\*   /\ UNCHANGED outbox
+\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
 
 ----
 \* Defines how the variables may transition.
 Next == \*/\
           \* \/ \E i \in Server : Restart(i)
            \* \/ Timeout("s1")
-           \/ \E i \in Server : Timeout(i)
-           \/ \E i \in Server : SelfVote(i)
-           \/ \E i \in Server : Initialize(i)
-           \/ \E i,j \in Server : RequestVote(i, j)
-           \/ \E i \in Server : BecomeLeader(i)
-           \* \/ BecomeLeader("s1")
-           \/ \E i \in Server, v \in Value : ClientRequest(i, v)
-           \/ \E i \in Server : AdvanceCommitIndex(i)
-           \/ \E i,j \in Server : AppendEntries(i, j)
-           \/
-             LET msgs == MsgsIn(inbox) IN
-             \E i \in 1..Len(msgs) : Receive(msgs[i])
-          \*  \/ \E m \in Receivable : DuplicateMessage(m)
-          \*  \/ \E m \in Receivable : DropMessage(m)
-          \*  \/ NetworkDelivery
-           \/ \E s \in Server : NetworkTakeMessage(s)
-           \* \/ NetworkDeliverMessage
-           \/ \E r \in Server : \E i \in 1..Len(inflight) :
-             NetworkDeliverMessageSlow(r, i)
+  \/ \E i \in Server : Timeout(i)
+  \/ \E i \in Server : SelfVote(i)
+  \/ \E i \in Server : Initialize(i)
+  \/ \E i,j \in Server : RequestVote(i, j)
+  \/ \E i \in Server : BecomeLeader(i)
+  \* \/ BecomeLeader("s1")
+  \/ \E i \in Server, v \in Value : ClientRequest(i, v)
+  \/ \E i \in Server : AdvanceCommitIndex(i)
+  \/ \E i,j \in Server : AppendEntries(i, j)
+  \/
+    LET msgs == MsgsIn(inbox) IN
+    \E i \in 1..Len(msgs) : ReceiveMsg(msgs[i])
+  \*  \/ \E m \in Receivable : DuplicateMessage(m)
+  \*  \/ \E m \in Receivable : DropMessage(m)
+  \*  \/ NetworkDelivery
+  \/ \E s \in Server : \E i \in 1..Len(outbox[s]) :
+    /\ NetworkTakeMessage(outbox[s][i])
+    /\ UNCHANGED vars
+  \* \/ NetworkDeliverMessage
+  \/ \E i \in 1..Len(inflight) :
+    /\ NetworkDeliverMessage(inflight[i])
+    /\ UNCHANGED vars
            \* History variable that tracks every log ever:
         \* /\ allLogs' = allLogs \cup {log[i] : i \in Server}
 
@@ -945,6 +933,44 @@ TargetActions1 == ~
   /\ actions[1][1] = "Initialize"
   /\ actions[2][1] = "Timeout"
   /\ actions[3][1] = "SelfVote"
+
+DesiredHist ==
+LET rv2 == [mtype |-> "RequestVoteRequest", mterm |-> 2, mlastLogTerm |-> 0, mlastLogIndex |-> 0, msource |-> "s1", mdest |-> "s2"]
+    rv3 == [mtype |-> "RequestVoteRequest", mterm |-> 2, mlastLogTerm |-> 0, mlastLogIndex |-> 0, msource |-> "s1", mdest |-> "s3"]
+    rvr2 == [mtype |-> "RequestVoteResponse", mterm |-> 2, mvoteGranted |-> TRUE, msource |-> "s2", mdest |-> "s1"]
+    rvr3 == [mtype |-> "RequestVoteResponse", mterm |-> 2, mvoteGranted |-> TRUE, msource |-> "s3", mdest |-> "s1"]
+IN
+<<
+  <<"Timeout", "s1">>
+  , <<"RequestVote", "s1", "s2">>
+  , <<"RequestVote", "s1", "s3">>
+  , <<"NetworkTakeMessage", rv2>>
+  , <<"NetworkTakeMessage", rv3>>
+  , <<"NetworkDeliverMessage", rv2>>
+  , <<"NetworkDeliverMessage", rv3>>
+  , <<"UpdateTerm", "s2", "s1", rv2>>
+  , <<"HandleRequestVoteRequest", "s2", "s1", rv2>>
+  , <<"UpdateTerm", "s3", "s1", rv3>>
+  , <<"HandleRequestVoteRequest", "s3", "s1", rv3>>
+  , <<"NetworkTakeMessage", rvr2>>
+  , <<"NetworkTakeMessage", rvr3>>
+  , <<"NetworkDeliverMessage", rvr2>>
+  , <<"NetworkDeliverMessage", rvr3>>
+  , <<"HandleRequestVoteResponse", "s1", "s2", rvr2>>
+  , <<"HandleRequestVoteResponse", "s1", "s3", rvr3>>
+  , <<"BecomeLeader", "s1">>
+>>
+
+ConstrHist ==
+  \* level 1 is the initial state, and at that point actions is empty
+  LET i == TLCGet("level") - 1 IN
+  1 <= i /\ i <= Len(DesiredHist) =>
+    actions[i] = DesiredHist[i]
+
+TargetHist == ~
+  LET i == TLCGet("level") - 1 IN
+  /\ i = Len(DesiredHist)
+  /\ actions[i] = DesiredHist[i]
 
 TargetActions == ~
   /\ \E n \in Server : state[n] = "Leader"
