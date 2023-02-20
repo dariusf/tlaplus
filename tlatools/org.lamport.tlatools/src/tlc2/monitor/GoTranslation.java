@@ -40,10 +40,10 @@ public class GoTranslation {
         return initial.entrySet().stream().map(e -> {
             GoExpr val = translateValue(e.getValue());
             GoExpr expr = goExpr("Eq(this.state.%s, %s)",
-                    e.getKey().toString(), val);
+                    publicVarName(e.getKey().toString()), val);
             return failureMessage("initial",
-                    String.format("%s = %s", e.getKey(), Eval.prettyPrint(e.getValue())),
-                    List.of(String.format("this.state.%s", e.getKey().toString()), val.expr),
+                    String.format("%s = %s", publicVarName(e.getKey().toString()), Eval.prettyPrint(e.getValue())),
+                    List.of(String.format("this.state.%s", publicVarName(e.getKey().toString())), val.expr),
                     expr, "precondition");
         }).reduce(GoBlock::seq).get();
     }
@@ -430,7 +430,6 @@ public class GoTranslation {
                         OpApplNode var = (OpApplNode) args.get(0);
                         String varName = var.getOperator().getName().toString();
 
-
                         boolean tupleArg = varName.equals("$Tuple");
                         if (tupleArg) {
                             ExprOrOpArgNode[] tupleArgs = ((OpApplNode) args.get(0)).getArgs();
@@ -540,11 +539,11 @@ public class GoTranslation {
                     }
 
                     if (variables.contains(name) || isPrimed(op)) {
-                        String eventVar = isPrimed(op) ? "this" : "prev";
+                        String where = isPrimed(op) ? "this" : "prev";
                         if (isPrimed(op)) {
                             name = ((OpApplNode) operatorArgs(op).get(0)).getOperator().getName().toString();
                         }
-                        return qualifyWithType(goExpr("%s.state.%s", eventVar, name), typ);
+                        return qualifyWithType(goExpr("%s.state.%s", where, publicVarName(name)), typ);
                     }
             }
         }
@@ -725,4 +724,7 @@ public class GoTranslation {
         return substitute((OpApplNode) def.getBody(), subs);
     }
 
+    public static String publicVarName(String v) {
+        return v.substring(0, 1).toUpperCase() + v.substring(1);
+    }
 }

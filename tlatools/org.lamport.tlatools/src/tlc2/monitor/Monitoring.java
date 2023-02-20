@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static tlc2.monitor.GoTranslation.publicVarName;
 import static tlc2.monitor.Translate.fail;
 
 public class Monitoring {
@@ -175,9 +176,10 @@ public class Monitoring {
             initialBody = translation.translateInitial(initialState);
         }
 
-        String pkg = "monitoring";
-//        pkg = "server"; // committer
-        String varDecls = variables.stream().map(v -> String.format("%s TLA", v.getName())).collect(Collectors.joining("\n"));
+        String pkg = "monitor";
+        String varDecls = declaredVariableNames.stream()
+                .map(v -> String.format("%s TLA", publicVarName(v)))
+                .collect(Collectors.joining("\n"));
 
         String actionNames = definitions.stream()
                 .filter(d -> translatedDefs.contains(d.getName().toString()))
@@ -208,10 +210,10 @@ public class Monitoring {
                 })
                 .collect(Collectors.joining("\n"));
 
-        String varAssignments = variables.stream().map(v ->
+        String varAssignments = declaredVariableNames.stream().map(v ->
                         String.format("if v.state.%1$s != nil {\n" +
                                 "c.%1$s = v.state.%1$s\n" +
-                                "}", v.getName().toString()))
+                                "}", publicVarName(v)))
                 .collect(Collectors.joining("\n"));
 
         String module = String.format(overallTemplate,
