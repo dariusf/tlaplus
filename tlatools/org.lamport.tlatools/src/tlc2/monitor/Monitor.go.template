@@ -3,7 +3,9 @@ package %s
 // GENERATED CODE, DO NOT EDIT DIRECTLY
 
 import (
-    // "encoding/json"
+    "bytes"
+    "encoding/json"
+    "os"
     "sort"
     "math"
     "strconv"
@@ -17,10 +19,15 @@ import (
 // TLA expressions
 type TLA interface {
 	String() string
+	MarshalJSON() ([]byte, error)
 }
 
 type Sequence struct {
 	elements []TLA
+}
+
+func (s Sequence) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.elements)
 }
 
 func (s Sequence) String() string {
@@ -33,6 +40,10 @@ func (s Sequence) String() string {
 
 type Record struct {
 	elements map[string]TLA
+}
+
+func (s Record) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.elements)
 }
 
 func (s Record) String() string {
@@ -52,6 +63,10 @@ func (s Record) String() string {
 
 type Set_ struct {
 	elements map[string]TLA
+}
+
+func (s Set_) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"type": "set", "content": s.elements})
 }
 
 func (s Set_) String() string {
@@ -77,6 +92,10 @@ func (s Integer) String() string {
 	return fmt.Sprintf("%%d", s.value)
 }
 
+func (s Integer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.value)
+}
+
 type Boolean struct {
 	value bool
 }
@@ -85,12 +104,20 @@ func (b Boolean) String() string {
 	return strconv.FormatBool(b.value)
 }
 
+func (s Boolean) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.value)
+}
+
 type String struct {
 	value string
 }
 
 func (s String) String() string {
 	return s.value
+}
+
+func (s String) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.value)
 }
 
 // smart constructors
@@ -403,6 +430,35 @@ func dAnd(a Boolean, b Boolean) Boolean {
 
 // panic instead of returning error
 var crash = true
+var writeLog = true
+
+var logfile *os.File
+var encoder *json.Encoder
+
+func lazyInitLogFile(node string) {
+	if logfile != nil {
+	    return
+	}
+    var err error
+    logfile, err = os.Create(fmt.Sprintf("log-%%s.ndjson", node))
+    if err != nil {
+        panic("could not create log file")
+    }
+    encoder = json.NewEncoder(logfile)
+    encoder.SetEscapeHTML(false)
+}
+
+func logEvent(node string, e Event) {
+	lazyInitLogFile(node)
+
+	// https://github.com/golang/go/issues/56630
+	// bs, _ := json.Marshal(e)
+	// logfile.Write(bs)
+	// logfile.WriteString("\n")
+	encoder.Encode(e)
+
+	_ = logfile.Sync()
+}
 
 func hash(a TLA) string {
 	return a.String()
@@ -458,12 +514,19 @@ func (e EventType) String() string {
 	}
 }
 
+func (s EventType) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString(`"`)
+	buffer.WriteString(s.String())
+	buffer.WriteString(`"`)
+	return buffer.Bytes(), nil
+}
+
 type Event struct {
-	typ    EventType
-	params []TLA
-	state  State
-	file   string
-	line   int
+	Typ    EventType `json:"typ"`
+	Params []TLA `json:"params"`
+	State  State `json:"state"`
+	File   string `json:"file"`
+	Line   int `json:"line"`
 }
 
 func printParams(ps []TLA) string {
@@ -476,7 +539,7 @@ func printParams(ps []TLA) string {
 
 func (e Event) String() string {
 	return fmt.Sprintf("%%s(%%s);%%s:%%d;%%+v",
-		e.typ, printParams(e.params), path.Base(e.file), e.line, e.state)
+		e.Typ, printParams(e.Params), path.Base(e.File), e.Line, e.State)
 }
 
 /*
@@ -490,11 +553,13 @@ type Monitor struct {
 	// which is annoying and error-prone as it may have to be passed across several functions
 	extra  []Event
 	events []Event
+	who String
 	//constants Constants
 }
 
-func NewMonitor(/* constants Constants */) *Monitor {
+func NewMonitor(who String /* constants Constants */) *Monitor {
 	return &Monitor{
+	    who: who,
 		extra:  []Event{},
 		events: []Event{},
 		//constants: constants,
@@ -511,7 +576,7 @@ func (m *Monitor) CheckTrace() error {
 		if i == 0 {
 			prev = this
 		}
-		switch this.typ {
+		switch this.Typ {
 		    case Initial:
                 if err := m.CheckInitial(i, Event{}, this); err != nil {
                     return err
@@ -566,11 +631,14 @@ func (m *Monitor) CheckInc(i int, prev Event, this Event) error {
 
 // this state value can have nil fields
 func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
+	if len(args) == 0 {
+		args = []TLA{}
+	}
 
 	e := Event{
-		typ:    typ,
-		params: args,
-		state:  v,
+		Typ:    typ,
+		Params: args,
+		State:  v,
 		// no need to capture file and line here
 	}
 	m.extra = append(m.extra, e)
@@ -578,15 +646,18 @@ func (m *Monitor) CaptureVariable(v State, typ EventType, args ...TLA) error {
 }
 
 func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
+	if len(args) == 0 {
+		args = []TLA{}
+	}
 
 	// override current values with extras
 	// all have to pertain to this action
 	for _, v := range m.extra {
 		// sanity checks
-		if v.typ != typ {
+		if v.Typ != typ {
 			return fmt.Errorf("type did not match")
 		}
-		for i, p := range v.params {
+		for i, p := range v.Params {
 			if p != args[i] {
 				return fmt.Errorf("arg %%d did not match", i)
 			}
@@ -603,14 +674,17 @@ func (m *Monitor) CaptureState(c State, typ EventType, args ...TLA) error {
 	// record event
 	file, line := getFileLine()
 	e := Event{
-		typ:    typ,
-		params: args,
-		state:  c,
-		file:   file,
-		line:   line,
+		Typ:    typ,
+		Params: args,
+		State:  c,
+		File:   file,
+		Line:   line,
 	}
 
 	m.events = append(m.events, e)
+	if writeLog {
+	    logEvent(m.who.value, e)
+	}
 
 	return nil
 }

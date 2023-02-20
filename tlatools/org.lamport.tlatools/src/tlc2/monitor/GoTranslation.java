@@ -39,11 +39,11 @@ public class GoTranslation {
         // this assumes the initial state contains all equalities
         return initial.entrySet().stream().map(e -> {
             GoExpr val = translateValue(e.getValue());
-            GoExpr expr = goExpr("Eq(this.state.%s, %s)",
+            GoExpr expr = goExpr("Eq(this.State.%s, %s)",
                     publicVarName(e.getKey().toString()), val);
             return failureMessage("initial",
                     String.format("%s = %s", publicVarName(e.getKey().toString()), Eval.prettyPrint(e.getValue())),
-                    List.of(String.format("this.state.%s", publicVarName(e.getKey().toString())), val.expr),
+                    List.of(String.format("this.State.%s", publicVarName(e.getKey().toString())), val.expr),
                     expr, "precondition");
         }).reduce(GoBlock::seq).get();
     }
@@ -543,7 +543,7 @@ public class GoTranslation {
                         if (isPrimed(op)) {
                             name = ((OpApplNode) operatorArgs(op).get(0)).getOperator().getName().toString();
                         }
-                        return qualifyWithType(goExpr("%s.state.%s", where, publicVarName(name)), typ);
+                        return qualifyWithType(goExpr("%s.State.%s", where, publicVarName(name)), typ);
                     }
             }
         }

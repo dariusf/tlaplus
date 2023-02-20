@@ -197,7 +197,7 @@ public class Monitoring {
         String checkSwitchCases = definitions.stream()
                 .filter(d -> translatedDefs.contains(d.getName().toString()))
                 .map(d -> {
-                    String params = translateParams(d, (i, p) -> String.format("this.params[%d]", i)).collect(Collectors.joining(", "));
+                    String params = translateParams(d, (i, p) -> String.format("this.Params[%d]", i)).collect(Collectors.joining(", "));
                     if (!params.isEmpty()) {
                         params += ", ";
                     }
@@ -211,8 +211,8 @@ public class Monitoring {
                 .collect(Collectors.joining("\n"));
 
         String varAssignments = declaredVariableNames.stream().map(v ->
-                        String.format("if v.state.%1$s != nil {\n" +
-                                "c.%1$s = v.state.%1$s\n" +
+                        String.format("if v.State.%1$s != nil {\n" +
+                                "c.%1$s = v.State.%1$s\n" +
                                 "}", publicVarName(v)))
                 .collect(Collectors.joining("\n"));
 
