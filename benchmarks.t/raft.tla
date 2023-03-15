@@ -370,9 +370,12 @@ Initialize(i) ==
     <<[term |-> 2, value |-> 0],
       [term |-> 2, value |-> 0],
       [term |-> 2, value |-> 0]>>]
+  \* etcd OMISSION 4
+  /\ nextIndex' = [nextIndex EXCEPT ![i] = [j \in Server |-> 3]]
   /\ UNCHANGED <<state, votedFor>>
   /\ UNCHANGED <<commitIndex>>
-  /\ UNCHANGED <<candidateVars, leaderVars>>
+  /\ UNCHANGED <<candidateVars>>
+  /\ UNCHANGED matchIndex
   /\ UNCHANGED <<inboxOutboxVars>>
   /\ LogAction(<<"Initialize", i>>)
   /\ LogActor(i)
@@ -384,8 +387,16 @@ Timeout(i) == /\ state[i] \in {"Follower", "Candidate"}
               /\ currentTerm' = [currentTerm EXCEPT ![i] = currentTerm[i] + 1]
               \* Most implementations would probably just set the local vote
               \* atomically, but messaging localhost for it is weaker.
-              /\ votedFor' = [votedFor EXCEPT ![i] = "none"]
+              \* /\ votedFor' = [votedFor EXCEPT ![i] = "none"]
+              \* etcd OMISSION 6
+              /\
+                \/ votedFor' = [votedFor EXCEPT ![i] = "none"]
+                \/ votedFor' = [votedFor EXCEPT ![i] = i]
               /\ votesResponded' = [votesResponded EXCEPT ![i] = {}]
+              \* etcd OMISSION 5
+              /\
+                \/ UNCHANGED nextIndex
+                \/ nextIndex' = [nextIndex EXCEPT ![i] = [j \in Server |-> nextIndex[i][j]+1]]
               \* OMISSION 3
               \* fix is to add a disjunct that allows servers to vote for themselves immediately
               \* /\ votesGranted'   = [votesGranted EXCEPT ![i] = {}]
@@ -394,7 +405,11 @@ Timeout(i) == /\ state[i] \in {"Follower", "Candidate"}
                 \/ votesGranted'   = [votesGranted EXCEPT ![i] = {i}]
               \* /\ voterLog'       = [voterLog EXCEPT ![i] = [j \in {} |-> <<>>]]
               \* /\ who' = i
-              /\ UNCHANGED <<leaderVars, logVars>>
+              \* etcd OMISSION 7
+              /\
+                \/ UNCHANGED matchIndex
+                \/ matchIndex' = [matchIndex EXCEPT ![i] = [matchIndex[i] EXCEPT ![i] = Len(log[i])]]
+              /\ UNCHANGED <<logVars>>
               /\ UNCHANGED <<inboxOutboxVars>>
               \* /\ UNCHANGED <<lastComm>>
               /\ LogAction(<<"Timeout", i>>)
@@ -470,8 +485,12 @@ BecomeLeader(i) ==
     /\ state'      = [state EXCEPT ![i] = "Leader"]
     /\ nextIndex'  = [nextIndex EXCEPT ![i] =
                          [j \in Server |-> Len(log[i]) + 1]]
-    /\ matchIndex' = [matchIndex EXCEPT ![i] =
-                         [j \in Server |-> 0]]
+    \* etcd OMISSION 9
+    /\
+      \/ matchIndex' = [matchIndex EXCEPT ![i] =
+                          [j \in Server |-> 0]]
+      \/ matchIndex' = [matchIndex EXCEPT ![i] =
+                          [j \in Server |-> IF i = j THEN matchIndex[i][j] ELSE 0]]
     \* /\ elections'  = elections \cup
     \*                      {[eterm     |-> currentTerm[i],
     \*                        eleader   |-> i,
@@ -480,7 +499,18 @@ BecomeLeader(i) ==
     \*                        evoterLog |-> <<>>
     \*                       \*  voterLog[i]
     \*                        ]}
-    /\ UNCHANGED <<currentTerm, votedFor, candidateVars, logVars>>
+    \* etcd OMISSION 10
+    /\
+      \/ log' = [log EXCEPT ![i] = Append(log[i], [term |-> currentTerm[i], value |-> 0])]
+      \/ UNCHANGED log
+    \* etcd OMISSION 11
+    /\
+      \/ UNCHANGED candidateVars
+      \/
+        /\ votesGranted' = [votesGranted EXCEPT ![i] = {}]
+        /\ votesResponded' = [votesResponded EXCEPT ![i] = {}]
+    /\ UNCHANGED <<currentTerm, votedFor>>
+    /\ UNCHANGED commitIndex
     \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"BecomeLeader", i>>)
@@ -730,7 +760,14 @@ UpdateTerm(i, j, m) ==
     /\ state'          = [state       EXCEPT ![i] = "Follower"]
     /\ votedFor'       = [votedFor    EXCEPT ![i] = "none"]
        \* messages is unchanged so m can be processed further.
-    /\ UNCHANGED <<candidateVars, leaderVars, logVars>>
+    /\ UNCHANGED <<candidateVars, logVars>>
+    \* etcd OMISSION 8
+    /\
+      \/ UNCHANGED matchIndex
+      \/ matchIndex' = [matchIndex EXCEPT ![i] = [matchIndex[i] EXCEPT ![i] = Len(log[i])]]
+    /\
+      \/ UNCHANGED nextIndex
+      \/ nextIndex' = [nextIndex EXCEPT ![i] = [j1 \in Server |-> nextIndex[i][j1]+1]]
     \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     \* /\ UNCHANGED actions

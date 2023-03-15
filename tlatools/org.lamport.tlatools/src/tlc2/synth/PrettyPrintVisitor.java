@@ -125,6 +125,11 @@ public class PrettyPrintVisitor extends Visitor<String> {
                     exp.accept(this));
         } else if (op.equals(OP_uc.toString())) {
             return String.format("UNCHANGED %s", node.getArgs()[0].accept(this));
+        } else if (op.equals(OP_ite.toString())) {
+            return String.format("IF %s THEN %s ELSE %s",
+                    node.getArgs()[0].accept(this),
+                    node.getArgs()[1].accept(this),
+                    node.getArgs()[2].accept(this));
         }
 
         char first = op.charAt(0);

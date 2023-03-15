@@ -41,7 +41,7 @@ public class GoTranslation {
             GoExpr val = translateValue(e.getValue());
             GoExpr expr = goExpr("Eq(this.State.%s, %s)",
                     publicVarName(e.getKey().toString()), val);
-            return failureMessage("initial",
+            return failureMessage("Initial",
                     String.format("%s = %s", publicVarName(e.getKey().toString()), Eval.prettyPrint(e.getValue())),
                     List.of(String.format("this.State.%s", publicVarName(e.getKey().toString())), val.expr),
                     expr, "precondition");
@@ -112,7 +112,9 @@ public class GoTranslation {
     }
 
     public static String escape(String s) {
-        return s.replaceAll("\\\\", "\\\\\\\\").replaceAll("\"", "\\\\\"");
+        return s.replaceAll("\\\\", "\\\\\\\\")
+                .replaceAll("\"", "\\\\\"")
+                .replaceAll("\n", " ");
     }
 
     public static List<String> findSubexprs(GoExpr expr) {
@@ -182,7 +184,9 @@ public class GoTranslation {
                     boundVarNames.addAll(paramNames);
                     GoExpr body = translateExpr(opDef.getBody(), null);
                     boundVarNames.removeAll(paramNames);
-                    return goExpr("func(%s) TLA { return %s }", params, body);
+                    return goExpr("func(%s) TLA {\n" +
+                            "%s\n" +
+                            "}", params, goBlock("return %s", body));
                 default:
                     throw fail("unimplemented OpArgNode %s", name);
             }
@@ -402,7 +406,9 @@ public class GoTranslation {
                     GoExpr a1 = translateExpr(set, null);
                     GoExpr a2 = translateExpr(rhs1, Type.SET);
                     boundVarNames.remove(v1);
-                    GoExpr func = goExpr("func(%s TLA) TLA { return %s }", v1, a2);
+                    GoExpr func = goExpr("func(%s TLA) TLA {\n" +
+                            "%s\n" +
+                            "}", v1, goBlock("return %s", a2));
                     return goExpr("FnConstruct(%s, %s)", a1, func);
                 }
                 case "$BoundedForall":
@@ -421,7 +427,9 @@ public class GoTranslation {
                     GoExpr body = translateExpr(substitute(cond, Map.of(var, tla(k1))), null);
                     boundVarNames.remove(k1);
                     // ensure this is a separate subexpression
-                    GoExpr func = goExpr("func(%s TLA) Boolean { return %s }", k1, body);
+                    GoExpr func = goExpr("func(%s TLA) Boolean {\n" +
+                            "%s" +
+                            "\n}", k1, goBlock("return %s", body));
                     return goExpr("%s(%s, %s)", name.substring(1), sset, func);
                 }
                 case "UNCHANGED": {
@@ -662,6 +670,9 @@ public class GoTranslation {
                 res.subexprs.add((GoExpr) a);
                 res.defs.addAll(((GoExpr) a).defs);
                 return Stream.of(((GoExpr) a).expr);
+            } else if (a instanceof GoBlock) {
+                // possible because of closures
+                return Stream.of(((GoBlock) a).block);
             } else {
                 throw fail("invalid");
             }
