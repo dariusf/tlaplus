@@ -47,19 +47,23 @@ public class TLCRunner {
 	
 	private boolean silenceStdOut;
 
-	public TLCRunner(final List<String> tlcArguments, final File logfileDestination) {
+	private final File workingDir;
+
+	public TLCRunner(final List<String> tlcArguments, File workingDir, final File logfileDestination) {
 		outputLogfile = logfileDestination;
 		outputOutputStream = null;
 		arguments = tlcArguments;
+		this.workingDir = workingDir;
 		
 		silenceStdOut = false;
 	}
 
-	public TLCRunner(final List<String> tlcArguments, final OutputStream logfileOutputStream) {
+	public TLCRunner(final List<String> tlcArguments, File workingDir, final OutputStream logfileOutputStream) {
 		outputLogfile = null;
 		outputOutputStream = logfileOutputStream;
 		arguments = tlcArguments;
-		
+		this.workingDir = workingDir;
+
 		silenceStdOut = false;
 	}
 	
@@ -139,7 +143,8 @@ public class TLCRunner {
 		final ProcessBuilder processBuilder = new ProcessBuilder(command);
 		final Map<String, String> environment = processBuilder.environment();
 		environment.put("CLASSPATH", System.getProperty("java.class.path"));
-		
+
+		processBuilder.directory(workingDir);
 		return processBuilder;
 	}
 
