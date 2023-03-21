@@ -18,7 +18,6 @@ import tlc2.value.impl.Value;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -38,15 +37,6 @@ public class MBTC {
             .registerTypeAdapter(State.class, new State.Adapter())
             .create();
 
-    private static final boolean DEBUG = true;
-
-    public void log(String s, Object... stuff) {
-        if (!DEBUG) {
-            return;
-        }
-        System.out.printf(s + "\n", stuff);
-    }
-
     public Optional<Cex> run() throws IOException {
 
 //        String spec = new File("../../benchmarks.t/raft.tla").getAbsolutePath();
@@ -64,19 +54,19 @@ public class MBTC {
 
         Function<Integer, Optional<List<State>>> align = i -> {
             if (i == null) {
-                log("checking for full alignment");
+                Misc.log("checking for full alignment");
             } else {
-                log("trying to find alignment at %d", i);
+                Misc.log("trying to find alignment at %d", i);
             }
             return checkAlignment(tool, specDir, implTrace, i, allowStuttering, originalSpec);
         };
 
         Optional<List<State>> initialAlignment = align.apply(null);
         if (initialAlignment.isPresent()) {
-            log("OK!");
+            Misc.log("OK!");
             return Optional.empty();
         }
-        log("cannot align full trace, bisecting to find counterexample");
+        Misc.log("cannot align full trace, bisecting to find counterexample");
         Optional<Cex> cex = bisectAlignment(implTrace.size() - 1, align);
 
         return cex.map(c -> {
@@ -89,14 +79,14 @@ public class MBTC {
     Optional<Cex> bisectAlignment(int index, Function<Integer, Optional<List<State>>> align) {
         Pair<Integer, Optional<List<State>>> res = binarySearchRightmost(1, index, align, m -> {
             if (m.isEmpty()) {
-                log("failed, trying shorter");
+                Misc.log("failed, trying shorter");
             } else {
-                log("succeeded, trying longer");
+                Misc.log("succeeded, trying longer");
             }
             return m.isEmpty();
         });
 
-        log("bad state at index " + res._1);
+        Misc.log("bad state at index " + res._1);
 
         return res._2.map(r -> {
             Cex cex = new Cex();
@@ -146,7 +136,7 @@ public class MBTC {
                     "CHECK_DEADLOCK FALSE", constants);
 
             Files.writeString(dir.resolve("MTrace4.cfg"), config);
-            copyFiles(".tla", specDir, dir);
+            Misc.copyFiles(".tla", specDir, dir);
 
             TLCRunner runner = new TLCRunner(
                     List.of("-noGenerateSpecTE", "-cleanup", "-dumpTrace", "json", "trace.json", "MTrace4.tla"),
@@ -181,7 +171,7 @@ public class MBTC {
                         "NEXT Next\n" +
                         "CHECK_DEADLOCK FALSE", constants);
                 Files.writeString(dir.resolve(originalSpec + ".cfg"), config);
-                copyFiles(".tla", specDir, dir);
+                Misc.copyFiles(".tla", specDir, dir);
             }
 
             String modifiedSpec = Files.readString(specPath);
@@ -318,66 +308,21 @@ public class MBTC {
         }
     }
 
-    private static void copyFiles(String suffix, Path specDir, Path dir) throws IOException {
-        Files.walkFileTree(specDir, new FileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                if (file.toString().endsWith(suffix)) {
-                    Files.copy(file, dir.resolve(file.getFileName()));
-                }
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
-                return FileVisitResult.CONTINUE;
-            }
-        });
-    }
-
     public static void main(String[] args) throws IOException {
 
         Cex cex;
         boolean memo = true;
 //        boolean memo = false;
         if (memo) {
-            cex = readCounterexample("cex.json");
+            cex = Misc.readJson("cex.json", Cex.class);
         } else {
             Optional<Cex> res;
             res = new MBTC().run();
-            ensure(res.isPresent());
+            Misc.ensure(res.isPresent());
             cex = res.get();
-            writeCounterexample(cex);
+            Misc.writeToJson(cex, "cex.json");
         }
 
         Present.showCounterexample(cex);
-    }
-
-    private static Cex readCounterexample(String path) throws IOException {
-        try (Reader reader = new FileReader(path)) {
-            return Objects.requireNonNull(gson.fromJson(reader, Cex.class));
-        }
-    }
-
-    private static void writeCounterexample(Cex cex) throws IOException {
-        try (Writer writer = new FileWriter("cex.json")) {
-            gson.toJson(cex, writer);
-        }
-    }
-
-    public static void ensure(boolean cond) {
-        if (!cond) {
-            throw new IllegalStateException();
-        }
     }
 }

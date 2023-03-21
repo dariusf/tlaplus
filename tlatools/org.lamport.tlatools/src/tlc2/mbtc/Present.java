@@ -2,11 +2,11 @@ package tlc2.mbtc;
 
 import tlc2.synth.Eval;
 import tlc2.value.IValue;
-import tlc2.value.impl.*;
-import util.Assert;
+import tlc2.value.impl.RecordValue;
+import tlc2.value.impl.StringValue;
+import tlc2.value.impl.TupleValue;
+import tlc2.value.impl.Value;
 
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -35,22 +35,11 @@ public class Present {
     static Set<String> simpleFlatDiff(State a, State b) {
         Set<String> res = new HashSet<>();
         for (Map.Entry<String, Value> e : a.data.entrySet()) {
-            if (b.data.containsKey(e.getKey()) && !valueEqual(e.getValue(), b.data.get(e.getKey()))) {
+            if (b.data.containsKey(e.getKey()) && !Misc.valueEqual(e.getValue(), b.data.get(e.getKey()))) {
                 res.add(e.getKey());
             }
         }
         return res;
-    }
-
-    private static boolean valueEqual(Value a, Value b) {
-        if (!a.getClass().equals(b.getClass())) {
-            return false;
-        }
-        try {
-            return a.equals(b);
-        } catch (Assert.TLCRuntimeException e) {
-            return false;
-        }
     }
 
     static State projectLimit(State s, State reference, StringValue actor) {
@@ -61,12 +50,6 @@ public class Present {
             }
         });
         return project(g, actor);
-    }
-
-    public static void main(String[] args) throws Exception {
-        String alignment = "/Users/darius/refinement-mappings/trace-specs/counterexample.json";
-        Cex cex = MBTC.gson.fromJson(Files.newBufferedReader(Paths.get(alignment)), Cex.class);
-        showCounterexample(cex);
     }
 
     public static void showCounterexample(Cex cex) {
@@ -81,7 +64,7 @@ public class Present {
 
         // project on current actor, and limit fields to those in the impl state
         State goodProj = projectLimit(goodGlobal, badProj.toState(), actor);
-        MBTC.ensure(goodProj.data.keySet().equals(badProj.data.keySet()));
+        Misc.ensure(goodProj.data.keySet().equals(badProj.data.keySet()));
 
         // what changed from goodProj -> badProj (i.e. what was observed to happen)
         Set<String> implChanged = simpleFlatDiff(goodProj, badProj.toState());
@@ -138,8 +121,8 @@ public class Present {
             implChanged.forEach(s -> {
                 // the next state will have values for everything
                 assert possibleNextProj.data.containsKey(s);
-                if (!valueEqual(possibleNextProj.data.get(s), badProj.data.get(s))) {
-                    if (valueEqual(goodProj.data.get(s), possibleNextProj.data.get(s))) {
+                if (!Misc.valueEqual(possibleNextProj.data.get(s), badProj.data.get(s))) {
+                    if (Misc.valueEqual(goodProj.data.get(s), possibleNextProj.data.get(s))) {
                         System.out.printf("%s changed from\n  %s\nto\n  %s\nbut it should have remained unchanged\n", s, Eval.prettyPrint(goodProj.data.get(s)), Eval.prettyPrint(badProj.data.get(s)));
                     } else {
                         System.out.printf("%s changed from\n  %s\nto\n  %s\nbut it should have changed to\n  %s\ninstead\n", s, Eval.prettyPrint(goodProj.data.get(s)), Eval.prettyPrint(badProj.data.get(s)), Eval.prettyPrint(possibleNextProj.data.get(s)));
@@ -183,7 +166,7 @@ public class Present {
 //            if (e.getKey().equals("i")) {
 //                continue; // TODO filter out these aux vars earlier on
 //            }
-                if (valueEqual(e.getValue(), goodGlobal.data.get(e.getKey()))) {
+                if (Misc.valueEqual(e.getValue(), goodGlobal.data.get(e.getKey()))) {
                     System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
                 } else {
                     // synth an expr to represent change
@@ -208,7 +191,7 @@ public class Present {
                 System.out.println("+1 for " + changedField);
                 score++;
 //                    System.out.println("same field " + changedField);
-                if (valueEqual(badProj.data.get(changedField), (proj.data.get(changedField)))) {
+                if (Misc.valueEqual(badProj.data.get(changedField), (proj.data.get(changedField)))) {
                     System.out.println("+2 for " + badProj.data.get(changedField));
 //                        System.out.println("equal value");
                     score += 2;
