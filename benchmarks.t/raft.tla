@@ -639,8 +639,9 @@ Next ==
   \* \/ \E i \in Server : Restart(i)
   \* \/ Timeout("s1")
   \/ \E i \in Server : Timeout(i)
-  \/ \E i \in Server : SelfVote(i)
-  \/ \E i \in Server : Initialize(i)
+  \* etcd OMISSIONs
+  \* \/ \E i \in Server : SelfVote(i)
+  \* \/ \E i \in Server : Initialize(i)
   \/ \E i,j \in Server : RequestVote(i, j)
   \/ \E i \in Server : BecomeLeader(i)
   \* \/ BecomeLeader("s1")

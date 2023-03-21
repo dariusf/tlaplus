@@ -1,5 +1,6 @@
 package tlc2.mbtc;
 
+import com.google.gson.JsonElement;
 import com.google.gson.TypeAdapter;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
@@ -20,11 +21,11 @@ public class State {
     private static final Type MAP_STRING_VALUE = new TypeToken<Map<String, Value>>() {
     }.getType();
 
-    public static class Deserializer extends TypeAdapter<State> {
+    public static class Adapter extends TypeAdapter<State> {
 
         @Override
         public void write(JsonWriter jsonWriter, State state) throws IOException {
-            throw new UnsupportedOperationException("not yet implemented");
+            MBTC.gson.toJson(state.data, MAP_STRING_VALUE, jsonWriter);
         }
 
         @Override

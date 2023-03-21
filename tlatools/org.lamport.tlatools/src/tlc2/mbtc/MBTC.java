@@ -15,8 +15,7 @@ import tlc2.value.impl.FcnRcdValue;
 import tlc2.value.impl.StringValue;
 import tlc2.value.impl.Value;
 
-import java.io.IOException;
-import java.io.Reader;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -35,8 +34,8 @@ public class MBTC {
     }.getType();
 
     public static Gson gson = new GsonBuilder()
-            .registerTypeAdapter(Value.class, new ValueDeserializer())
-            .registerTypeAdapter(State.class, new State.Deserializer())
+            .registerTypeAdapter(Value.class, new ValueAdapter())
+            .registerTypeAdapter(State.class, new State.Adapter())
             .create();
 
     private static final boolean DEBUG = true;
@@ -65,7 +64,7 @@ public class MBTC {
 
         Function<Integer, Optional<List<State>>> align = i -> {
             if (i == null) {
-                log("initial alignment");
+                log("checking for full alignment");
             } else {
                 log("trying to find alignment at %d", i);
             }
@@ -77,7 +76,7 @@ public class MBTC {
             log("OK!");
             return Optional.empty();
         }
-        log("no initial alignment, bisecting to find counterexample");
+        log("cannot align full trace, bisecting to find counterexample");
         Optional<Cex> cex = bisectAlignment(implTrace.size() - 1, align);
 
         return cex.map(c -> {
@@ -87,8 +86,8 @@ public class MBTC {
         });
     }
 
-    Optional<Cex> bisectAlignment(int length, Function<Integer, Optional<List<State>>> align) {
-        Pair<Integer, Optional<List<State>>> res = binarySearchRightmost(1, length, align, m -> {
+    Optional<Cex> bisectAlignment(int index, Function<Integer, Optional<List<State>>> align) {
+        Pair<Integer, Optional<List<State>>> res = binarySearchRightmost(1, index, align, m -> {
             if (m.isEmpty()) {
                 log("failed, trying shorter");
             } else {
@@ -97,7 +96,7 @@ public class MBTC {
             return m.isEmpty();
         });
 
-        log("max length " + res._1);
+        log("bad state at index " + res._1);
 
         return res._2.map(r -> {
             Cex cex = new Cex();
@@ -209,7 +208,14 @@ public class MBTC {
 
             Path dumpFile = dir.resolve("dump.json");
             Reader reader = Files.newBufferedReader(dumpFile);
-            return Objects.requireNonNull(gson.fromJson(reader, LIST_STATE));
+
+            List<State> states = Objects.requireNonNull(gson.fromJson(reader, LIST_STATE));
+
+            // ignore stuttering states in the frontier
+            states = states.stream()
+                    .filter(s -> s.data.get("actions").size() > 0)
+                    .collect(Collectors.toList());
+            return states;
 
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -340,8 +346,38 @@ public class MBTC {
     }
 
     public static void main(String[] args) throws IOException {
-        Optional<Cex> res = new MBTC().run();
-        res.ifPresent(Present::showCounterexample);
+
+        Cex cex;
+        boolean memo = true;
+//        boolean memo = false;
+        if (memo) {
+            cex = readCounterexample("cex.json");
+        } else {
+            Optional<Cex> res;
+            res = new MBTC().run();
+            ensure(res.isPresent());
+            cex = res.get();
+            writeCounterexample(cex);
+        }
+
+        Present.showCounterexample(cex);
     }
 
+    private static Cex readCounterexample(String path) throws IOException {
+        try (Reader reader = new FileReader(path)) {
+            return Objects.requireNonNull(gson.fromJson(reader, Cex.class));
+        }
+    }
+
+    private static void writeCounterexample(Cex cex) throws IOException {
+        try (Writer writer = new FileWriter("cex.json")) {
+            gson.toJson(cex, writer);
+        }
+    }
+
+    public static void ensure(boolean cond) {
+        if (!cond) {
+            throw new IllegalStateException();
+        }
+    }
 }
