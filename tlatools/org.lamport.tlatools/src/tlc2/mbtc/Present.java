@@ -1,100 +1,19 @@
-package tlc2.synth;
+package tlc2.mbtc;
 
-import com.google.gson.*;
-import tlc2.module.Json;
+import tlc2.synth.Eval;
 import tlc2.value.IValue;
 import tlc2.value.impl.*;
 import util.Assert;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
-class State {
-    Map<String, Value> data;
-    Map<String, Value> extra = new HashMap<>();
 
-    public State(Map<String, Value> data) {
-        this.data = data;
-    }
-}
-
-class MBTCResult {
-    int prefix_i;
-    List<State> tracePrefix;
-    List<State> implTrace;
-    List<State> frontier;
-    Map<String, Value> implInfo;
-
-    State goodState() {
-        return tracePrefix.get(tracePrefix.size() - 1);
-    }
-
-    State badState() {
-        return implTrace.get(prefix_i);
-    }
-
-    static class Deserializer implements JsonDeserializer<MBTCResult> {
-        @Override
-        public MBTCResult deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext c) throws JsonParseException {
-            MBTCResult r = new MBTCResult();
-            JsonObject json = jsonElement.getAsJsonObject();
-            r.prefix_i = json.get("prefix_i").getAsInt();
-//            try {
-//                BufferedReader read = Files.newBufferedReader(Paths.get(json.get("impl_trace").getAsString()));
-//                JsonArray events = JsonParser.parseReader(read).getAsJsonArray();
-            JsonArray events = json.get("impl_trace").getAsJsonArray();
-            JsonArray a = new JsonArray();
-            events.forEach(e -> a.add(e.getAsJsonObject().get("data")));
-            r.implTrace = parseStates(a);
-//            JsonArray events = json.get("impl_trace").getAsJsonArray();
-//            r.implTrace = parseStates(events);
-            int i = 0;
-            for (JsonElement e : events) {
-                int j = i;
-                e.getAsJsonObject().entrySet().forEach(en -> {
-                    if (en.getKey().equals("data")) {
-                        return;
-                    }
-                    try {
-                        r.implTrace.get(j).extra.put(en.getKey(), Json.getValue(en.getValue()));
-                    } catch (IOException ex) {
-                        throw new RuntimeException(ex);
-                    }
-                });
-                i++;
-            }
-//            } catch (IOException e) {
-//                throw new RuntimeException(e);
-//            }
-            r.tracePrefix = parseStates(json.get("trace_prefix").getAsJsonArray());
-            r.frontier = parseStates(json.get("frontier").getAsJsonArray());
-            return r;
-        }
-
-        private static List<State> parseStates(JsonArray json) {
-            List<State> res = new ArrayList<>();
-            json.forEach(e -> {
-                Map<String, Value> a = new HashMap<>();
-                e.getAsJsonObject().entrySet().forEach(en -> {
-                    try {
-                        a.put(en.getKey(), Json.getValue(en.getValue()));
-                    } catch (IOException ex) {
-                        throw new RuntimeException(ex);
-                    }
-                });
-                res.add(new State(a));
-            });
-            return res;
-        }
-    }
-
-}
-
+/**
+ * Presentation of counterexamples
+ */
 public class Present {
 
     public static State project(State s, StringValue party) {
@@ -167,25 +86,27 @@ public class Present {
 
     public static void main(String[] args) throws Exception {
         String alignment = "/Users/darius/refinement-mappings/trace-specs/counterexample.json";
-        Gson gson = new GsonBuilder().registerTypeAdapter(MBTCResult.class, new MBTCResult.Deserializer()).create();
-        MBTCResult mbtc = gson.fromJson(Files.newBufferedReader(Paths.get(alignment)), MBTCResult.class);
+        Cex cex = MBTC.gson.fromJson(Files.newBufferedReader(Paths.get(alignment)), Cex.class);
+        showCounterexample(cex);
+    }
 
+    public static void showCounterexample(Cex mbtc) {
         // good contains all variables in the model.
         // bad/impl contains a subset, where absence means not exposed (and not necessarily unchanged).
         State goodGlobal = mbtc.goodState();
-        State badProj = mbtc.badState();
+        Event badProj = mbtc.badState();
 
-        StringValue actor = (StringValue) badProj.extra.get("who");
+        StringValue actor = new StringValue(badProj.who);
         StringValue network = new StringValue("Network");
 
         // project on current actor, and limit fields to those in the impl state
-        State goodProj = projectLimit(goodGlobal, badProj, actor);
+        State goodProj = projectLimit(goodGlobal, badProj.toState(), actor);
 
         // what changed from goodProj -> bad (i.e. what was observed to happen)
-        Set<String> implChanged = simpleDiff(goodProj, badProj);
+        Set<String> implChanged = simpleDiff(goodProj, badProj.toState());
 
-        System.out.println("---\nfrontiers");
-//        System.out.println("* frontiers");
+        System.out.println("---\nfrontier states");
+//        System.out.println("* frontier states");
 
         // pick the state in the frontier with the smallest diff from what happened
         List<RankedState> ranked = mbtc.frontier.stream()
@@ -196,7 +117,7 @@ public class Present {
                 .map(s ->
                         // diff frontier with global good state
                 {
-                    State proj = projectLimit(s, badProj, actor);
+                    State proj = projectLimit(s, badProj.toState(), actor);
                     Set<String> changedFields = simpleDiff(goodProj, proj);
 
                     int score = 0;
@@ -272,16 +193,16 @@ public class Present {
         for (IValue a : ((TupleValue) goodGlobal.data.get("actions")).getElems()) {
             System.out.printf("%2d. %s\n", i, a);
             System.out.printf("    %s %s\n",
-                    mbtc.implTrace.get(i).extra.get("who"),
-                    mbtc.implTrace.get(i).extra.get("label"));
+                    mbtc.implTrace.get(i).who,
+                    mbtc.implTrace.get(i).label);
             i++;
         }
         System.out.printf("---\nstate %d is allowed by the model, but %d (as seen in the impl) is not\n",
-                mbtc.prefix_i - 1, mbtc.prefix_i);
-        System.out.printf("%s:%s\n", badProj.extra.get("file"), badProj.extra.get("line"));
+                mbtc.prefixI - 1, mbtc.prefixI);
+        System.out.printf("%s:%s\n", badProj.file, badProj.line);
 
         System.out.printf("---\n%d. impl made a transition that saw %s changing:\n",
-                mbtc.prefix_i, Eval.prettyPrint(actor));
+                mbtc.prefixI, Eval.prettyPrint(actor));
         for (String s : implChanged) {
             System.out.printf("%s: %s to %s\n", s, goodProj.data.get(s), badProj.data.get(s));
         }
@@ -515,7 +436,6 @@ public class Present {
 //        Diff diff = javers.compare(good, bad);
 //        DiffNode diff1 = ObjectDifferBuilder.buildDefault().compare(working, base);
 //        System.out.println(diff);
-
     }
 
 }

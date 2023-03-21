@@ -25,7 +25,6 @@ test1() {
 alias c=compile
 alias t=test1
 alias d='dune promote'
-alias g='go run raft.go 2>&1 | less'
 
 tlatools() {
   name=$1

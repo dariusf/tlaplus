@@ -7,6 +7,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +48,9 @@ public class TLCRunner {
 	
 	private boolean silenceStdOut;
 
-	private final File workingDir;
+	private final Path workingDir;
 
-	public TLCRunner(final List<String> tlcArguments, File workingDir, final File logfileDestination) {
+	public TLCRunner(final List<String> tlcArguments, Path workingDir, final File logfileDestination) {
 		outputLogfile = logfileDestination;
 		outputOutputStream = null;
 		arguments = tlcArguments;
@@ -58,7 +59,7 @@ public class TLCRunner {
 		silenceStdOut = false;
 	}
 
-	public TLCRunner(final List<String> tlcArguments, File workingDir, final OutputStream logfileOutputStream) {
+	public TLCRunner(final List<String> tlcArguments, Path workingDir, final OutputStream logfileOutputStream) {
 		outputLogfile = null;
 		outputOutputStream = logfileOutputStream;
 		arguments = tlcArguments;
@@ -70,7 +71,7 @@ public class TLCRunner {
 	/**
 	 * @param flag if true, no output from the TLC process will be sent to System.out
 	 */
-	void setSilenceStdOut(final boolean flag) {
+	public void setSilenceStdOut(final boolean flag) {
 		silenceStdOut = flag;
 	}
 	
@@ -144,7 +145,7 @@ public class TLCRunner {
 		final Map<String, String> environment = processBuilder.environment();
 		environment.put("CLASSPATH", System.getProperty("java.class.path"));
 
-		processBuilder.directory(workingDir);
+		processBuilder.directory(workingDir.toFile());
 		return processBuilder;
 	}
 

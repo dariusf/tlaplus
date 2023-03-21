@@ -35,7 +35,7 @@ public class Monitoring {
         ));
     }
 
-    static String getResourceFileAsString(String fileName) throws IOException {
+    public static String getResourceFileAsString(String fileName) throws IOException {
         ClassLoader classLoader = ClassLoader.getSystemClassLoader();
         try (InputStream is = classLoader.getResourceAsStream(fileName)) {
             if (is == null) return null;

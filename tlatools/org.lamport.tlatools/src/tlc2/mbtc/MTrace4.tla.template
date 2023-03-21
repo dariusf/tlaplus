@@ -1,0 +1,39 @@
+--------------------------------- MODULE MTrace4 ---------------------------------
+
+EXTENDS TLC, Integers, Sequences, MTrace3
+
+\* instead of using a refinement mapping, this checks membership of the MTrace4 in %s via some logical magic
+
+Compose(NextA, varsA, NextB, varsB) ==
+  \/ NextA /\ NextB
+%s
+
+\* this figures out values of these variables such that MTrace4 refines %s
+%s
+%s
+
+vars1 == << %s >>
+
+Model == INSTANCE %s
+
+Init ==
+  /\ Model!%s
+  /\ Init1
+
+Next ==
+  /\ Compose(Model!%s, vars1, Next1, vars)
+
+Spec ==
+  /\ Init
+  /\ [][Next]_<<vars, vars1>>
+
+TraceFinished == i >= %s
+
+Check == ~TraceFinished
+
+Target == ~
+  TLCGet("level") > 5
+
+THEOREM Spec => [](Check)
+
+=============================================================================
