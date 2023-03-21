@@ -39,3 +39,4 @@ tlatools/org.lamport.tlatools/test-model/test.out
 *.go
 tlatools/org.lamport.tlatools/classes
 _build
+**TT**

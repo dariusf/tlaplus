@@ -7,39 +7,6 @@
 
 EXTENDS Naturals, FiniteSets, Sequences, TLC, TLCExt, Json, InboxOutbox, Monitoring
 
-\* ToSet(s) == { s[i] : i \in DOMAIN s }
-
-\* MapThenFoldSet(op(_,_), base, f(_), choose(_), S) ==
-\*   LET iter[s \in SUBSET S] ==
-\*         IF s = {} THEN base
-\*         ELSE LET x == choose(s)
-\*              IN  op(f(x), iter[s \ {x}])
-\*   IN  iter[S]
-
-
-\* FoldFunction(op(_,_), base, fun) ==
-\*   MapThenFoldSet(op, base, LAMBDA i : fun[i], LAMBDA s: CHOOSE x \in s : TRUE, DOMAIN fun)
-
-\* FoldSeq(op(_, _), base, seq) == 
-\*   FoldFunction(op, base, seq)
-
-\* Remove(s, e) ==
-\*     SelectSeq(s, LAMBDA t: t # e)
-
-\* RemoveAt(s, i) == 
-\*   SubSeq(s, 1, i-1) \o SubSeq(s, i+1, Len(s))
-
-\* IsPrefix(s, t) ==
-\*   Len(s) <= Len(t) /\ SubSeq(s, 1, Len(s)) = SubSeq(t, 1, Len(s))
-
-\* IsInjective(f) == \A a,b \in DOMAIN f : f[a] = f[b] => a = b
-
-\* SetToSeq(S) == 
-\*   CHOOSE f \in [1..Cardinality(S) -> S] : IsInjective(f)
-
-\* The set of server IDs
-\* CONSTANTS Server
-
 \* The set of requests that can go into the log
 CONSTANTS Value
 
@@ -54,43 +21,6 @@ CONSTANTS Value
 \*           AppendEntriesRequest, AppendEntriesResponse
 
 ----
-\* Global variables
-
-\* A bag of records representing requests and responses sent from one server
-\* to another. TLAPS doesn't support the Bags module, so this is a function
-\* mapping Message to Nat.
-\* VARIABLE messages
-
-\* VARIABLES outbox, inbox
-\* VARIABLES inflight
-
-\* VARIABLES s1Outbox, s1Inbox
-\* VARIABLES s2Outbox, s2Inbox
-\* VARIABLES s3Outbox, s3Inbox
-
-\* commVars == <<
-\*   \* s1Outbox, s1Inbox
-\*   \* , s2Outbox, s2Inbox
-\*   \* , s3Outbox, s3Inbox
-\*   outbox, inbox, inflight
-\* >>
-
-\* Receivable == s1Inbox \union s2Inbox \union s3Inbox
-\* Sendable == s1Outbox \union s2Outbox \union s3Outbox
-
-\* Receivable == ToSet(s1Inbox) \union ToSet(s2Inbox) \union ToSet(s3Inbox)
-\* Sendable == ToSet(s1Outbox) \union ToSet(s2Outbox) \union ToSet(s3Outbox)
-
-\* MsgsIn(box) == FoldSeq(LAMBDA c,t: box[c] \o t, <<>>, SetToSeq(Server))
-
-\* Receivable == s1Inbox \o s2Inbox \o s3Inbox
-\* Sendable == s1Outbox \o s2Outbox \o s3Outbox
-
-\* inboxVars == <<s1Inbox, s2Inbox, s3Inbox>>
-\* inboxVars == <<inbox>>
-
-\* outboxVars == <<s1Outbox, s2Outbox, s3Outbox>>
-\* outboxVars == <<outbox>>
 
 \* A history variable used in the proof. This would not be present in an
 \* implementation.
@@ -156,8 +86,6 @@ leaderVars == <<nextIndex, matchIndex>>
 
 \* All variables; used for stuttering (asserting state hasn't changed).
 vars == <<serverVars, candidateVars, leaderVars, logVars>>
-\* who,
-\* allLogs,
 
 ----
 \* Helpers
@@ -169,64 +97,7 @@ vars == <<serverVars, candidateVars, leaderVars, logVars>>
 \* The term of the last entry in a log, or 0 if the log is empty.
 LastTerm(xlog) == IF Len(xlog) = 0 THEN 0 ELSE xlog[Len(xlog)].term
 
-\* \* Helper for Send and Reply. Given a message m and bag of messages, return a
-\* \* new bag of messages with one more m in it.
-\* WithMessage(m, msgs) ==
-\*     IF m \in DOMAIN msgs THEN
-\*         [msgs EXCEPT ![m] = msgs[m] + 1]
-\*     ELSE
-\*         msgs @@ (m :> 1)
-
-\* \* Helper for Discard and Reply. Given a message m and bag of messages, return
-\* \* a new bag of messages with one less m in it.
-\* WithoutMessage(m, msgs) ==
-\*     IF m \in DOMAIN msgs THEN
-\*         [msgs EXCEPT ![m] = msgs[m] - 1]
-\*     ELSE
-\*         msgs
-
-\* SendM(sender, m) ==
-\*   IF sender = "s1" THEN
-\*     /\ s1Outbox' = Append(s1Outbox, m)
-\*     \* /\ s1Outbox' = s1Outbox \union {m}
-\*     /\ UNCHANGED s2Outbox
-\*     /\ UNCHANGED s3Outbox
-\*   ELSE IF sender = "s2" THEN
-\*     /\ UNCHANGED s1Outbox
-\*     /\ s2Outbox' = Append(s2Outbox, m)
-\*     \* /\ s2Outbox' = s2Outbox \union {m}
-\*     /\ UNCHANGED s3Outbox
-\*   ELSE
-\*     /\ UNCHANGED s1Outbox
-\*     /\ UNCHANGED s2Outbox
-\*     /\ s3Outbox' = Append(s3Outbox, m)
-\*     \* /\ s3Outbox' = s3Outbox \union {m}
-
-\* SendM(sender, m) ==
-\*   outbox' = [outbox EXCEPT ![sender] = Append(outbox[sender], m)]
-
-\* \* Add a message to the bag of messages.
-\* Send(m) ==
-\*   SendM(m.msource, m)
-\*   \* /\ messages' = WithMessage(m, messages)
-\*   \* /\ lastComm' = <<[who |-> m.msource, msg |-> m]>>
-
 InSeq(x, xs) == x \in ToSet(xs)
-
-\* \* this cannot be implemented if in/outboxes are sets
-\* DuplicateMsg(m) ==
-\*   \/
-\*     /\ s1Inbox /= <<>>
-\*     /\ InSeq(m, s1Inbox)
-\*     /\ s1Inbox' = Append(s1Inbox, m)
-\*   \/
-\*     /\ s2Inbox /= <<>>
-\*     /\ InSeq(m, s2Inbox)
-\*     /\ s2Inbox' = Append(s2Inbox, m)
-\*   \/
-\*     /\ s3Inbox /= <<>>
-\*     /\ InSeq(m, s3Inbox)
-\*     /\ s3Inbox' = Append(s3Inbox, m)
 
 \* this cannot be implemented if in/outboxes are sets
 DuplicateMsg(m) ==
@@ -235,58 +106,10 @@ DuplicateMsg(m) ==
     /\ InSeq(m, inbox[s])
     /\ inbox' = [inbox EXCEPT ![s] = Append(inbox[s], m)]
 
-\* RecvM(recipient, m) ==
-\*   IF recipient = "s1" THEN
-\*     /\ m \in ToSet(s1Inbox)
-\*     /\
-\*       \* LET e == CHOOSE x \in s1Inbox : TRUE IN
-\*       \* s1Inbox' = s1Inbox \ {e}
-\*       \* LET e == Head(s1Inbox) IN
-\*       \* s1Inbox' = Tail(s1Inbox)
-\*       s1Inbox' = Remove(s1Inbox, m)
-\*     /\ UNCHANGED s2Inbox
-\*     /\ UNCHANGED s3Inbox
-\*   ELSE IF recipient = "s2" THEN
-\*     /\ UNCHANGED s1Inbox
-\*     /\ m \in ToSet(s2Inbox)
-\*     /\ s2Inbox' = Remove(s2Inbox, m)
-\*     /\ UNCHANGED s3Inbox
-\*   ELSE
-\*     /\ UNCHANGED s1Inbox
-\*     /\ UNCHANGED s2Inbox
-\*     /\ m \in ToSet(s3Inbox)
-\*     /\ s3Inbox' = Remove(s3Inbox, m)
-
-\* RecvM(recipient, m) ==
-\*   /\ m \in ToSet(inbox[recipient])
-\*   /\ inbox' = [inbox EXCEPT ![recipient] = Remove(inbox[recipient], m)]
-
-\* \* Remove a message from the bag of messages. Used when a server is done
-\* \* processing a message.
-\* Discard(m) ==
-\*   RecvM(m.mdest, m)
-\*   \* /\ messages' = WithoutMessage(m, messages)
-\*   \* /\ lastComm' = <<[who |-> m.mdest, msg |-> m]>>
-
-\* \* Combination of Send and Discard
-\* Reply(response, request) ==
-\*   /\ Discard(request)
-\*   /\ Send(response)
-\*   \* /\ messages' = WithoutMessage(request, WithMessage(response, messages))
-\*   \* /\ lastComm' = <<[who |-> request.mdest, msg |-> request], [who |-> response.msource, msg |-> response]>>
-
 \* Return the minimum value from a set, or undefined if the set is empty.
 Min(s) == CHOOSE x \in s : \A y \in s : x <= y
 \* Return the maximum value from a set, or undefined if the set is empty.
 Max(s) == CHOOSE x \in s : \A y \in s : x >= y
-
-\* LogAction(a) ==
-\*   /\ actions' = Append(actions, a)
-\*   \* /\ actions' = a
-
-\* LogActor(w) ==
-\*   /\ who' = w
-\*   \* /\ who' = Append(who, w)
 
 ----
 \* Define initial values for all variables
@@ -310,20 +133,6 @@ InitLeaderVars == /\ nextIndex  = [i \in Server |-> [j \in Server |-> 1]]
 InitLogVars == /\ log          = [i \in Server |-> << >>]
                /\ commitIndex  = [i \in Server |-> 0]
 InitCommVars ==
-  \* /\ s1Inbox = {}
-  \* /\ s1Outbox = {}
-  \* /\ s2Inbox = {}
-  \* /\ s2Outbox = {}
-  \* /\ s3Inbox = {}
-  \* /\ s3Outbox = {}
-
-  \* /\ s1Inbox = <<>>
-  \* /\ s1Outbox = <<>>
-  \* /\ s2Inbox = <<>>
-  \* /\ s2Outbox = <<>>
-  \* /\ s3Inbox = <<>>
-  \* /\ s3Outbox = <<>>
-
   /\ inbox = [i \in Server |-> <<>>]
   /\ outbox = [i \in Server |-> <<>>]
   /\ inflight = <<>>
@@ -824,75 +633,11 @@ DropMessage(m) ==
     /\ LogAction(<<"DropMessage", m>>)
     /\ LogActor("Network")
 
-\* NetworkDelivery ==
-\*   /\
-\*     \* \/ s1Outbox /= {}
-\*     \* \/ s2Outbox /= {}
-\*     \* \/ s3Outbox /= {}
-\*     \/ s1Outbox /= <<>>
-\*     \/ s2Outbox /= <<>>
-\*     \/ s3Outbox /= <<>>
-\*   /\ s1Outbox' = <<>>
-\*   /\ s2Outbox' = <<>>
-\*   /\ s3Outbox' = <<>>
-\*   \* /\ s1Outbox' = {}
-\*   \* /\ s2Outbox' = {}
-\*   \* /\ s3Outbox' = {}
-\*   \* /\ s1Inbox' = { m \in Sendable : m.mdest = "s1" } \union s1Inbox
-\*   \* /\ s2Inbox' = { m \in Sendable : m.mdest = "s2" } \union s2Inbox
-\*   \* /\ s3Inbox' = { m \in Sendable : m.mdest = "s3" } \union s3Inbox
-\*   /\ s1Inbox' = SetToSeq({ m \in Sendable : m.mdest = "s1" }) \o s1Inbox
-\*   /\ s2Inbox' = SetToSeq({ m \in Sendable : m.mdest = "s2" }) \o s2Inbox
-\*   /\ s3Inbox' = SetToSeq({ m \in Sendable : m.mdest = "s3" }) \o s3Inbox
-\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-\*   /\ LogAction("Network")
-
-\* deliver everything at once
-\* NetworkDelivery ==
-\*   /\ \E s \in Server : outbox[s] /= <<>>
-\*   /\ outbox' = [s \in Server |-> <<>>]
-\*   /\ inbox' = [s \in Server |-> inbox[s] \o SelectSeq(MsgsIn(outbox), LAMBDA m : m.mdest = s)]
-\*   /\ UNCHANGED inflight
-\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-\*   \* we don't capture args here, but it's unlikely we'll have to repair this
-\*   /\ LogAction(<<"Network">>)
-\*   /\ LogActor("Network")
-
-\* NetworkTakeMessage(s) ==
-\*   /\ outbox[s] /= <<>>
-\*   /\ outbox' = [s1 \in Server |-> <<>>]
-\*   /\ inflight' = inflight \o MsgsIn(outbox)
-\*   /\ UNCHANGED inbox
-\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-\*   /\ LogAction(<<"NetworkTakeMessage", MsgsIn(outbox)>>)
-\*   /\ LogActor("Network")
-
-\* this is unused
-\* NetworkDeliverMessage ==
-\*   /\ inflight /= <<>>
-\*   /\ inbox' = [s \in Server |-> SelectSeq(inflight, LAMBDA m : m.mdest = s)]
-\*   /\ inflight' = <<>>
-\*   /\ UNCHANGED outbox
-\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-\*   /\ LogAction(<<"NetworkDeliverMessage">>)
-\*   /\ LogActor("Network")
-
-\* this delivers only one message at a time, which corresponds to what impls see
-\* NetworkDeliverMessageSlow(r, i) ==
-\*   /\ inflight /= <<>>
-\*   /\ inflight[i].mdest = r
-\*   /\ inbox' = [inbox EXCEPT ![r] = Append(inbox[r], inflight[i])]
-\*   /\ inflight' = RemoveAt(inflight, i)
-\*   /\ LogAction(<<"NetworkDeliverMessageSlow", inflight[i]>>)
-\*   /\ LogActor("Network")
-\*   /\ UNCHANGED outbox
-\*   /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
-
 ----
 \* Defines how the variables may transition.
-Next == \*/\
-          \* \/ \E i \in Server : Restart(i)
-           \* \/ Timeout("s1")
+Next ==
+  \* \/ \E i \in Server : Restart(i)
+  \* \/ Timeout("s1")
   \/ \E i \in Server : Timeout(i)
   \/ \E i \in Server : SelfVote(i)
   \/ \E i \in Server : Initialize(i)
@@ -907,16 +652,14 @@ Next == \*/\
     \E i \in 1..Len(msgs) : ReceiveMsg(msgs[i])
   \*  \/ \E m \in Receivable : DuplicateMessage(m)
   \*  \/ \E m \in Receivable : DropMessage(m)
-  \*  \/ NetworkDelivery
   \/ \E s \in Server : \E i \in 1..Len(outbox[s]) :
     /\ NetworkTakeMessage(outbox[s][i])
     /\ UNCHANGED vars
-  \* \/ NetworkDeliverMessage
   \/ \E i \in 1..Len(inflight) :
     /\ NetworkDeliverMessage(inflight[i])
     /\ UNCHANGED vars
-           \* History variable that tracks every log ever:
-        \* /\ allLogs' = allLogs \cup {log[i] : i \in Server}
+    \* History variable that tracks every log ever:
+    \* /\ allLogs' = allLogs \cup {log[i] : i \in Server}
 
 \* The specification must start with the initial state and transition according
 \* to Next.
@@ -937,39 +680,11 @@ Alias == [
   \* , s3Outbox |-> s3Outbox
 ]
 
-\* TargetTest1 == ~
-\*   \* /\ Len(lastComm) > 1
-\*   /\ Len(lastComm) = 1
-\*   /\ lastComm[1].msg.mtype = "RequestVoteResponse"
-\*   /\ lastComm[1].who /= lastComm[1].msg.msource
-\*   /\ lastComm[1].who = "s3"
-
-  \* TLCGet("level") > 3
-  \* /\ currentTerm["s3"] = 2
-  \* Cardinality(messages) = 3
-  \* /\ PrintT(DOMAIN messages)
-  \* /\ PrintT([mtype |-> "RequestVoteResponse", mterm |-> 1, mvoteGranted |-> TRUE, msource |-> "s1", mdest |-> "s3"] = [mtype |-> "RequestVoteResponse", mterm |-> 1, mvoteGranted |-> TRUE, msource |-> "s1", mdest |-> "s3"])
-  \* /\ [mterm |-> 2, mlastLogTerm |-> 0, mlastLogIndex |-> 0, mtype |-> "RequestVoteRequest", msource |-> "s3", mdest |-> "s2"] \in DOMAIN messages
-  \* /\ lastComm = <<[who |-> "s3", msg |-> [mtype |-> "RequestVoteResponse", mterm |-> 1, mvoteGranted |-> TRUE, msource |-> "s1", mdest |-> "s3"]]>>
-  \* /\ lastComm = <<[who |-> "s3", msg |-> [mterm |-> 2, mlastLogTerm |-> 0, mlastLogIndex |-> 0, mtype |-> "RequestVoteRequest", msource |-> "s3", mdest |-> "s2"]]>>
-  \* /\ [mtype |-> "RequestVoteResponse", mterm |-> 1, mvoteGranted |-> TRUE, msource |-> "s1", mdest |-> "s3"] \in DOMAIN messages
-  \* /\ messages[[mtype |-> "RequestVoteResponse", mterm |-> 1, mvoteGranted |-> TRUE, msource |-> "s1", mdest |-> "s3"]] = 1
-
 TargetLength == ~
   TLCGet("level") > 10
 
-\* TargetReceive == ~
-\*   /\ TLCGet("level") > 4 => Cardinality(s1Inbox) > 0
-\*   /\ TLCGet("level") > 10 => Cardinality(s1Inbox) = 0
-
 TargetSomeLeader == ~
   \E n \in Server : state[n] = "Leader"
-
-TargetActions1 == ~
-  /\ Len(actions) = 3
-  /\ actions[1][1] = "Initialize"
-  /\ actions[2][1] = "Timeout"
-  /\ actions[3][1] = "SelfVote"
 
 DesiredHist ==
 LET rv2 == [mtype |-> "RequestVoteRequest", mterm |-> 2, mlastLogTerm |-> 0, mlastLogIndex |-> 0, msource |-> "s1", mdest |-> "s2"]
@@ -1009,37 +724,9 @@ TargetHist == ~
   /\ i = Len(DesiredHist)
   /\ actions[i] = DesiredHist[i]
 
-TargetActions == ~
-  /\ \E n \in Server : state[n] = "Leader"
-  /\ IsPrefix(<<
-      "Timeout"
-    , "RequestVote"
-    , "RequestVote"
-    , "Network"
-    \* , "UpdateTerm"
-    \* , "Network"
-    \* , "HandleRequestVoteRequest"
-    \* , "Network"
-    \* , "UpdateTerm"
-    \* , "HandleRequestVoteRequest"
-    \* , "Network"
-    \* , "RequestVote"
-    \* , "RequestVote"
-    \* , "HandleRequestVoteResponse"
-    \* , "BecomeLeader"
-    >>, actions)
-
-Bindings(f) == SetToSeq({ <<k, f[k]>> : k \in DOMAIN f })
-
 Post ==
     LET t1 == ToTrace(CounterExample) IN
-    \* LET t2 == [ i \in 1 .. Len(t1) |->
-    \*   [t1[i] EXCEPT !["messages"] = Bindings(t1[i]["messages"])] ]
-    \* IN
-    \* /\ PrintT(t1)
-    \* /\ PrintT(t2)
     /\ JsonSerialize("trace.json", t1)
-    \* /\ PrintT("using post")
 
 ===============================================================================
 
