@@ -4,7 +4,10 @@ import tlc2.value.impl.Value;
 
 import java.util.Map;
 
-public class Event {
+/**
+ * An observed state is a state augmented with concrete info about where we saw it
+ */
+public class ObState {
     String who;
     String label;
     String file;

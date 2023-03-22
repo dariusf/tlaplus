@@ -27,7 +27,7 @@ import java.util.stream.Stream;
 
 public class MBTC {
 
-    private static final Type LIST_EVENT = new TypeToken<ArrayList<Event>>() {
+    private static final Type LIST_EVENT = new TypeToken<ArrayList<ObState>>() {
     }.getType();
     private static final Type LIST_STATE = new TypeToken<ArrayList<State>>() {
     }.getType();
@@ -36,21 +36,20 @@ public class MBTC {
             .registerTypeAdapter(Value.class, new ValueAdapter())
             .registerTypeAdapter(State.class, new State.Adapter())
             .create();
+    private final FastTool tool;
+
+    public MBTC(FastTool tool) {
+        this.tool = tool;
+    }
 
     public Optional<Cex> run() throws IOException {
 
-//        String spec = new File("../../benchmarks.t/raft.tla").getAbsolutePath();
-//        String spec = "/Users/darius/java/tlaplus/benchmarks.t/raft.tla";
-        String spec = "raft";
-        String config = spec;
-
-        FastTool tool = new FastTool(spec, config);
         boolean allowStuttering = false;
         String originalSpec = "raft";
         Path specDir = Paths.get(".").toAbsolutePath();
 
-        Reader reader = Files.newBufferedReader(Paths.get("/Users/darius/refinement-mappings/projects/etcd/contrib/raftexample/log.json"));
-        List<Event> implTrace = gson.fromJson(reader, LIST_EVENT);
+        Reader reader = Files.newBufferedReader(Paths.get(System.getProperty("user.home"), "refinement-mappings/projects/etcd/contrib/raftexample/log.json"));
+        List<ObState> implTrace = gson.fromJson(reader, LIST_EVENT);
 
         Function<Integer, Optional<List<State>>> align = i -> {
             if (i == null) {
@@ -122,7 +121,7 @@ public class MBTC {
 
 
     private Optional<List<State>> checkAlignment(FastTool tool, Path specDir,
-                                                 List<Event> implTrace, Integer i,
+                                                 List<ObState> implTrace, Integer i,
                                                  boolean allowStuttering, String originalSpec) {
 
         try {
@@ -221,7 +220,7 @@ public class MBTC {
                 .collect(Collectors.joining("\n"));
     }
 
-    private Path buildAuxSpecs(FastTool tool, List<Event> trace, Integer length,
+    private Path buildAuxSpecs(FastTool tool, List<ObState> trace, Integer length,
                                boolean allowStuttering, String originalSpec) {
 
         try {
@@ -243,7 +242,7 @@ public class MBTC {
             String mtrace3;
             {
                 String trace1 = IntStream.range(0, trace.size()).mapToObj(i -> {
-                    Event ev = trace.get(i);
+                    ObState ev = trace.get(i);
                     FcnRcdValue traceEv = new FcnRcdValue(
                             ev.data.entrySet().stream().collect(Collectors.toMap(e ->
                                     new StringValue(e.getKey()), e -> e.getValue())),
@@ -310,6 +309,13 @@ public class MBTC {
 
     public static void main(String[] args) throws IOException {
 
+//        String spec = new File("../../benchmarks.t/raft.tla").getAbsolutePath();
+//        String spec = System.getProperty("user.home") + "/java/tlaplus/benchmarks.t/raft.tla";
+        String spec = "raft";
+        String config = spec;
+
+        FastTool tool = new FastTool(spec, config);
+
         Cex cex;
         boolean memo = true;
 //        boolean memo = false;
@@ -317,12 +323,12 @@ public class MBTC {
             cex = Misc.readJson("cex.json", Cex.class);
         } else {
             Optional<Cex> res;
-            res = new MBTC().run();
+            res = new MBTC(tool).run();
             Misc.ensure(res.isPresent());
             cex = res.get();
             Misc.writeToJson(cex, "cex.json");
         }
 
-        Present.showCounterexample(cex);
+        Present.showCounterexample(tool, cex);
     }
 }

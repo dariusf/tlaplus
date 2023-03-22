@@ -1,11 +1,15 @@
 package tlc2.mbtc;
 
+import tla2sany.semantic.*;
+import tlc2.synth.Build;
+import tlc2.synth.Enumerate;
 import tlc2.synth.Eval;
+import tlc2.tool.TLCStateMut;
+import tlc2.tool.impl.FastTool;
+import tlc2.util.Context;
 import tlc2.value.IValue;
-import tlc2.value.impl.RecordValue;
-import tlc2.value.impl.StringValue;
-import tlc2.value.impl.TupleValue;
-import tlc2.value.impl.Value;
+import tlc2.value.impl.*;
+import util.UniqueString;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -52,12 +56,12 @@ public class Present {
         return project(g, actor);
     }
 
-    public static void showCounterexample(Cex cex) {
+    public static void showCounterexample(FastTool tool, Cex cex) {
         // good contains all variables in the model, including auxilaries.
         // bad (projected, from impl) contains a subset, where absence means not exposed
         // (and not necessarily unchanged).
         State goodGlobal = cex.goodState();
-        Event badProj = cex.badState();
+        ObState badProj = cex.badState();
 
         StringValue actor = new StringValue(badProj.who);
         StringValue network = new StringValue("Network");
@@ -147,37 +151,169 @@ public class Present {
         // try to add a transition
         if (true || false) {
 
-            System.out.println("\n* new transition, if that's wanted:\n");
+            System.out.println("\n* new transition:\n");
 
+            // TODO factor this out
+            // TODO
             for (Map.Entry<String, Value> e : goodGlobal.data.entrySet()) {
-//                System.out.printf("/\\ %s = %s\n", e.getKey(), e.getValue());
+                // TODO constrain only this node's vars
+                System.out.printf("/\\ %s = %s\n", e.getKey(), e.getValue());
                 if (!badProj.data.containsKey(e.getKey())) {
                     System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
                 }
+                // TODO figure out a grouping of variables to use. build a tree of those expressions
             }
 
-//            given this in bad state
-//            /\ currentTerm' = 2
-            // /\ currentTerm' = [currentTerm EXCEPT ![who] = ... (expr which evaluates to 2)]
-            // only do this for variables which are global
+            Enumerate enumerate = new Enumerate(tool, null, null, null);
 
-            // TODO need to un-project the bad state into the good one, then synthesise a way to make the change
+            // The variables are already set by loading the spec via a Tool,
+            // so we just have to provide the right order...
+            TLCStateMut goodState = new TLCStateMut(
+                    Arrays.stream(tool.getInitStates().elementAt(0).getVars())
+                            .map(o -> goodGlobal.data.get(o.getName().toString()))
+                            .toArray(Value[]::new));
+
             for (Map.Entry<String, Value> e : badProj.data.entrySet()) {
-//            if (e.getKey().equals("i")) {
-//                continue; // TODO filter out these aux vars earlier on
-//            }
-                if (Misc.valueEqual(e.getValue(), goodGlobal.data.get(e.getKey()))) {
+
+                StringNode who = Build.stringLiteral(badProj.who);
+
+                // TODO seed constants
+                // TODO seed params
+                // TODO may have more seeds as rules are applied
+                Map<String, ExprOrOpArgNode> seed =
+//                    Arrays.stream(goodState.getVarsAsStrings())
+                        // TODO is this the right place to filter these aux vars?
+                        goodGlobal.data.keySet().stream()
+                                .filter(v -> !Set.of("i", "actions").contains(v))
+                                .map(v -> Build.fnApp(Build.op(v), who))
+                                .collect(Collectors.toMap(s -> Eval.prettyPrint(s), s -> s));
+
+//                seed.put(Eval.prettyPrint(who), who);
+
+                seed.put(Eval.prettyPrint(e.getValue()), valueToOpAppl(e.getValue()));
+
+                // horrible hacks
+//                seed.put(Eval.prettyPrint(e.getValue()), Build.op("valueItself"));
+//                OpDefNode valueItself = new OpDefNode(UniqueString.uniqueStringOf("valueItself"));
+//                valueItself.setBody(e.getValue());
+//                Context context = Context.Empty.cons(valueItself, e.getValue());
+
+                if (Misc.valueEqual(e.getValue(), goodProj.data.get(e.getKey()))) {
                     System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
+                    continue;
+                }
+
+                // target would be acceptable, but we want to synthesize something more general
+                Value target = e.getValue();
+                Enumerate.Control synthesized = enumerate.synthesizeStateless(seed, c -> {
+//                    OpApplNode candidate = Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), c.term);
+                    // TODO this printing is just for debugging for now
+
+//                    if (e.getKey().equals("log")) {
+//                        System.out.printf("%s\n", Eval.prettyPrint(c.term));
+//                    }
+
+//                    if (e.getKey().equals("log") && c.candidates % 50 == 0) {
+//                        int a = 1;
+//                    }
+//                    if (
+////                            Eval.prettyPrint(c.term).contains("currentTerm[\"s2\"]")
+////                    && Eval.prettyPrint(c.term).contains("+")
+//                                    Eval.prettyPrint(c.term).contains("currentTerm[\"s2\"] + 1")
+//                    ) {
+//                        System.out.printf("%s\n", Eval.prettyPrint(c.term));
+//                        int a = 1;
+//                    }
+
+                    long timeout = 3 * 1000;
+                    if (c.ms > timeout || c.candidates > 400_000) {
+                        System.out.printf("\\* gave up on %s after %ds and %s candidates, depth %s\n",
+                                e.getKey(), timeout / 1000, c.candidates, c.depth);
+                        c.giveUp();
+                    }
+
+                    if (Eval.prettyPrint(c.term).startsWith("Append(log[\"s2\"], <<")) {
+                        int a = 1;
+                    }
+                    IValue v = tool.eval(c.term, Context.Empty, goodState);
+                    // some heuristics:
+                    // has to use its own variable
+                    // cannot use only its own variable
+                    String itself = String.format("%s[%s]", e.getKey(), Eval.prettyPrint(who));
+                    if (Eval.prettyPrint(c.term).equals(itself)) {
+                        return;
+                    }
+                    if (!Eval.prettyPrint(c.term).contains(e.getKey())) {
+                        return;
+                    }
+                    if (Eval.valueEq(v, target)) {
+                        c.stop();
+                    }
+                });
+
+                if (synthesized.term != null) {
+//                    System.out.println("FOUND! " + Eval.prettyPrint(Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), synthesized.get())));
+                    OpApplNode res = Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), synthesized.term);
+//                    System.out.println("FOUND! " + Eval.prettyPrint(res));
+                    System.out.printf("/\\ %s' = %s\n", e.getKey(), Eval.prettyPrint(res));
                 } else {
-                    // synth an expr to represent change
-                    System.out.printf("/\\ %s' = %s\n", e.getKey(), e.getValue());
+                    System.out.printf("/\\ %s' = %s\n", e.getKey(), Eval.prettyPrint(target));
                 }
             }
+
+//            for (Map.Entry<String, Value> e : badProj.data.entrySet()) {
+////            if (e.getKey().equals("i")) {
+////                continue; // TODO filter out these aux vars earlier on
+////            }
+//                if (Misc.valueEqual(e.getValue(), goodGlobal.data.get(e.getKey()))) {
+//                    System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
+//                } else {
+//                    // target would be acceptable, but we want to synthesize something more general
+//                    Value target = e.getValue();
+//                    System.out.printf("/\\ %s' = %s\n", e.getKey(), target);
+//                }
+//            }
 
         }
     }
 
-    private static int scoreFrontierState(Event badProj, StringValue actor, StringValue network, Set<String> implChanged, State s, State proj, Set<String> changedFields) {
+    private static ExprOrOpArgNode valueToOpAppl(Value value) {
+        if (value instanceof IntValue) {
+            return Build.number(((IntValue) value).val);
+        }
+        if (value instanceof StringValue) {
+            return Build.stringLiteral(((StringValue) value).val.toString());
+        }
+        if (value instanceof SetEnumValue) {
+            return Build.setLiteral(
+                    Arrays.stream(((SetEnumValue) value).elems.toArray())
+                            .map(Present::valueToOpAppl)
+                            .toArray(ExprOrOpArgNode[]::new));
+        }
+        if (value instanceof TupleValue) {
+            return Build.seq(
+                    Arrays.stream(((TupleValue) value).elems)
+                            .map(Present::valueToOpAppl)
+                            .toArray(ExprOrOpArgNode[]::new));
+        }
+        if (value instanceof RecordValue) {
+            List<ExprOrOpArgNode> names = Arrays.stream(((RecordValue) value).names)
+                    .map(n -> Build.stringLiteral(n.toString()))
+                    .collect(Collectors.toList());
+            List<ExprOrOpArgNode> values = Arrays.stream(((RecordValue) value).values)
+                    .map(v -> valueToOpAppl(v))
+                    .collect(Collectors.toList());
+            List<ExprOrOpArgNode> all = new ArrayList<>();
+            for (int i=0; i< names.size(); i++) {
+                all.add(names.get(i));
+                all.add(values.get(i));
+            }
+            return Build.record(all.toArray(ExprOrOpArgNode[]::new));
+        }
+        throw new IllegalStateException();
+    }
+
+    private static int scoreFrontierState(ObState badProj, StringValue actor, StringValue network, Set<String> implChanged, State s, State proj, Set<String> changedFields) {
         int score = 0;
 //            System.out.println("* frontier action name: " + ((TupleValue) s.data.get("actions")).getLast());
         // FRONTIER HEURISTIC DEBUGGING

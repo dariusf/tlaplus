@@ -1,7 +1,6 @@
 package tlc2.monitor;
 
 import tla2sany.semantic.*;
-import util.UniqueString;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,24 +27,6 @@ public class Translate {
 
     static String fresh(String suffix) {
         return String.format("v%d_%s", n++, suffix);
-    }
-
-    /**
-     * Builds TLA+ expressions
-     */
-    static OpApplNode tla(UniqueString op, ExprOrOpArgNode... args) {
-        OpDefNode def = new OpDefNode(op);
-        OpApplNode app = new OpApplNode(def);
-        // TODO level checking
-        app.levelChecked = 1; // disable some errors on new expressions
-        // TODO forall params
-        // TODO binder params
-        app.setArgs(args);
-        return app;
-    }
-
-    static OpApplNode tla(String op, ExprOrOpArgNode... args) {
-        return tla(UniqueString.uniqueStringOf(op), args);
     }
 
     public static boolean isPrimed(SemanticNode body) {

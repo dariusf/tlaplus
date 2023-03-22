@@ -1,6 +1,7 @@
 package tlc2.monitor;
 
 import tla2sany.semantic.*;
+import tlc2.synth.Build;
 import tlc2.synth.Eval;
 import tlc2.tool.Defns;
 import tlc2.value.IValue;
@@ -398,7 +399,7 @@ public class GoTranslation {
                     ExprNode set = op.getBdedQuantBounds()[0];
                     FormalParamNode var = op.getQuantSymbolLists().get(0);
                     String v1 = fresh();
-                    ExprOrOpArgNode rhs1 = substitute(rhs, Collections.singletonMap(var, tla(v1)));
+                    ExprOrOpArgNode rhs1 = substitute(rhs, Collections.singletonMap(var, Build.op(v1)));
                     if (rhs == rhs1) {
                         v1 = "_";
                     }
@@ -424,7 +425,7 @@ public class GoTranslation {
                     String k1 = fresh(var.getName().toString());
 
                     boundVarNames.add(k1);
-                    GoExpr body = translateExpr(substitute(cond, Map.of(var, tla(k1))), null);
+                    GoExpr body = translateExpr(substitute(cond, Map.of(var, Build.op(k1))), null);
                     boundVarNames.remove(k1);
                     // ensure this is a separate subexpression
                     GoExpr func = goExpr("func(%s TLA) Boolean {\n" +
@@ -441,21 +442,21 @@ public class GoTranslation {
                         boolean tupleArg = varName.equals("$Tuple");
                         if (tupleArg) {
                             ExprOrOpArgNode[] tupleArgs = ((OpApplNode) args.get(0)).getArgs();
-                            return translateExpr(tla(OP_cl,
+                            return translateExpr(Build.op(OP_cl,
                                     Arrays.stream(tupleArgs)
-                                            .map(a -> tla("UNCHANGED", a))
+                                            .map(a -> Build.op("UNCHANGED", a))
                                             .toArray(ExprOrOpArgNode[]::new)), null);
                         }
 
                         boolean varArg = variables.contains(varName);
                         if (varArg) {
-                            OpApplNode equal = tla("=", tla(OP_prime, var), var);
+                            OpApplNode equal = Build.op("=", Build.op(OP_prime, var), var);
                             return translateExpr(equal, null);
                         }
 
                         boolean opArg = defns.get(varName) != null && defns.get(varName) instanceof OpDefNode;
                         if (opArg) {
-                            return translateExpr(tla("UNCHANGED", ((OpDefNode) defns.get(varName)).getBody()), typ);
+                            return translateExpr(Build.op("UNCHANGED", ((OpDefNode) defns.get(varName)).getBody()), typ);
                         }
 
                     }

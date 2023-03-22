@@ -2,473 +2,28 @@ package tlc2.synth;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.jline.reader.EndOfFileException;
-import org.jline.reader.LineReader;
 import tla2sany.semantic.*;
 import tlc2.TLCGlobals;
 import tlc2.module.Json;
 import tlc2.tool.*;
-import org.jline.reader.UserInterruptException;
 import tla2sany.parser.TLAplusParser;
 import tlc2.tool.impl.FastTool;
-import tlc2.tool.impl.Tool;
 import tlc2.util.Context;
 import tlc2.value.IValue;
 import tlc2.value.impl.BoolValue;
 import tlc2.value.impl.StringValue;
-import tlc2.value.impl.Value;
 import util.*;
 
 import java.io.*;
-import java.lang.reflect.Method;
-import java.nio.file.Path;
 import java.util.*;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static tla2sany.semantic.ASTConstants.OpApplKind;
 import static tlc2.tool.ToolGlobals.*;
 
 public class Eval {
 
-    private static final String HISTORY_PATH = System.getProperty("user.home", "") + File.separator + ".tlaplus" + File.separator + "history.repl";
-
-    // The spec file to use in the REPL context, if any.
-    private File specFile = null;
-
-    // The naming prefix of the temporary directory.
-    static final String TEMP_DIR_PREFIX = "tlarepl";
-
-    // The name of the spec used for evaluating expressions.
-    final String REPL_SPEC_NAME = "tlarepl";
-
-    private static final String prompt = "(tla+) ";
-
-    private final Writer replWriter = new PrintWriter(System.out);
-
-    // A temporary directory to place auxiliary files needed for REPL evaluation.
-    Path replTempDir;
-
-    public Eval(Path tempDir) {
-        replTempDir = tempDir;
-    }
-
     public Eval() {
-    }
-
-    public void setSpecFile(final File pSpecFile) {
-        specFile = pSpecFile;
-    }
-
-    /**
-     * Evaluate the given string input as a TLA+ expression.
-     *
-     * @return the pretty printed result of the evaluation or an empty string if there was an error.
-     */
-    public String processInput(String evalExpr) {
-
-        // The modules we will extend in the REPL environment.
-        String moduleExtends = "Reals,Sequences,Bags,FiniteSets,TLC,Randomization";
-        try {
-            // Try loading the "index" class of the Community Modules that define
-            // popular modulesl that should be loaded by default. If the Community Modules
-            // are not present, silently fail.
-            final Class<?> clazz = Class.forName("tlc2.overrides.CommunityModules");
-            final Method m = clazz.getDeclaredMethod("popularModules");
-            moduleExtends += String.format(",%s", m.invoke(null));
-        } catch (Exception | NoClassDefFoundError ignore) {
-        }
-
-        if (specFile != null) {
-            String mainModuleName = specFile.getName().replaceFirst(TLAConstants.Files.TLA_EXTENSION + "$", "");
-            moduleExtends += ("," + mainModuleName);
-        }
-
-        File tempFile, configFile;
-        try {
-
-            // We want to place the spec files used by REPL evaluation into the temporary directory.
-            tempFile = new File(replTempDir.toString(), REPL_SPEC_NAME + TLAConstants.Files.TLA_EXTENSION);
-            configFile = new File(replTempDir.toString(), REPL_SPEC_NAME + TLAConstants.Files.CONFIG_EXTENSION);
-
-            // Create the config file.
-            BufferedWriter cfgWriter = new BufferedWriter(new FileWriter(configFile.getAbsolutePath(), false));
-            cfgWriter.append("INIT replinit");
-            cfgWriter.newLine();
-            cfgWriter.append("NEXT replnext");
-            cfgWriter.newLine();
-            cfgWriter.close();
-
-            // Create the spec file lines.
-            ArrayList<String> lines = new ArrayList<String>();
-            String replValueVarName = "replvalue";
-            lines.add("---- MODULE tlarepl ----");
-            lines.add("EXTENDS " + moduleExtends);
-            lines.add("VARIABLE replvar");
-            // Dummy Init and Next predicates.
-            lines.add("replinit == replvar = 0");
-            lines.add("replnext == replvar' = 0");
-            // The expression to evaluate.
-            lines.add(replValueVarName + " == " + evalExpr);
-            lines.add("====");
-
-            // Write out the spec file.
-            BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile.getAbsolutePath(), false));
-            for (String line : lines) {
-                writer.append(line);
-                writer.newLine();
-            }
-            writer.close();
-
-            // Avoid sending log messages to stdout and reset the messages recording.
-            ToolIO.setMode(ToolIO.TOOL);
-            ToolIO.reset();
-
-            try {
-                // We placed the REPL spec files into a temporary directory, so, we add this temp directory
-                // path to the filename resolver used by the Tool.
-                SimpleFilenameToStream resolver = new SimpleFilenameToStream(replTempDir.toAbsolutePath().toString());
-                Tool tool = new FastTool(REPL_SPEC_NAME, REPL_SPEC_NAME, resolver);
-                ModuleNode module = tool.getSpecProcessor().getRootModule();
-                OpDefNode valueNode = module.getOpDef(replValueVarName);
-
-                // Make output of TLC!Print and TLC!PrintT appear in the REPL. Set here
-                // and unset in finally below to suppress output of FastTool instantiation
-                // above.
-                tlc2.module.TLC.OUTPUT = replWriter;
-                final Value exprVal = (Value) tool.eval(valueNode.getBody());
-                return exprVal.toString();
-            } catch (EvalException exc) {
-                // TODO: Improve error messages with more specific detail.
-                System.out.printf("Error evaluating expression: '%s'%n%s%n", evalExpr, exc);
-            } catch (Assert.TLCRuntimeException exc) {
-                if (exc.parameters != null && exc.parameters.length > 0) {
-                    // 0..1 \X 0..1 has non-null params of length zero. Actual error message is
-                    // "Parsing or semantic analysis failed.".
-                    System.out.printf("Error evaluating expression: '%s'%n%s%n", evalExpr,
-                            Arrays.toString(exc.parameters));
-                } else if (exc.getMessage() != null) {
-                    // Examples of what ends up here:
-                    // 23 = TRUE
-                    // Attempted to evaluate an expression of form P \/ Q when P was an integer.
-                    // 23 \/ TRUE
-                    // Attempted to check equality of integer 23 with non-integer: TRUE
-                    // CHOOSE x \in Nat : x = 4
-                    // Attempted to compute the value of an expression of form CHOOSE x \in S: P, but S was not enumerable.
-                    String msg = exc.getMessage().trim();
-                    // Strip meaningless location from error message.
-                    msg = msg.replaceFirst("\\nline [0-9]+, col [0-9]+ to line [0-9]+, col [0-9]+ of module tlarepl$", "");
-                    // Replace any newlines with whitespaces.
-                    msg = msg.replaceAll("\\n", " ").trim();
-                    System.out.printf("Error evaluating expression: '%s'%n%s%n", evalExpr, msg);
-                } else {
-                    System.out.printf("Error evaluating expression: '%s'%n", evalExpr);
-                }
-            } finally {
-                replWriter.flush();
-                tlc2.module.TLC.OUTPUT = null;
-            }
-        } catch (IOException pe) {
-            pe.printStackTrace();
-        }
-        return "";
-    }
-
-    /**
-     * Runs the main REPL loop continuously until there is a fatal error or a user interrupt.
-     */
-    public void runREPL(final LineReader reader) throws IOException {
-        // Run the loop.
-        String expr;
-        while (true) {
-            try {
-                expr = reader.readLine(prompt);
-                String res = processInput(expr);
-                if (res.equals("")) {
-                    continue;
-                }
-                System.out.println(res);
-            } catch (UserInterruptException e) {
-                return;
-            } catch (EndOfFileException e) {
-                e.printStackTrace();
-                return;
-            } finally {
-                // Persistent file and directory will be create on demand.
-                reader.getHistory().save();
-            }
-        }
-    }
-
-    OpApplNode append(ExprOrOpArgNode left, ExprOrOpArgNode right) {
-        OpDefNode appendDef = (OpDefNode) tool.getModule("Sequences").getDefinitions().stream()
-                .filter(op -> op instanceof OpDefNode && ((OpDefNode) op).getName().equals("Append"))
-                .findAny().get();
-        return new OpApplNode(appendDef,
-                new ExprOrOpArgNode[]{left, right});
-    }
-
-    OpApplNode setLiteral(ExprOrOpArgNode arg) {
-        SymbolNode setLiteral = new OpDefNode(OP_se);
-        OpApplNode set = new OpApplNode(setLiteral, new ExprOrOpArgNode[]{arg});
-        return set;
-    }
-
-    static <A, B> Function<List<A>, B> unary(Function<A, B> f) {
-        return xs -> f.apply(xs.get(0));
-    }
-
-    static <A, B> Function<List<A>, B> binary(BiFunction<A, A, B> f) {
-        return xs -> f.apply(xs.get(0), xs.get(1));
-    }
-
-    static <T> Stream<List<T>> cartesianProduct(List<List<T>> lists) {
-        if (lists.size() == 0) {
-            return Stream.of(new ArrayList<T>());
-        } else {
-            List<T> firstList = lists.get(0);
-            Stream<List<T>> remainingLists = cartesianProduct(lists.subList(1, lists.size()));
-            return remainingLists.flatMap(remainingList ->
-                    firstList.stream().map(condition -> {
-                        ArrayList<T> resultList = new ArrayList<T>();
-                        resultList.add(condition);
-                        resultList.addAll(remainingList);
-                        return resultList;
-                    })
-            );
-        }
-    }
-
-//    public static <T> Predicate<T> distinctByKey(Function<? super T, ?> keyExtractor) {
-//        Set<Object> seen = ConcurrentHashMap.newKeySet();
-//        return t -> seen.add(keyExtractor.apply(t));
-//    }
-
-    class Enumerate {
-        Map<String, Tool.TermVal> components;
-        Context ctx;
-        TLCState state;
-
-        public Enumerate(Map<String, Tool.TermVal> components, Context ctx, TLCState state) {
-            this.components = components;
-            this.ctx = ctx;
-            this.state = state;
-        }
-
-        int rank(OpApplNode left) {
-            // balance size and generality
-            return 1;
-        }
-
-        Stream<ExprOrOpArgNode> mutationsRec(ExprOrOpArgNode node, boolean top) {
-            if (!(node instanceof OpApplNode)) {
-                if (top) {
-                    return Stream.of(node);
-                }
-                return Stream.concat(Stream.of(node), components.values().stream().map(v -> v.term));
-            } else {
-                OpApplNode n = (OpApplNode) node;
-                List<ExprOrOpArgNode> candidates = new ArrayList<>();
-                List<List<ExprOrOpArgNode>> args = Arrays.stream(n.getArgs())
-                        .map(a -> mutationsRec(a, false).collect(Collectors.toList()))
-                        .collect(Collectors.toList());
-
-                // cartesianProduct([]) = {{}}, so there will be one element if this operator
-                // has no operands, which causes it to be added once
-                cartesianProduct(args).filter(a -> !a.isEmpty()).forEach(a -> {
-                    OpApplNode m = n.astCopy();
-                    m.setArgs(a.toArray(new ExprOrOpArgNode[0]));
-                    candidates.add(m);
-                });
-
-                if (top) {
-                    return candidates.stream();
-                }
-                return Stream.concat(candidates.stream(), components.values().stream().map(v -> v.term));
-//                        .filter(distinctByKey(Eval::prettyPrint));
-            }
-        }
-
-        // only mutates at the current level
-        Stream<ExprOrOpArgNode> extraMutations(ExprOrOpArgNode node) {
-            if (!(node instanceof OpApplNode)) {
-                return Stream.of();
-            } else {
-                OpApplNode n = (OpApplNode) node;
-                if (n.getArgs().length == 0) {
-                    return Stream.of();
-                }
-                // TODO don't return singleton?
-                // TODO we create an invalid EXCEPT
-
-                int argCount;
-                if (BuiltInOPs.getOpCode(n.getOperator().getName()) == OPCODE_exc) {
-                    argCount = 3;
-                } else {
-                    argCount = n.getArgs().length;
-                }
-
-                List<ExprOrOpArgNode> candidates = new ArrayList<>();
-                List<List<ExprOrOpArgNode>> args = IntStream.range(0, argCount)
-                        .mapToObj(i -> components.values().stream()
-                                .map(v -> (ExprOrOpArgNode) v.term)
-                                .collect(Collectors.toList()))
-                        .collect(Collectors.toList());
-
-                // cartesianProduct([]) = {{}}, so there will be one element if this operator
-                // has no operands, which causes it to be added once
-                cartesianProduct(args).filter(a -> !a.isEmpty()).forEach(a -> {
-                    OpApplNode m = n.astCopy();
-                    if (BuiltInOPs.getOpCode(n.getOperator().getName()) == OPCODE_exc) {
-                        OpApplNode pair = (OpApplNode) n.getArgs()[1].astCopy();
-                        OpApplNode idx;
-                        if (pair.getArgs()[0] instanceof OpApplNode) {
-                            idx = ((OpApplNode) pair.getArgs()[0]).astCopy();
-                            idx.setArgs(new ExprOrOpArgNode[]{ a.get(1) });
-                        } else {
-                            idx = (OpApplNode) a.get(1);
-                        }
-                        pair.setArgs(new ExprOrOpArgNode[]{ idx, a.get(2) });
-                        m.setArgs(new ExprOrOpArgNode[] { a.get(0), pair });
-//                        m.setArgs(a.toArray(ExprOrOpArgNode[]::new));
-                    } else {
-                        m.setArgs(a.toArray(ExprOrOpArgNode[]::new));
-                    }
-                    candidates.add(m);
-                });
-
-//                List<String> collect = candidates.stream().map(a -> prettyPrint(a)).collect(Collectors.toList());
-
-//                if (top) {
-                return candidates.stream();
-//                }
-//                return Stream.concat(candidates.stream(), components.values().stream().map(v -> v.term));
-//                        .filter(distinctByKey(Eval::prettyPrint));
-            }
-        }
-
-        Stream<List<OpApplNode>> product(int n) {
-            List<List<OpApplNode>> c = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                c.add(this.components.values().stream().map(a -> a.term).toList());
-            }
-            return cartesianProduct(c);
-        }
-
-        // compute next frontier
-        void next(IValue target) {
-            Map<String, Tool.TermVal> additions = new HashMap<>();
-
-            System.out.println("level 0");
-            // the zeroth level: mutating components
-            components.keySet().forEach(k -> {
-                System.out.println(k);
-            });
-            for (Map.Entry<String, Tool.TermVal> entry : components.entrySet()) {
-                System.out.println("(" + components.size() + ") generating mutations of " + prettyPrint(entry.getValue().term));
-                List<ExprOrOpArgNode> mut = extraMutations(entry.getValue().term).collect(Collectors.toList());
-
-//                List<String> debug1 = mut.stream().map(Eval::prettyPrint).collect(Collectors.toList());
-                for (ExprOrOpArgNode m : mut) {
-                    String debug = prettyPrint(m);
-                    try {
-                        IValue res = tool.eval(m, ctx, state);
-                        System.out.printf("%s ==> %s\n", prettyPrint(m), res);
-
-                        boolean better = true;
-                        if (better) {
-                            // TODO cast for now
-                            // don't save these values as the component set grows too quickly, and most are not valuable
-//                            additions.put(prettyPrint(res), new Tool.TermVal((OpApplNode) m, res, ctx));
-                        }
-                        if (valueEq(res, target)) {
-                            break;
-                        }
-                    } catch (Assert.TLCRuntimeException | EvalException e) {
-                        // do nothing
-//                        System.out.println("invalid " + debug);
-                    }
-                }
-            }
-
-            System.out.println("applying rules");
-            // apply rules to build new components, then mutate them
-
-            List<List<Function<List<ExprOrOpArgNode>, OpApplNode>>> rules = List.of(
-                    List.of(unary(Eval.this::setLiteral)),
-                    List.of(binary(Eval.this::append)));
-            top:
-            for (int i = 0; i < rules.size(); i++) {
-                for (List<OpApplNode> p : (Iterable<List<OpApplNode>>) product(i + 1)::iterator) {
-                    List<ExprOrOpArgNode> p1 = p.stream()
-                            .map(p2 -> (ExprOrOpArgNode) p2)
-                            .collect(Collectors.toList());
-                    // TODO prune non-promising expressions like {{}}?
-                    //  so we don't keep them as components. hard to identify them though
-                    for (Function<List<ExprOrOpArgNode>, OpApplNode> r : rules.get(i)) {
-                        OpApplNode candidate = r.apply(p1);
-                        try {
-                            {
-                                IValue res = tool.eval(candidate, ctx, state);
-                                System.out.printf("%s ==> %s\n", prettyPrint(candidate), res);
-
-                                boolean better = true;
-                                if (better) {
-                                    additions.put(prettyPrint(res), new Tool.TermVal(candidate, res, ctx));
-                                }
-                                if (valueEq(res, target)) {
-                                    break top;
-                                }
-                            }
-
-                            List<ExprOrOpArgNode> mut = extraMutations(candidate).collect(Collectors.toList());
-
-                            for (ExprOrOpArgNode m : mut) {
-                                IValue res = tool.eval(m, ctx, state);
-                                System.out.printf("%s ==> %s\n", prettyPrint(m), res);
-
-                                boolean better = true;
-                                if (better) {
-                                    // TODO cast for now
-                                    additions.put(prettyPrint(res), new Tool.TermVal((OpApplNode) m, res, ctx));
-                                }
-                                if (valueEq(res, target)) {
-                                    break top;
-                                }
-                            }
-
-                        } catch (EvalException e) {
-                            // not sure if it's worth pruning ill-typed expressions because they're
-                            // removed in one traversal, by evaluation
-                            // System.out.printf("%s =/=>\n", candidate.prettyPrint());
-                        }
-                    }
-                }
-            }
-
-            // commit all changes
-            System.out.println("COMMIT");
-            components.putAll(additions);
-        }
-
-        OpApplNode synthesize(IValue target) {
-            while (true) {
-                next(target);
-                if (done(target)) {
-                    System.out.println("done");
-                    OpApplNode answer = components.get(target.toString()).term;
-                    System.out.println(prettyPrint(answer));
-                    return answer;
-                }
-            }
-        }
-
-        private boolean done(IValue target) {
-            return components.values().stream().anyMatch(v -> valueEq(v.value, target));
-        }
     }
 
     public static String prettyPrint(ExprOrOpArgNode node) {
@@ -565,11 +120,111 @@ public class Eval {
 
     public static void main(String[] args) throws Exception {
         TLCGlobals.warn = false;
-        String path = "/Users/darius/refinement-mappings/trace-specs/raft-outbox/raft";
-        String config = "/Users/darius/refinement-mappings/trace-specs/raft-outbox/raft";
+        String path = "raft";
+        String config = "raft";
+
+        // Avoid sending log messages to stdout and reset the messages recording.
+        // TODO unsure if this is needed
+        ToolIO.setMode(ToolIO.TOOL);
+        ToolIO.reset();
 
         FastTool tool = new FastTool(path, config);
 
+//        modifyAction(path, tool);
+        createAction(tool);
+    }
+
+    private static void createAction(FastTool tool) throws IOException {
+        TLCState init = tool.getInitStates().elementAt(0);
+        List<OpDeclNode> vars = Arrays.asList(init.getVars());
+        TLCStateMut goodState = new TLCStateMut(loadValues(vars));
+
+//        OpApplNode node1 = Build.except(Build.op("matchIndex"), Build.stringLiteral("s2"), Build.stringLiteral("hi"));
+//        IValue eval = tool.eval(Build.op("matchIndex"), Context.Empty, init);
+//        IValue eval1 = tool.eval(node1, Context.Empty, init);
+
+        Enumerate enumerate = new Enumerate(tool, null, null, null);
+
+//        IValue target = jsonToValue(
+//                "{\"s1\": {\"type\": \"set\", value: []}," +
+//                        "\"s2\": {\"type\": \"set\", value: [\"s2\"]}," +
+//                        "\"s3\": {\"type\": \"set\", value: []}" +
+//                        "}");
+//        target = jsonToValue(
+//                "{\"s1\": 0," +
+//                        "\"s2\": 1," +
+//                        "\"s3\": 0" +
+//                        "}");
+        IValue target = jsonToValue("1");
+        // TODO record indexing
+        // TODO embed the whole thing in an except
+        // TODO allow specifying what to eval from here
+        // TODO cutoff, say number of candidates
+
+        Map<String, ExprOrOpArgNode> seed =
+                Arrays.stream(goodState.getVarsAsStrings())
+                        .collect(Collectors.toMap(s -> s, s -> Build.op(s)));
+
+        Enumerate.Control synthesized = enumerate.synthesizeStateless(seed, c -> {
+            IValue v = tool.eval(c.term, Context.Empty, goodState);
+            if (Eval.valueEq(v, target)) {
+                c.stop();
+            }
+        });
+        System.out.println(synthesized.term);
+
+        int a = 1;
+
+//        tool.obsEnabled = true;
+//
+//        // this records evaluated expressions as a side effect
+//        StateVec ignored = tool.getNextStates(timeoutWithSomeArgs, goodState);
+//
+//        tool.obsEnabled = false;
+
+//        IValue eval = tool.eval(any.pred, ref);
+//        FormalParamNode r = (FormalParamNode) ref.getName();
+//        Context ctx = new Context(null, null, null);
+//        FormalParamNode formalParamNode = new FormalParamNode("i", 0,
+//                ref.getName().stn, null, r.moduleNode);
+
+        System.out.println("---");
+        System.out.println("printing observations");
+        tool.observed.entrySet().forEach(e -> {
+            System.out.printf("%s: %s\n", e.getValue().term.getOperator().getName(), e.getValue().value);
+//            System.out.println("eval");
+//            super(1, SyntaxTreeNode.nullSTN, UniqueString.uniqueStringOf(name));
+//            SymbolNode name = new OpDefNode(UniqueString.uniqueStringOf("xlog"));
+//            System.out.println(name.getName() + " is defined");
+//            0, SyntaxTreeNode.nullSTN,
+            tool.eval(e.getValue().term, e.getValue().ctx, goodState);
+//            tool.eval(e.getValue().term, Context.Empty.cons(name, e.getValue().term), newState);
+        });
+        System.out.println("---");
+
+//        Eval eval = new Eval();
+//
+//        Enumerate enumerate = new Enumerate(tool, tool.observed, timeoutWithSomeArgs.con, goodState);
+//
+////        IValue target = jsonToValue("[s1 |-> {}, s2 |-> {\"s2\"}, s3 |-> {}]", 0);
+//        IValue target = jsonToValue(
+//                "{\"s1\": {\"type\": \"set\", value: []}," +
+//                        "\"s2\": {\"type\": \"set\", value: [\"s2\"]}," +
+//                        "\"s3\": {\"type\": \"set\", value: []}" +
+//                        "}");
+//        OpApplNode answer = enumerate.synthesize(target);
+//
+//        eval.modify(timeoutWithSomeArgs.pred, timeoutWithSomeArgs.con, goodState);
+//
+//        try (NamedInputStream stream = new NamedInputStream(path, "raft", new File(path + ".tla"))) {
+//            ;
+//            TLAplusParser parseTree = new TLAplusParser(stream);
+//            System.out.println(parseTree.parse());
+//        }
+
+    }
+
+    private static void modifyAction(String path, FastTool tool) throws IOException {
         List<Action> actions = Arrays.asList(tool.getActions());
         List<Action> collect = actions.stream().filter(a -> {
             return a.getName().equals("Timeout");
@@ -612,9 +267,8 @@ public class Eval {
         System.out.println("---");
 
         Eval eval = new Eval();
-        eval.tool = tool;
 
-        Enumerate enumerate = eval.new Enumerate(tool.observed, timeoutWithSomeArgs.con, goodState);
+        Enumerate enumerate = new Enumerate(tool, tool.observed, timeoutWithSomeArgs.con, goodState);
 
 //        IValue target = jsonToValue("[s1 |-> {}, s2 |-> {\"s2\"}, s3 |-> {}]", 0);
         IValue target = jsonToValue(
@@ -622,7 +276,7 @@ public class Eval {
                         "\"s2\": {\"type\": \"set\", value: [\"s2\"]}," +
                         "\"s3\": {\"type\": \"set\", value: []}" +
                         "}");
-        OpApplNode answer = enumerate.synthesize(target);
+//        OpApplNode answer = enumerate.synthesize(target);
 
         eval.modify(timeoutWithSomeArgs.pred, timeoutWithSomeArgs.con, goodState);
 
@@ -631,40 +285,6 @@ public class Eval {
             TLAplusParser parseTree = new TLAplusParser(stream);
             System.out.println(parseTree.parse());
         }
-
-        // Here is the one true REAL call to the parseTree.parse() for a file;
-        // The root node of the parse tree is left in parseTree.
-
-//        try {
-//            final Path tempDir = Files.createTempDirectory(TEMP_DIR_PREFIX);
-//            final Eval repl = new Eval(tempDir);
-//            // TODO: Allow external spec file to be loaded into REPL context.
-//
-//            if(args.length == 1) {
-//                String res = repl.processInput(args[0]);
-//                if (!res.equals("")) {
-//                	System.out.println(res);
-//                }
-//                //TODO Return actual exit value if parsing/evaluation fails.
-//                System.exit(0);
-//            }
-//
-//            // For TLA+ we don't want to treat backslashes as escape chars e.g. for LaTeX like operators.
-//			final DefaultParser parser = new DefaultParser();
-//			parser.setEscapeChars(null);
-//			final Terminal terminal = TerminalBuilder.builder().build();
-//			final LineReader reader = LineReaderBuilder.builder().parser(parser).terminal(terminal)
-//					.history(new DefaultHistory()).build();
-//			reader.setVariable(LineReader.HISTORY_FILE, HISTORY_PATH);
-//
-//			System.out.println("Welcome to the TLA+ REPL!");
-//            MP.printMessage(EC.TLC_VERSION, TLCGlobals.versionOfTLC);
-//        	System.out.println("Enter a constant-level TLA+ expression.");
-//
-//            repl.runREPL(reader);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
     }
 
     private static String goodStateStr = "{\n" +
