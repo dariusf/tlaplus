@@ -34,9 +34,6 @@ CONSTANTS Value
 \* Keeps track of every log ever in the system (set of logs).
 \* VARIABLE allLogs
 
-\* VARIABLE lastComm
-\* VARIABLE who
-
 ----
 \* The following variables are all per server (functions with domain Server).
 
@@ -117,7 +114,6 @@ Max(s) == CHOOSE x \in s : \A y \in s : x >= y
 InitHistoryVars == \*/\ elections = {}
                    /\ actions = <<>>
                   \*  /\ allLogs   = {}
-                  \*  /\ lastComm = <<>>
                    /\ who = "none"
                   \*  /\ voterLog  = [i \in Server |-> [j \in {} |-> <<>>]]
 InitServerVars == /\ currentTerm = [i \in Server |-> 1]
@@ -162,9 +158,7 @@ Restart(i) ==
     /\ nextIndex'      = [nextIndex EXCEPT ![i] = [j \in Server |-> 1]]
     /\ matchIndex'     = [matchIndex EXCEPT ![i] = [j \in Server |-> 0]]
     /\ commitIndex'    = [commitIndex EXCEPT ![i] = 0]
-    \* /\ who' = i
     /\ UNCHANGED <<currentTerm, votedFor, log>>
-    \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"Restart", i>>)
     /\ LogActor(i)
@@ -213,14 +207,12 @@ Timeout(i) == /\ state[i] \in {"Follower", "Candidate"}
                 \/ votesGranted'   = [votesGranted EXCEPT ![i] = {}]
                 \/ votesGranted'   = [votesGranted EXCEPT ![i] = {i}]
               \* /\ voterLog'       = [voterLog EXCEPT ![i] = [j \in {} |-> <<>>]]
-              \* /\ who' = i
               \* etcd OMISSION 7
               /\
                 \/ UNCHANGED matchIndex
                 \/ matchIndex' = [matchIndex EXCEPT ![i] = [matchIndex[i] EXCEPT ![i] = Len(log[i])]]
               /\ UNCHANGED <<logVars>>
               /\ UNCHANGED <<inboxOutboxVars>>
-              \* /\ UNCHANGED <<lastComm>>
               /\ LogAction(<<"Timeout", i>>)
               /\ LogActor(i)
 
@@ -234,7 +226,6 @@ RequestVote(i, j) ==
              mlastLogIndex |-> Len(log[i]),
              msource       |-> i,
              mdest         |-> j])
-    /\ who' = i
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
     \* /\ UNCHANGED Receivable
     /\ LogAction(<<"RequestVote", i, j>>)
@@ -244,7 +235,6 @@ RequestVote(i, j) ==
 \* While implementations may want to send more than 1 at a time, this spec uses
 \* just 1 because it minimizes atomic regions without loss of generality.
 AppendEntries(i, j) ==
-    \* /\ who' = i
     /\ i /= j
     /\ state[i] = "Leader"
     /\ LET prevLogIndex == nextIndex[i][j] - 1
@@ -287,7 +277,6 @@ AppendEntries(i, j) ==
 
 \* Candidate i transitions to leader.
 BecomeLeader(i) ==
-    \* /\ who' = i
     /\ state[i] = "Candidate"
     \* /\ votesGranted[i] \in Quorum
     /\ Cardinality(votesGranted[i]) >= Cardinality(Server) \div 2 + 1
@@ -320,14 +309,12 @@ BecomeLeader(i) ==
         /\ votesResponded' = [votesResponded EXCEPT ![i] = {}]
     /\ UNCHANGED <<currentTerm, votedFor>>
     /\ UNCHANGED commitIndex
-    \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"BecomeLeader", i>>)
     /\ LogActor(i)
 
 \* Leader i receives a client request to add v to the log.
 ClientRequest(i, v) ==
-    \* /\ who' = i
     /\ state[i] = "Leader"
     /\ LET entry == [term  |-> currentTerm[i],
                      value |-> v]
@@ -335,7 +322,6 @@ ClientRequest(i, v) ==
        IN  log' = [log EXCEPT ![i] = newLog]
     /\ UNCHANGED <<serverVars, candidateVars,
                    leaderVars, commitIndex>>
-    \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"ClientRequest", i, v>>)
     /\ LogActor(i)
@@ -345,7 +331,6 @@ ClientRequest(i, v) ==
 \* in part to minimize atomic regions, and in part so that leaders of
 \* single-server clusters are able to mark entries committed.
 AdvanceCommitIndex(i) ==
-    \* /\ who' = i
     /\ state[i] = "Leader"
     /\ LET \* The set of servers that agree up through index.
            Agree(index) == {i} \cup {k \in Server :
@@ -365,7 +350,6 @@ AdvanceCommitIndex(i) ==
                   commitIndex[i]
        IN commitIndex' = [commitIndex EXCEPT ![i] = newCommitIndex]
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, log>>
-    \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     /\ LogAction(<<"AdvanceCommitIndex", i>>)
     /\ LogActor(i)
@@ -395,7 +379,6 @@ HandleRequestVoteRequest(i, j, m) ==
                  msource      |-> i,
                  mdest        |-> j],
                  m)
-       \* /\ who' = i
        /\ UNCHANGED inflight
        /\ UNCHANGED <<state, currentTerm, candidateVars, leaderVars, logVars>>
        /\ LogAction(<<"HandleRequestVoteRequest", i, j, m>>)
@@ -439,7 +422,6 @@ HandleRequestVoteResponse(i, j, m) ==
           \* /\ UNCHANGED <<votesGranted, voterLog>>
           /\ UNCHANGED <<votesGranted>>
     /\ Discard(m)
-    \* /\ who' = i
     /\ UNCHANGED <<serverVars, votedFor, leaderVars, logVars>>
     /\ LogAction(<<"HandleRequestVoteResponse", i, j, m>>)
     /\ LogActor(i)
@@ -454,7 +436,6 @@ HandleAppendEntriesRequest(i, j, m) ==
                     /\ m.mprevLogIndex <= Len(log[i])
                     /\ m.mprevLogTerm = log[i][m.mprevLogIndex].term
     IN /\ m.mterm <= currentTerm[i]
-       \* /\ who' = i
        /\ LogAction(<<"HandleAppendEntriesRequest", i, j, m>>)
        /\ LogActor(i)
        /\ \/ /\ \* reject request
@@ -475,7 +456,6 @@ HandleAppendEntriesRequest(i, j, m) ==
              /\ state[i] = "Candidate"
              /\ state' = [state EXCEPT ![i] = "Follower"]
              /\ UNCHANGED <<currentTerm, votedFor, logVars>>
-            \*  /\ UNCHANGED <<lastComm>>
              /\ UNCHANGED <<inboxOutboxVars>>
           \/ \* accept request
              /\ m.mterm = currentTerm[i]
@@ -512,7 +492,6 @@ HandleAppendEntriesRequest(i, j, m) ==
                                           log[i][index2]]
                           IN log' = [log EXCEPT ![i] = new]
                        /\ UNCHANGED <<serverVars, commitIndex>>
-                      \*  /\ UNCHANGED <<lastComm>>
                        /\ UNCHANGED <<inboxOutboxVars>>
                    \/ \* no conflict: append entry
                        /\ m.mentries /= << >>
@@ -527,7 +506,6 @@ HandleAppendEntriesRequest(i, j, m) ==
                          \/ UNCHANGED commitIndex
                          \* BUGFIX bound commitIndex by our log length
                          \/ commitIndex' = [commitIndex EXCEPT ![i] = Min({m.mcommitIndex, Len(log'[i])})]
-                      \*  /\ UNCHANGED <<lastComm>>
                        \* OMISSION 5
                        \* allow sending a reply
                        \* /\ UNCHANGED commVars
@@ -548,7 +526,6 @@ HandleAppendEntriesRequest(i, j, m) ==
 \* m.mterm = currentTerm[i].
 HandleAppendEntriesResponse(i, j, m) ==
     /\ m.mterm = currentTerm[i]
-    \* /\ who' = i
     /\ \/ /\ m.msuccess \* successful
           /\ nextIndex'  = [nextIndex  EXCEPT ![i][j] = m.mmatchIndex + 1]
           /\ matchIndex' = [matchIndex EXCEPT ![i][j] = m.mmatchIndex]
@@ -564,7 +541,6 @@ HandleAppendEntriesResponse(i, j, m) ==
 \* Any RPC with a newer term causes the recipient to advance its term first.
 UpdateTerm(i, j, m) ==
     /\ m.mterm > currentTerm[i]
-    \* /\ who' = i
     /\ currentTerm'    = [currentTerm EXCEPT ![i] = m.mterm]
     /\ state'          = [state       EXCEPT ![i] = "Follower"]
     /\ votedFor'       = [votedFor    EXCEPT ![i] = "none"]
@@ -577,7 +553,6 @@ UpdateTerm(i, j, m) ==
     /\
       \/ UNCHANGED nextIndex
       \/ nextIndex' = [nextIndex EXCEPT ![i] = [j1 \in Server |-> nextIndex[i][j1]+1]]
-    \* /\ UNCHANGED <<lastComm>>
     /\ UNCHANGED <<inboxOutboxVars>>
     \* /\ UNCHANGED actions
     /\ LogAction(<<"UpdateTerm", i, j, m>>)
@@ -586,7 +561,6 @@ UpdateTerm(i, j, m) ==
 \* Responses with stale terms are ignored.
 DropStaleResponse(i, j, m) ==
     /\ m.mterm < currentTerm[i]
-    \* /\ who' = i
     /\ Discard(m)
     /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars>>
     /\ UNCHANGED actions
