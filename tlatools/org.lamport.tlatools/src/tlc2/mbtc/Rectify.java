@@ -56,7 +56,17 @@ public class Rectify {
     }
 
     public static void showCounterexample(FastTool tool, Cex cex) {
-        // good contains all variables in the model, including auxilaries.
+
+        // COUNTEREXAMPLES
+        //                          v-- bad state (at index prefixI)
+        // implTrace:   () -> () -> () -> ...
+        //                    ^
+        //                    | related by refinement mapping
+        //                    v
+        // tracePrefix: () -> ()
+        //                    ^-- good state
+
+        // good contains all variables in the model, including auxiliary variables.
         // bad (projected, from impl) contains a subset, where absence means not exposed
         // (and not necessarily unchanged).
         State goodGlobal = cex.goodState();
