@@ -9,7 +9,6 @@ import tlc2.tool.impl.FastTool;
 import tlc2.util.Context;
 import tlc2.value.IValue;
 import tlc2.value.impl.*;
-import util.UniqueString;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -18,7 +17,7 @@ import java.util.stream.Collectors;
 /**
  * Presentation of counterexamples
  */
-public class Present {
+public class Rectify {
 
     public static State project(State s, StringValue party) {
         State res = new State(new HashMap<>());
@@ -287,13 +286,13 @@ public class Present {
         if (value instanceof SetEnumValue) {
             return Build.setLiteral(
                     Arrays.stream(((SetEnumValue) value).elems.toArray())
-                            .map(Present::valueToOpAppl)
+                            .map(Rectify::valueToOpAppl)
                             .toArray(ExprOrOpArgNode[]::new));
         }
         if (value instanceof TupleValue) {
             return Build.seq(
                     Arrays.stream(((TupleValue) value).elems)
-                            .map(Present::valueToOpAppl)
+                            .map(Rectify::valueToOpAppl)
                             .toArray(ExprOrOpArgNode[]::new));
         }
         if (value instanceof RecordValue) {
