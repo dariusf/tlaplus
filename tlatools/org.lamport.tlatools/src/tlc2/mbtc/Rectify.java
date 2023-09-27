@@ -13,6 +13,7 @@ import tlc2.value.IValue;
 import tlc2.value.impl.*;
 
 import java.util.*;
+import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 
 import static tlc2.tool.ToolGlobals.*;
@@ -86,105 +87,75 @@ public class Rectify {
         // what changed from goodProj -> badProj (i.e. what was observed to happen)
         Set<String> implChanged = simpleFlatDiff(goodProj, badProj.toState());
 
-        {
-
-            Set<String> variables = goodGlobal.data.keySet().stream()
-                    .filter(n -> !(n.equals("who") || n.equals("i") || n.equals("actions")))
-                    .collect(Collectors.toSet());
-
-            // try to get overapproximation of changed variables
-            Action nextStateSpec = tool.getNextStateSpec();
-            OpDefNode opDef = nextStateSpec.getOpDef();
-            OpApplNode body = (OpApplNode) opDef.getBody();
-            Misc.ensure(BuiltInOPs.getOpCode(body.getOperator().getName()) == OPCODE_dl);
-            List<ExprOrOpArgNode> nextDisjuncts = Arrays.asList(body.getArgs());
-            FindActionVisitor.R reduce = nextDisjuncts.stream()
-                    .map(d -> {
-                        FindActionVisitor fav = new FindActionVisitor(tool);
-                        FindActionVisitor.R accept = d.accept(fav);
-                        return accept;
-                    }).reduce(new FindActionVisitor.R(), (a, b) -> {
-                        FindActionVisitor.R r = new FindActionVisitor.R();
-                        a.actions.forEach((k, v) -> r.actions.merge(k, v, (v1, v2) -> v1));
-                        b.actions.forEach((k, v) -> r.actions.merge(k, v, (v1, v2) -> v1));
-                        return r;
-                    });
-
-            List<OverapproxModifiesVisitor.R> collect = reduce.actions.entrySet().stream()
-                    .map(e -> {
-                        OverapproxModifiesVisitor v = new OverapproxModifiesVisitor(tool);
-                        OverapproxModifiesVisitor.R res = e.getValue().action.accept(v);
-                        System.out.println(e.getKey());
-                        System.out.printf("must: %s\nmay: %s\n\n", res.must, res.may);
-                        return res;
-                    })
-                    .collect(Collectors.toList());
-
-            int a = 1;
-        }
+        overapproximateActionSelection(tool, goodGlobal, implChanged);
 
         frontierHeuristics(cex, badProj, actor, goodProj, network, implChanged, goodGlobal);
 
         // try to add a transition
         if (true || false) {
+            runSynthesis(tool, goodGlobal, badProj, goodProj);
+        }
+    }
 
-            System.out.println("\n* new transition:\n");
+    static void runSynthesis(FastTool tool, State goodGlobal, ObState badProj, State goodProj) {
 
-            // TODO factor this out
-            // TODO
-            for (Map.Entry<String, Value> e : goodGlobal.data.entrySet()) {
-                // TODO constrain only this node's vars
-                System.out.printf("/\\ %s = %s\n", e.getKey(), e.getValue());
-                if (!badProj.data.containsKey(e.getKey())) {
-                    System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
-                }
-                // TODO figure out a grouping of variables to use. build a tree of those expressions
+        System.out.println("\n* new transition:\n");
+
+        // TODO factor this out
+        // TODO
+        for (Map.Entry<String, Value> e : goodGlobal.data.entrySet()) {
+            // TODO constrain only this node's vars
+            System.out.printf("/\\ %s = %s\n", e.getKey(), e.getValue());
+            if (!badProj.data.containsKey(e.getKey())) {
+                System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
             }
+            // TODO figure out a grouping of variables to use. build a tree of those expressions
+        }
 
-            Enumerate enumerate = new Enumerate(tool, null, null, null);
+        Enumerate enumerate = new Enumerate(tool, null, null, null);
 
-            // The variables are already set by loading the spec via a Tool,
-            // so we just have to provide the right order...
-            TLCStateMut goodState = new TLCStateMut(
-                    Arrays.stream(tool.getInitStates().elementAt(0).getVars())
-                            .map(o -> goodGlobal.data.get(o.getName().toString()))
-                            .toArray(Value[]::new));
+        // The variables are already set by loading the spec via a Tool,
+        // so we just have to provide the right order...
+        TLCStateMut goodState = new TLCStateMut(
+                Arrays.stream(tool.getInitStates().elementAt(0).getVars())
+                        .map(o -> goodGlobal.data.get(o.getName().toString()))
+                        .toArray(Value[]::new));
 
-            for (Map.Entry<String, Value> e : badProj.data.entrySet()) {
+        for (Map.Entry<String, Value> e : badProj.data.entrySet()) {
 
-                StringNode who = Build.stringLiteral(badProj.who);
+            StringNode who = Build.stringLiteral(badProj.who);
 
-                // TODO seed constants
-                // TODO seed params
-                // TODO may have more seeds as rules are applied
-                Map<String, ExprOrOpArgNode> seed =
+            // TODO seed constants
+            // TODO seed params
+            // TODO may have more seeds as rules are applied
+            Map<String, ExprOrOpArgNode> seed =
 //                    Arrays.stream(goodState.getVarsAsStrings())
-                        // TODO is this the right place to filter these aux vars?
-                        goodGlobal.data.keySet().stream()
-                                .filter(v -> !Set.of("i", "actions").contains(v))
-                                .map(v -> Build.fnApp(Build.op(v), who))
-                                .collect(Collectors.toMap(s -> Eval.prettyPrint(s), s -> s));
+                    // TODO is this the right place to filter these aux vars?
+                    goodGlobal.data.keySet().stream()
+                            .filter(v -> !Set.of("i", "actions").contains(v))
+                            .map(v -> Build.fnApp(Build.op(v), who))
+                            .collect(Collectors.toMap(s -> Eval.prettyPrint(s), s -> s));
 
 //                seed.put(Eval.prettyPrint(who), who);
 
-                seed.put(Eval.prettyPrint(e.getValue()), valueToOpAppl(e.getValue()));
+            seed.put(Eval.prettyPrint(e.getValue()), valueToOpAppl(e.getValue()));
 
-                // horrible hacks
+            // horrible hacks
 //                seed.put(Eval.prettyPrint(e.getValue()), Build.op("valueItself"));
 //                OpDefNode valueItself = new OpDefNode(UniqueString.uniqueStringOf("valueItself"));
 //                valueItself.setBody(e.getValue());
 //                Context context = Context.Empty.cons(valueItself, e.getValue());
 
-                if (Misc.valueEqual(e.getValue(), goodProj.data.get(e.getKey()))) {
-                    System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
-                    continue;
-                }
+            if (Misc.valueEqual(e.getValue(), goodProj.data.get(e.getKey()))) {
+                System.out.printf("/\\ UNCHANGED %s\n", e.getKey());
+                continue;
+            }
 
-                // target would be acceptable, but we want to synthesize something more general
-                Value target = e.getValue();
-                Enumerate.Control synthesized = enumerate.synthesizeStateless(seed, c -> {
+            // target would be acceptable, but we want to synthesize something more general
+            Value target = e.getValue();
+            Enumerate.Control synthesized = enumerate.synthesizeStateless(seed, c -> {
 //                    OpApplNode candidate = Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), c.term);
-                    // TODO this printing is just for debugging for now
+                // TODO this printing is just for debugging for now
 
 //                    if (e.getKey().equals("log")) {
 //                        System.out.printf("%s\n", Eval.prettyPrint(c.term));
@@ -202,41 +173,41 @@ public class Rectify {
 //                        int a = 1;
 //                    }
 
-                    long timeout = 3 * 1000;
-                    if (c.ms > timeout || c.candidates > 400_000) {
-                        System.out.printf("\\* gave up on %s after %ds and %s candidates, depth %s\n",
-                                e.getKey(), timeout / 1000, c.candidates, c.depth);
-                        c.giveUp();
-                    }
-
-                    if (Eval.prettyPrint(c.term).startsWith("Append(log[\"s2\"], <<")) {
-                        int a = 1;
-                    }
-                    IValue v = tool.eval(c.term, Context.Empty, goodState);
-                    // some heuristics:
-                    // has to use its own variable
-                    // cannot use only its own variable
-                    String itself = String.format("%s[%s]", e.getKey(), Eval.prettyPrint(who));
-                    if (Eval.prettyPrint(c.term).equals(itself)) {
-                        return;
-                    }
-                    if (!Eval.prettyPrint(c.term).contains(e.getKey())) {
-                        return;
-                    }
-                    if (Eval.valueEq(v, target)) {
-                        c.stop();
-                    }
-                });
-
-                if (synthesized.term != null) {
-//                    System.out.println("FOUND! " + Eval.prettyPrint(Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), synthesized.get())));
-                    OpApplNode res = Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), synthesized.term);
-//                    System.out.println("FOUND! " + Eval.prettyPrint(res));
-                    System.out.printf("/\\ %s' = %s\n", e.getKey(), Eval.prettyPrint(res));
-                } else {
-                    System.out.printf("/\\ %s' = %s\n", e.getKey(), Eval.prettyPrint(target));
+                long timeout = 3 * 1000;
+                if (c.ms > timeout || c.candidates > 400_000) {
+                    System.out.printf("\\* gave up on %s after %ds and %s candidates, depth %s\n",
+                            e.getKey(), timeout / 1000, c.candidates, c.depth);
+                    c.giveUp();
                 }
+
+                if (Eval.prettyPrint(c.term).startsWith("Append(log[\"s2\"], <<")) {
+                    int a = 1;
+                }
+                IValue v = tool.eval(c.term, Context.Empty, goodState);
+                // some heuristics:
+                // has to use its own variable
+                // cannot use only its own variable
+                String itself = String.format("%s[%s]", e.getKey(), Eval.prettyPrint(who));
+                if (Eval.prettyPrint(c.term).equals(itself)) {
+                    return;
+                }
+                if (!Eval.prettyPrint(c.term).contains(e.getKey())) {
+                    return;
+                }
+                if (Eval.valueEq(v, target)) {
+                    c.stop();
+                }
+            });
+
+            if (synthesized.term != null) {
+//                    System.out.println("FOUND! " + Eval.prettyPrint(Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), synthesized.get())));
+                OpApplNode res = Build.except(Build.op(e.getKey()), Build.stringLiteral(badProj.who), synthesized.term);
+//                    System.out.println("FOUND! " + Eval.prettyPrint(res));
+                System.out.printf("/\\ %s' = %s\n", e.getKey(), Eval.prettyPrint(res));
+            } else {
+                System.out.printf("/\\ %s' = %s\n", e.getKey(), Eval.prettyPrint(target));
             }
+        }
 
 //            for (Map.Entry<String, Value> e : badProj.data.entrySet()) {
 ////            if (e.getKey().equals("i")) {
@@ -251,7 +222,72 @@ public class Rectify {
 //                }
 //            }
 
-        }
+    }
+
+    static void overapproximateActionSelection(FastTool tool, State goodGlobal, Set<String> implChanged) {
+        Set<String> variables = goodGlobal.data.keySet().stream()
+                .filter(n -> !(n.equals("who") || n.equals("i") || n.equals("actions")))
+                .collect(Collectors.toSet());
+
+        // try to get overapproximation of changed variables
+        Action nextStateSpec = tool.getNextStateSpec();
+        OpDefNode opDef = nextStateSpec.getOpDef();
+        OpApplNode body = (OpApplNode) opDef.getBody();
+        Misc.ensure(BuiltInOPs.getOpCode(body.getOperator().getName()) == OPCODE_dl);
+        List<ExprOrOpArgNode> nextDisjuncts = Arrays.asList(body.getArgs());
+        FindActionVisitor.R reduce = nextDisjuncts.stream()
+                .map(d -> {
+                    FindActionVisitor fav = new FindActionVisitor(tool);
+                    FindActionVisitor.R accept = d.accept(fav);
+                    return accept;
+                }).reduce(new FindActionVisitor.R(), (a, b) -> {
+                    FindActionVisitor.R r = new FindActionVisitor.R();
+                    a.actions.forEach((k, v) -> r.actions.merge(k, v, (v1, v2) -> v1));
+                    b.actions.forEach((k, v) -> r.actions.merge(k, v, (v1, v2) -> v1));
+                    return r;
+                });
+
+        List<AbstractMap.SimpleEntry<String, OverapproxModifiesVisitor.R>> collect = reduce.actions.entrySet().stream()
+                .map(e -> {
+                    OverapproxModifiesVisitor v = new OverapproxModifiesVisitor(tool);
+                    OverapproxModifiesVisitor.R res = e.getValue().action.accept(v);
+                    return new AbstractMap.SimpleEntry<>(e.getKey(), res);
+                })
+//                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
+                .collect(Collectors.toList());
+
+        // this returns the "distance" to the set of changed impl variables
+
+        // must variable > may variable
+        // may absence = must absence
+        // may > absence
+        // some examples:
+        // 2 must and an absence < 3 may
+        ToIntFunction<AbstractMap.SimpleEntry<String, OverapproxModifiesVisitor.R>> simpleEntryToIntFunction =
+                e -> {
+                    OverapproxModifiesVisitor.R res = e.getValue();
+                    int inMust = implChanged.stream().map(c -> res.must.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
+                    int inMay = implChanged.stream().map(c -> res.may.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
+                    int notInMust = implChanged.stream().map(c -> res.must.contains(c) ? 0 : 1).mapToInt(Integer::intValue).sum();
+                    return inMust * 2 - notInMust + inMay;
+                };
+        collect.sort(Comparator.comparingInt(simpleEntryToIntFunction).reversed());
+
+        collect.forEach(e -> {
+            OverapproxModifiesVisitor.R res = e.getValue();
+            System.out.println(e.getKey());
+            System.out.printf("must: %s\nmay: %s\n", res.must, res.may);
+            int inMust = implChanged.stream().map(c -> res.must.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
+            System.out.printf("in must: %d\n", inMust);
+            int inMay = implChanged.stream().map(c -> res.may.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
+            System.out.printf("in may: %d\n", inMay);
+            int notInMust = implChanged.stream().map(c -> res.must.contains(c) ? 0 : 1).mapToInt(Integer::intValue).sum();
+            System.out.printf("not in must: %d\n", notInMust);
+            System.out.printf("score: %d\n", simpleEntryToIntFunction.applyAsInt(e));
+            System.out.println();
+        });
+
+        int a = 1;
     }
 
     /**
