@@ -8,6 +8,7 @@ VARIABLES outbox, inbox
 VARIABLES inflight
 CONSTANT Server
 
+\* converts a map of id -> seq to seq
 MsgsIn(box) == FoldSeq(LAMBDA c,t: box[c] \o t, <<>>, SetToSeq(Server))
 
 SendM(sender, m) ==

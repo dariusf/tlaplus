@@ -35,7 +35,7 @@ public class Enumerate {
     }
 
     static <T> Stream<List<T>> cartesianProduct(List<List<T>> lists) {
-        if (lists.size() == 0) {
+        if (lists.isEmpty()) {
             return Stream.of(new ArrayList<T>());
         } else {
             List<T> firstList = lists.get(0);

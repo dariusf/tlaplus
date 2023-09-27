@@ -4,6 +4,8 @@ import tla2sany.semantic.*;
 import tlc2.synth.Build;
 import tlc2.synth.Enumerate;
 import tlc2.synth.Eval;
+import tlc2.tool.Action;
+import tlc2.tool.BuiltInOPs;
 import tlc2.tool.TLCStateMut;
 import tlc2.tool.impl.FastTool;
 import tlc2.util.Context;
@@ -12,6 +14,8 @@ import tlc2.value.impl.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static tlc2.tool.ToolGlobals.*;
 
 
 /**
@@ -82,80 +86,44 @@ public class Rectify {
         // what changed from goodProj -> badProj (i.e. what was observed to happen)
         Set<String> implChanged = simpleFlatDiff(goodProj, badProj.toState());
 
-        System.out.println("---\nfrontier states");
-//        System.out.println("* frontier states");
-
-        // pick the state in the frontier with the smallest diff from what happened
-        List<RankedState> ranked = cex.frontier.stream()
-                .map(s -> {
-                    // project frontier and diff with projected good state
-                    State proj = projectLimit(s, badProj.toState(), actor);
-                    Set<String> changedFields = simpleFlatDiff(goodProj, proj);
-                    int score = scoreFrontierState(badProj, actor, network, implChanged, s, proj, changedFields);
-                    return new RankedState(s, changedFields, proj, score);
-                })
-                .sorted(Comparator.comparing(s -> -s.score))
-                .collect(Collectors.toList());
-
-        // assume there is at least one non-stuttering state in the frontier
-        RankedState possibleNext = ranked.get(0);
-        IValue nextAction = ((TupleValue) possibleNext.state.data.get("actions")).getLast();
-
-        // summarize what happened
-//        System.out.println("* prefix of behaviour:");
-        System.out.println("---\nprefix of behaviour:");
-        System.out.printf("%2d. Initial state\n", 0);
-        int i = 1;
-        for (IValue a : ((TupleValue) goodGlobal.data.get("actions")).getElems()) {
-            System.out.printf("%2d. %s\n", i, a);
-            System.out.printf("    %s %s\n",
-                    cex.implTrace.get(i).who,
-                    cex.implTrace.get(i).label);
-            i++;
-        }
-
-        // explain the diverging state
-        System.out.printf("---\nstate %d is allowed by the model, but %d (as seen in the impl) is not\n",
-                cex.prefixI - 1, cex.prefixI);
-        System.out.printf("%s:%s\n", badProj.file, badProj.line);
-
-        System.out.printf("---\n%d. impl made a transition that saw %s changing:\n",
-                cex.prefixI, Eval.prettyPrint(actor));
-        for (String s : implChanged) {
-            System.out.printf("%s: %s to %s\n", s, goodProj.data.get(s), badProj.data.get(s));
-        }
-
-        // find and explain the closest action in the frontier
-//        System.out.printf("* the closest action is %s\n", Eval.prettyPrint(nextAction));
-        System.out.printf("---\nthe closest action in the frontier is %s\n", Eval.prettyPrint(nextAction));
         {
-            State possibleNextProj = project(possibleNext.state, actor);
 
-            implChanged.forEach(s -> {
-                // the next state will have values for everything
-                assert possibleNextProj.data.containsKey(s);
-                if (!Misc.valueEqual(possibleNextProj.data.get(s), badProj.data.get(s))) {
-                    if (Misc.valueEqual(goodProj.data.get(s), possibleNextProj.data.get(s))) {
-                        System.out.printf("%s changed from\n  %s\nto\n  %s\nbut it should have remained unchanged\n", s, Eval.prettyPrint(goodProj.data.get(s)), Eval.prettyPrint(badProj.data.get(s)));
-                    } else {
-                        System.out.printf("%s changed from\n  %s\nto\n  %s\nbut it should have changed to\n  %s\ninstead\n", s, Eval.prettyPrint(goodProj.data.get(s)), Eval.prettyPrint(badProj.data.get(s)), Eval.prettyPrint(possibleNextProj.data.get(s)));
-                    }
-                }
-            });
-            possibleNext.changedFields.forEach(k -> {
-                // remove some aux vars
-                if (k.equals("who") || k.equals("actions")) {
-                    return;
-                }
-                // would have been handled earlier
-                if (implChanged.contains(k)) {
-                    return;
-                }
-                if (badProj.data.containsKey(k)) {
-                    System.out.printf("%s did not change but it should have changed from\n  %s\nto\n  %s\n", k, Eval.prettyPrint(project(goodGlobal, actor).data.get(k)), Eval.prettyPrint(possibleNextProj.data.get(k)));
-                }
-            });
+            Set<String> variables = goodGlobal.data.keySet().stream()
+                    .filter(n -> !(n.equals("who") || n.equals("i") || n.equals("actions")))
+                    .collect(Collectors.toSet());
+
+            // try to get overapproximation of changed variables
+            Action nextStateSpec = tool.getNextStateSpec();
+            OpDefNode opDef = nextStateSpec.getOpDef();
+            OpApplNode body = (OpApplNode) opDef.getBody();
+            Misc.ensure(BuiltInOPs.getOpCode(body.getOperator().getName()) == OPCODE_dl);
+            List<ExprOrOpArgNode> nextDisjuncts = Arrays.asList(body.getArgs());
+            FindActionVisitor.R reduce = nextDisjuncts.stream()
+                    .map(d -> {
+                        FindActionVisitor fav = new FindActionVisitor(tool);
+                        FindActionVisitor.R accept = d.accept(fav);
+                        return accept;
+                    }).reduce(new FindActionVisitor.R(), (a, b) -> {
+                        FindActionVisitor.R r = new FindActionVisitor.R();
+                        a.actions.forEach((k, v) -> r.actions.merge(k, v, (v1, v2) -> v1));
+                        b.actions.forEach((k, v) -> r.actions.merge(k, v, (v1, v2) -> v1));
+                        return r;
+                    });
+
+            List<OverapproxModifiesVisitor.R> collect = reduce.actions.entrySet().stream()
+                    .map(e -> {
+                        OverapproxModifiesVisitor v = new OverapproxModifiesVisitor(tool);
+                        OverapproxModifiesVisitor.R res = e.getValue().action.accept(v);
+                        System.out.println(e.getKey());
+                        System.out.printf("must: %s\nmay: %s\n\n", res.must, res.may);
+                        return res;
+                    })
+                    .collect(Collectors.toList());
+
+            int a = 1;
         }
+
+        frontierHeuristics(cex, badProj, actor, goodProj, network, implChanged, goodGlobal);
 
         // try to add a transition
         if (true || false) {
@@ -286,6 +254,131 @@ public class Rectify {
         }
     }
 
+    /**
+     * Given a formula like \E i \in set : \E j \in set1 : f, collects quantifiers
+     * and passes f to the next stage
+     */
+    static void analyzeExistsActionInNext(FastTool tool, OpApplNode actionInvoc,
+                                          Set<String> variables) {
+        List<String> accVars = new ArrayList<>();
+        List<OpApplNode> accSets = new ArrayList<>();
+
+        while (BuiltInOPs.getOpCode(actionInvoc.getOperator().getName()) == OPCODE_be) {
+            List<OpApplNode> sets = Arrays.stream(actionInvoc.getBdedQuantBounds())
+                    .map(s -> ((OpApplNode) s))
+                    .collect(Collectors.toList());
+            List<List<String>> vars = Arrays.stream(actionInvoc.getBdedQuantSymbolLists())
+                    .map(l -> Arrays.stream(l).map(s -> s.getName().toString()).collect(Collectors.toList()))
+                    .collect(Collectors.toList());
+            OpApplNode fml = (OpApplNode) actionInvoc.getArgs()[0];
+            for (int i = 0; i < sets.size(); i++) {
+                for (String var : vars.get(i)) {
+                    accVars.add(var);
+                    accSets.add(sets.get(i));
+                }
+            }
+            actionInvoc = fml;
+        }
+
+        StaticAction staticAction = new StaticAction();
+        staticAction.vars.addAll(accVars);
+        staticAction.sets.addAll(accSets);
+        staticAction.body = actionInvoc;
+
+        analyzeActionInNext(tool, actionInvoc, variables, staticAction);
+    }
+
+    /**
+     * Given an quantifier-free invocation of an action found in a Next disjunct,
+     * overapproximates the set of variables it modifies
+     */
+    static void analyzeActionInNext(FastTool tool, OpApplNode actionInvoc,
+                                    Set<String> variables,
+                                    StaticAction staticAction) {
+        String actionName = actionInvoc.getOperator().getName().toString();
+        OpDefNode actionDef = (OpDefNode) tool.getSpecProcessor().getDefns().get(actionName);
+        OverapproxModifiesVisitor visitor = new OverapproxModifiesVisitor(tool);
+        OverapproxModifiesVisitor.R accept = actionDef.getBody().accept(visitor);
+        System.out.printf("%s\n%s\n%s\n\n", actionName, accept.must, accept.may);
+    }
+
+    static void frontierHeuristics(Cex cex, ObState badProj, StringValue actor, State goodProj, StringValue network, Set<String> implChanged, State goodGlobal) {
+        System.out.println("---\nfrontier states");
+//        System.out.println("* frontier states");
+
+        // pick the state in the frontier with the smallest diff from what happened
+        List<RankedState> ranked = cex.frontier.stream()
+                .map(s -> {
+                    // project frontier and diff with projected good state
+                    State proj = projectLimit(s, badProj.toState(), actor);
+                    Set<String> changedFields = simpleFlatDiff(goodProj, proj);
+                    int score = scoreFrontierState(badProj, actor, network, implChanged, s, proj, changedFields);
+                    return new RankedState(s, changedFields, proj, score);
+                })
+                .sorted(Comparator.comparing(s -> -s.score))
+                .collect(Collectors.toList());
+
+        // assume there is at least one non-stuttering state in the frontier
+        RankedState possibleNext = ranked.get(0);
+        IValue nextAction = ((TupleValue) possibleNext.state.data.get("actions")).getLast();
+
+        // summarize what happened
+//        System.out.println("* prefix of behaviour:");
+        System.out.println("---\nprefix of behaviour:");
+        System.out.printf("%2d. Initial state\n", 0);
+        int i = 1;
+        for (IValue a : ((TupleValue) goodGlobal.data.get("actions")).getElems()) {
+            System.out.printf("%2d. %s\n", i, a);
+            System.out.printf("    %s %s\n",
+                    cex.implTrace.get(i).who,
+                    cex.implTrace.get(i).label);
+            i++;
+        }
+
+        // explain the diverging state
+        System.out.printf("---\nstate %d is allowed by the model, but %d (as seen in the impl) is not\n",
+                cex.prefixI - 1, cex.prefixI);
+        System.out.printf("%s:%s\n", badProj.file, badProj.line);
+
+        System.out.printf("---\n%d. impl made a transition that saw %s changing:\n",
+                cex.prefixI, Eval.prettyPrint(actor));
+        for (String s : implChanged) {
+            System.out.printf("%s: %s to %s\n", s, goodProj.data.get(s), badProj.data.get(s));
+        }
+
+        // find and explain the closest action in the frontier
+//        System.out.printf("* the closest action is %s\n", Eval.prettyPrint(nextAction));
+        System.out.printf("---\nthe closest action in the frontier is %s\n", Eval.prettyPrint(nextAction));
+        {
+            State possibleNextProj = project(possibleNext.state, actor);
+
+            implChanged.forEach(s -> {
+                // the next state will have values for everything
+                assert possibleNextProj.data.containsKey(s);
+                if (!Misc.valueEqual(possibleNextProj.data.get(s), badProj.data.get(s))) {
+                    if (Misc.valueEqual(goodProj.data.get(s), possibleNextProj.data.get(s))) {
+                        System.out.printf("%s changed from\n  %s\nto\n  %s\nbut it should have remained unchanged\n", s, Eval.prettyPrint(goodProj.data.get(s)), Eval.prettyPrint(badProj.data.get(s)));
+                    } else {
+                        System.out.printf("%s changed from\n  %s\nto\n  %s\nbut it should have changed to\n  %s\ninstead\n", s, Eval.prettyPrint(goodProj.data.get(s)), Eval.prettyPrint(badProj.data.get(s)), Eval.prettyPrint(possibleNextProj.data.get(s)));
+                    }
+                }
+            });
+            possibleNext.changedFields.forEach(k -> {
+                // remove some aux vars
+                if (k.equals("who") || k.equals("actions")) {
+                    return;
+                }
+                // would have been handled earlier
+                if (implChanged.contains(k)) {
+                    return;
+                }
+                if (badProj.data.containsKey(k)) {
+                    System.out.printf("%s did not change but it should have changed from\n  %s\nto\n  %s\n", k, Eval.prettyPrint(project(goodGlobal, actor).data.get(k)), Eval.prettyPrint(possibleNextProj.data.get(k)));
+                }
+            });
+        }
+    }
+
     private static ExprOrOpArgNode valueToOpAppl(Value value) {
         if (value instanceof IntValue) {
             return Build.number(((IntValue) value).val);
@@ -313,7 +406,7 @@ public class Rectify {
                     .map(v -> valueToOpAppl(v))
                     .collect(Collectors.toList());
             List<ExprOrOpArgNode> all = new ArrayList<>();
-            for (int i=0; i< names.size(); i++) {
+            for (int i = 0; i < names.size(); i++) {
                 all.add(names.get(i));
                 all.add(values.get(i));
             }
