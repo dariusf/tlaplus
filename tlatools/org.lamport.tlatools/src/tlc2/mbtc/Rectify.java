@@ -256,35 +256,26 @@ public class Rectify {
 //                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
                 .collect(Collectors.toList());
 
-        // this returns the "distance" to the set of changed impl variables
-
-        // must variable > may variable
-        // may absence = must absence
-        // may > absence
-        // some examples:
-        // 2 must and an absence < 3 may
+        // the "distance" to the set of changed impl variables is just the number of absent ones,
+        // changing must and may variables takes the same effort.
+        // fewer absent = less effort, better, ranked higher
         ToIntFunction<AbstractMap.SimpleEntry<String, OverapproxModifiesVisitor.R>> simpleEntryToIntFunction =
                 e -> {
                     OverapproxModifiesVisitor.R res = e.getValue();
-                    int inMust = implChanged.stream().map(c -> res.must.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
-                    int inMay = implChanged.stream().map(c -> res.may.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
-                    int notInMust = implChanged.stream().map(c -> res.must.contains(c) ? 0 : 1).mapToInt(Integer::intValue).sum();
-                    return inMust * 2 - notInMust + inMay;
+                    int absent = implChanged.stream().map(c -> !res.must.contains(c) && !res.may.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
+                    return absent;
                 };
-        collect.sort(Comparator.comparingInt(simpleEntryToIntFunction).reversed());
+        collect.sort(Comparator.comparingInt(simpleEntryToIntFunction));
 
+        // friendly summary of results
         collect.forEach(e -> {
             OverapproxModifiesVisitor.R res = e.getValue();
             System.out.println(e.getKey());
             System.out.printf("must: %s\nmay: %s\n", res.must, res.may);
             int inMust = implChanged.stream().map(c -> res.must.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
-            System.out.printf("in must: %d\n", inMust);
             int inMay = implChanged.stream().map(c -> res.may.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
-            System.out.printf("in may: %d\n", inMay);
-            int notInMust = implChanged.stream().map(c -> res.must.contains(c) ? 0 : 1).mapToInt(Integer::intValue).sum();
-            System.out.printf("not in must: %d\n", notInMust);
-            System.out.printf("score: %d\n", simpleEntryToIntFunction.applyAsInt(e));
-            System.out.println();
+            int absent = implChanged.stream().map(c -> !res.must.contains(c) && !res.may.contains(c) ? 1 : 0).mapToInt(Integer::intValue).sum();
+            System.out.printf("changed: %s, in must: %d, in may: %d, absent: %d\n\n", implChanged, inMust, inMay, absent);
         });
 
         int a = 1;
