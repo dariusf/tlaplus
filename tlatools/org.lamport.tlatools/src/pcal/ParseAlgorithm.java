@@ -385,8 +385,9 @@ public class ParseAlgorithm
         		   fairness = AST.WF_PROC;
         		   }
              } else if (PeekAtAlgToken(1).equals("choreography")) {
-                  // TODO ignore fairness for now
+                  // TODO fairness is not handled
                   List<AST.Process> proc = PlusCalExtensions.GetChoreography(vdecls, macros) ;
+                  proc.forEach(p -> Printer.print(0, p));
                   proc.forEach(multiproc.procs::addElement);
                   continue;
               } else

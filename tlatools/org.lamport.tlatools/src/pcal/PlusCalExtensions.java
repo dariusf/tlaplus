@@ -205,7 +205,7 @@ public class PlusCalExtensions {
 
         // Post-projection elaboration
         List<AST.Process> res1 = res.entrySet().stream()
-                .flatMap(p -> expandAllStatement(ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .flatMap(p -> expandAllStatement(p.getKey(), ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .map(Map.Entry::getValue)
@@ -440,8 +440,10 @@ public class PlusCalExtensions {
             res = Stream.of(stmt);
         } else if (stmt instanceof AST.Skip) {
             res = Stream.of(stmt);
+//        } else if (stmt instanceof AST.LabeledStmt) {
+//            res = Stream.of(stmt);
         } else {
-            fail("unimplemented transformTask(Party, AST) " + stmt);
+            fail("transformTask: unimplemented " + stmt);
             return null;
         }
         if (task.isEmpty()) {
@@ -507,10 +509,11 @@ public class PlusCalExtensions {
         return newProcesses;
     }
 
-    private static List<AST.Process> expandAllStatement(Map<String, Party> ownership,
+    private static List<AST.Process> expandAllStatement(Party party,
+                                                        Map<String, Party> ownership,
                                                         Map<String, Party> partyDecls,
                                                         AST.Process proc) {
-        return transformProcessBody(proc, s -> expandAllStatement(ownership, partyDecls, s));
+        return transformProcessBody(proc, s -> expandAllStatement(party, ownership, partyDecls, s));
 
 //        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
 //                .map(s -> expandAllStatement(ownership, partyDecls, s))
@@ -547,6 +550,11 @@ public class PlusCalExtensions {
     }
 
     private static TLAExpr tlaExpr(String fmt, Object... args) {
+        for (int i=0; i<args.length; i++) {
+            if (args[i] instanceof TLAExpr) {
+                args[i] = Printer.show((TLAExpr) args[i]);
+            }
+        }
         String s = String.format(fmt, args);
         Vector<String> line = new Vector<>();
         line.add(s);
@@ -581,64 +589,94 @@ public class PlusCalExtensions {
         return createProcess(processActionName, false, set, body, decls);
     }
 
-    private static AST.Process allStatementProcess(String ig, TLAExpr ps) {
+    /*
+     parameters: q, qs
 
-//    process (q \in qs)
-//    variables auxps = ps;
-//    {
-//        while (auxps /= {}) {
-//            with (pp \in { pr \in ps : pc[pr] = "pa" }) {
-//                out := out \ union {<<pp, self>>};
-//                auxps := auxps \ {pp};
-//            }
+     process (m = main)
+        ...
+     {
+         all (q \in qs) {
+            ...
+         }
+     }
+
+     translates to two processes:
+
+     process (m = main)
+        ...
+     {
+        await ...
+     }
+
+     process (q \in qs)
+        variables auxps = ps;
+     {
+        while (auxps /= {}) {
+            with (pp \in { pr \in ps : pc[pr] = "pa" }) {
+                out := out \ union {<<pp, self>>};
+                auxps := auxps \ {pp};
+            }
+        }
+     }
+     */
+    private static AST.Process allStatementProcess(Party party, String label,
+                                                   String q, TLAExpr qs, Vector<AST> body) {
+
+//        String p = fresh("proc");
+//        String auxps = fresh("ps");
+//
+//        Vector<AST.VarDecl> decls = new Vector<>();
+//        {
+//            AST.VarDecl varDecl = new AST.VarDecl();
+//            varDecl.var = auxps;
+//            varDecl.isEq = true;
+//            varDecl.val = ps;
+//            decls.add(varDecl);
 //        }
-//    }
-        String p = fresh("proc");
-        String auxps = fresh("ps");
+//        Vector<AST> body = new Vector<>();
+//        AST.With with = new AST.With();
+//        with.setOrigin(ps.getOrigin());
+//        String pp = fresh("pp");
+//        String pr = fresh("pr");
+//        String paLabel = fresh("pa"); // TODO
+//        with.exp = tlaExpr("%s \\in { %s \\in %s : pc[%s] = \"%s\"}", pp, pr, ps, pr, paLabel);
+//        // TODO rename q->self, p->pp
+////        substituteForAll
+//        with.Do = new Vector<AST>();
+//        AST.Assign assign1 = new AST.Assign();
+//        assign1.setOrigin(ps.getOrigin());
+//        assign1.ass = new Vector<AST>();
+//        AST.SingleAssign a1 = new AST.SingleAssign();
+//        a1.setOrigin(ps.getOrigin());
+//        assign1.ass.add(a1);
+//        AST.Lhs lhs = new AST.Lhs();
+//        {
+//            lhs.setOrigin(ps.getOrigin());
+//            lhs.var = auxps;
+////            lhs.sub = tlaExpr(""); // has to be initialized
+//            lhs.sub = PcalTranslate.MakeExpr(new Vector());
+//        }
+//        a1.lhs = lhs;
+//        a1.rhs = tlaExpr("%s \\ {{%s}}", auxps, pp);
+//        // TODO add the body here
+//        with.Do.add(assign1);
+//        AST.While loop = new AST.While();
+//        loop.test = tlaExpr("%s # {}", auxps);
+//        loop.unlabDo = new Vector<>();
+//        loop.unlabDo.add(with);
+//        loop.setOrigin(ps.getOrigin());
+//        body.add(loop);
 
-        Vector<AST.VarDecl> decls = new Vector<>();
-        {
-            AST.VarDecl varDecl = new AST.VarDecl();
-            varDecl.var = auxps;
-            varDecl.isEq = true;
-            varDecl.val = ps;
-            decls.add(varDecl);
-        }
-        Vector<AST> body = new Vector<>();
-        AST.With with = new AST.With();
-        with.setOrigin(ps.getOrigin());
-        String pp = fresh("pp");
-        String pr = fresh("pr");
-        String paLabel = fresh("pa"); // TODO
-        with.exp = tlaExpr("%s \\in { %s \\in %s : pc[%s] = \"%s\"}", pp, pr, ps, pr, paLabel);
-        // TODO rename q->self, p->pp
-//        substituteForAll
-        with.Do = new Vector<AST>();
-        AST.Assign assign1 = new AST.Assign();
-        assign1.setOrigin(ps.getOrigin());
-        assign1.ass = new Vector<AST>();
-        AST.SingleAssign a1 = new AST.SingleAssign();
-        a1.setOrigin(ps.getOrigin());
-        assign1.ass.add(a1);
-        AST.Lhs lhs = new AST.Lhs();
-        {
-            lhs.setOrigin(ps.getOrigin());
-            lhs.var = auxps;
-//            lhs.sub = tlaExpr(""); // has to be initialized
-            lhs.sub = PcalTranslate.MakeExpr(new Vector());
-        }
-        a1.lhs = lhs;
-        a1.rhs = tlaExpr("%s \\ {{%s}}", auxps, pp);
-        // TODO add the body here
-        with.Do.add(assign1);
-        AST.While loop = new AST.While();
-        loop.test = tlaExpr("%s # {}", auxps);
-        loop.unlabDo = new Vector<>();
-        loop.unlabDo.add(with);
-        loop.setOrigin(ps.getOrigin());
-        body.add(loop);
-        AST.Process proc = createProcess(p, false, ps, body, decls);
-        return proc;
+        AST.When await = new AST.When();
+        await.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
+        await.setOrigin(qs.getOrigin());
+
+        Vector<AST> body1 = new Vector<>();
+        body1.add(await);
+        body1.addAll(body);
+
+        TLAExpr product = tlaExpr("(%s \\X %s)", party.partySet, qs);
+        return createProcess(fresh("proc"), false, product, body1, new Vector<>());
     }
 
     /**
@@ -671,15 +709,30 @@ public class PlusCalExtensions {
         }
     }
 
-    private static WithProc<AST> expandAllStatement(Map<String, Party> ownership,
+    // Given an all statement, returns the await statement it is replaced with,
+    // together with the process created to support it
+    private static WithProc<AST> expandAllStatement(Party party,
+                                                    Map<String, Party> ownership,
                                                     Map<String, Party> partyDecls,
                                                     AST stmt) {
         if (stmt instanceof AST.All) {
             AST.All all = (AST.All) stmt;
             AST.When wait = new AST.When();
             wait.setOrigin(stmt.getOrigin());
-            wait.exp = tlaExpr("\\A %s \\in %s : pc[%s] = \"Done\"", all.var, all.exp, all.var);
-            AST.Process proc = allStatementProcess(all.var, all.exp);
+            wait.exp = tlaExpr("\\A %s %s (%s \\X %s) : pc[%s] = \"Done\"",
+                    all.var, all.isEq ? "=" : "\\in",
+                    party.partySet, all.exp,
+                    all.var);
+
+//            AST.LabeledStmt label = new AST.LabeledStmt();
+//            label.label = fresh("fork");
+//            label.stmts = new Vector<>();
+//            label.stmts.add(wait);
+//            label.setOrigin(stmt.getOrigin());
+            wait.lbl = fresh("fork");
+
+            AST.Process proc = allStatementProcess(party, wait.lbl, all.var, all.exp, all.Do);
+
 //           TODO recurse into proc
             return new WithProc<>(wait, List.of(proc));
 //        } else if (stmt instanceof AST.With) {
@@ -999,8 +1052,10 @@ public class PlusCalExtensions {
             return assign;
         } else if (stmt instanceof AST.MacroCall) {
             return stmt;
+//        } else if (stmt instanceof AST.LabeledStmt) {
+//            return stmt;
         } else {
-            fail("unimplemented project(Party, AST) " + stmt);
+            fail("transformCancellations: unimplemented " + stmt);
             return null;
         }
     }

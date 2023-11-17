@@ -11,6 +11,14 @@ Entry points:
 - Monitoring: src/tlc2/TLC.java, extends normal TLC frontend
 - MBTC: src/tlc2/mbtc/Rectify.java
 
+# Choreographic PlusCal
+
+Run PlusCal translator as usual:
+
+```sh
+java -XX:+UseParallelGC -cp tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans benchmarks.t/Chor.tla
+```
+
 # MBTC flow
 
 1. Start implementation
