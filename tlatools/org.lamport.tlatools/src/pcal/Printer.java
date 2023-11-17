@@ -46,10 +46,6 @@ public class Printer {
             ass.forEach(a -> result.add(String.format("%s := %s", a.lhs.var, show(a.rhs))));
         } else if (p instanceof AST.When) {
             result.add(String.format("await %s", show(((AST.When) p).exp)));
-//        } else if (p instanceof AST.LabeledStmt) {
-//            AST.LabeledStmt p1 = (AST.LabeledStmt) p;
-//            result.add(p1.label + ":");
-//            ((Vector<AST>) p1.stmts).forEach(s -> result.add(show(indent + 2, s)));
         } else if (p instanceof AST.MacroCall) {
             result.add(String.format("%s(%s)",
                     ((AST.MacroCall) p).name,

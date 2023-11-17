@@ -440,8 +440,6 @@ public class PlusCalExtensions {
             res = Stream.of(stmt);
         } else if (stmt instanceof AST.Skip) {
             res = Stream.of(stmt);
-//        } else if (stmt instanceof AST.LabeledStmt) {
-//            res = Stream.of(stmt);
         } else {
             fail("transformTask: unimplemented " + stmt);
             return null;
@@ -723,12 +721,6 @@ public class PlusCalExtensions {
                     all.var, all.isEq ? "=" : "\\in",
                     party.partySet, all.exp,
                     all.var);
-
-//            AST.LabeledStmt label = new AST.LabeledStmt();
-//            label.label = fresh("fork");
-//            label.stmts = new Vector<>();
-//            label.stmts.add(wait);
-//            label.setOrigin(stmt.getOrigin());
             wait.lbl = fresh("fork");
 
             AST.Process proc = allStatementProcess(party, wait.lbl, all.var, all.exp, all.Do);
@@ -1052,8 +1044,6 @@ public class PlusCalExtensions {
             return assign;
         } else if (stmt instanceof AST.MacroCall) {
             return stmt;
-//        } else if (stmt instanceof AST.LabeledStmt) {
-//            return stmt;
         } else {
             fail("transformCancellations: unimplemented " + stmt);
             return null;
