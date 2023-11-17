@@ -1,4 +1,7 @@
 
+This is a collection of experimental extensions to the TLA+ tools.
+Some are described in the paper [Protocol Conformance with Choreographic PlusCal](https://dariusf.github.io/cpluscal.pdf).
+
 # Project structure
 
 benchmarks.t/run.t contains cpcal tests
@@ -10,6 +13,30 @@ Entry points:
 - cpcal: most of the changes are in src/pcal/PlusCalExtensions.java, extends PlusCal translator
 - Monitoring: src/tlc2/TLC.java, extends normal TLC frontend
 - MBTC: src/tlc2/mbtc/Rectify.java
+
+# Development
+
+Build
+
+```sh
+source build.sh
+compile
+```
+
+Ad hoc testing
+
+```sh
+cd benchmarks.t
+export tlaroot=..
+source ../build.sh
+tlc Chor.tla
+```
+
+Running tests
+
+```sh
+dune test
+```
 
 # Choreographic PlusCal
 

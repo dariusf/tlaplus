@@ -6,7 +6,6 @@ CONSTANTS p1, p2, coord
 (* --algorithm Chor {
   variables
     participants = {p1, p2};
-    out = {};
     messages = {};
 
   macro Send(from, to, type) {
@@ -18,85 +17,66 @@ CONSTANTS p1, p2, coord
   }
 
   choreography
-    (P \in participants),
-    (C = coord)
+    (C = coord),
+    (P \in participants)
       variables
-        aborted = {},
-        committed = {},
-        has_aborted = FALSE;
+        committed = {};
   {
     all (p \in participants) {
       Send(coord, p, "prepare");
-      out := out \union {<<p, coord>>};
+      committed := committed \union {<<p, coord>>};
     }
   }
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "63de594" /\ chksum(tla) = "7ce7a561")
-VARIABLES participants, out, messages, pc, aborted, committed, has_aborted
+\* BEGIN TRANSLATION (chksum(pcal) = "2b5a45c2" /\ chksum(tla) = "bb44a8b9")
+VARIABLES participants, messages, pc, committed
 
-vars == << participants, out, messages, pc, aborted, committed, has_aborted
-        >>
+vars == << participants, messages, pc, committed >>
 
-ProcSet == ((participants \X participants)) \cup (participants) \cup ((coord \X participants)) \cup {coord}
+ProcSet == ((coord \X participants)) \cup {coord} \cup (participants)
 
 Init == (* Global variables *)
         /\ participants = {p1, p2}
-        /\ out = {}
         /\ messages = {}
-        (* Process C *)
-        /\ aborted = {}
-        /\ committed = {}
-        /\ has_aborted = FALSE
-        /\ pc = [self \in ProcSet |-> CASE self \in (participants \X participants) -> "Lbl_1"
-                                        [] self \in participants -> "fork_0"
-                                        [] self \in (coord \X participants) -> "Lbl_2"
-                                        [] self = coord -> "fork_2"]
+        (* Process P *)
+        /\ committed = [self \in participants |-> {}]
+        /\ pc = [self \in ProcSet |-> CASE self \in (coord \X participants) -> "Lbl_1"
+                                        [] self = coord -> "fork_0"
+                                        [] self \in participants -> "Lbl_2"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
                /\ pc[Head(self)] = "fork_0"
-               /\ [To |-> self, From |-> coord, Type |-> "prepare"] \in messages
-               /\ out' = (out \union {<<p, coord>>})
+               /\ messages' = (messages \union {[To |-> self, From |-> p, Type |-> "prepare"]})
+               /\ TRUE
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, messages, aborted, committed, 
-                               has_aborted >>
+               /\ UNCHANGED << participants, committed >>
 
 proc_1(self) == Lbl_1(self)
 
-fork_0(self) == /\ pc[self] = "fork_0"
-                /\ \A p \in (participants \X participants) : pc[p] = "Done"
-                /\ pc' = [pc EXCEPT ![self] = "Done"]
-                /\ UNCHANGED << participants, out, messages, aborted, 
-                                committed, has_aborted >>
-
-P(self) == fork_0(self)
-
-Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Head(self)] = "fork_2"
-               /\ messages' = (messages \union {[To |-> self, From |-> p, Type |-> "prepare"]})
-               /\ out' = (out \union {<<p, coord>>})
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, aborted, committed, has_aborted >>
-
-proc_3(self) == Lbl_2(self)
-
-fork_2 == /\ pc[coord] = "fork_2"
+fork_0 == /\ pc[coord] = "fork_0"
           /\ \A p \in (coord \X participants) : pc[p] = "Done"
           /\ pc' = [pc EXCEPT ![coord] = "Done"]
-          /\ UNCHANGED << participants, out, messages, aborted, committed, 
-                          has_aborted >>
+          /\ UNCHANGED << participants, messages, committed >>
 
-C == fork_2
+C == fork_0
+
+Lbl_2(self) == /\ pc[self] = "Lbl_2"
+               /\ [To |-> self, From |-> coord, Type |-> "prepare"] \in messages
+               /\ committed' = [committed EXCEPT ![self] = committed[self] \union {<<p, coord>>}]
+               /\ pc' = [pc EXCEPT ![self] = "Done"]
+               /\ UNCHANGED << participants, messages >>
+
+P(self) == Lbl_2(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
 Next == C
-           \/ (\E self \in (participants \X participants): proc_1(self))
+           \/ (\E self \in (coord \X participants): proc_1(self))
            \/ (\E self \in participants: P(self))
-           \/ (\E self \in (coord \X participants): proc_3(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars

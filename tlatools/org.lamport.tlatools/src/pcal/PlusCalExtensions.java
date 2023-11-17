@@ -41,7 +41,7 @@ public class PlusCalExtensions {
     }
 
     public static AST GetAll(int depth) throws ParseAlgorithmException {
-        return InnerGetAll(depth, null) ;
+        return InnerGetAll(depth, null);
     }
 
     /**
@@ -49,66 +49,70 @@ public class PlusCalExtensions {
      * The reason we don't parameterize {@link ParseAlgorithm#InnerGetWith} is that there is no supertype of With/All
      * that has all the fields we need to assign.
      */
-    public static AST.All InnerGetAll(int depth, PCalLocation beginLoc) throws ParseAlgorithmException
-    {
-        PCalLocation begLoc = beginLoc ;
-        if (depth == 0)
-        { GobbleThis("all") ;
-            begLoc = GetLastLocationStart() ;
-            if (cSyntax) { GobbleThis("(") ; } ;
-        } ;
-        AST.All result = new AST.All() ;
-        result.col  = lastTokCol ;
-        result.line = lastTokLine ;
-        result.var  = GetAlgToken() ;
-        result.isEq = GobbleEqualOrIf() ;
-        result.exp  = GetExpr() ;
-        if (pSyntax || ! PeekAtAlgToken(1).equals(")"))
-        { GobbleCommaOrSemicolon();
+    public static AST.All InnerGetAll(int depth, PCalLocation beginLoc) throws ParseAlgorithmException {
+        PCalLocation begLoc = beginLoc;
+        if (depth == 0) {
+            GobbleThis("all");
+            begLoc = GetLastLocationStart();
+            if (cSyntax) {
+                GobbleThis("(");
+            }
+            ;
+        }
+        ;
+        AST.All result = new AST.All();
+        result.col = lastTokCol;
+        result.line = lastTokLine;
+        result.var = GetAlgToken();
+        result.isEq = GobbleEqualOrIf();
+        result.exp = GetExpr();
+        if (pSyntax || !PeekAtAlgToken(1).equals(")")) {
+            GobbleCommaOrSemicolon();
             /**************************************************************
              * Gobble the ";" or "," ending the <VarEqOrIn>, which may be  *
              * eliminated before a ")" or "do".                            *
              **************************************************************/
-        } ;
-        if (result.exp.tokens.size() == 0)
-        { ParsingError("Empty all expression at ") ;} ;
-        if (pSyntax && PeekAtAlgToken(1).equals("do"))
-        { GobbleThis("do") ;
-            result.Do   = GetStmtSeq() ;
-            GobbleThis("end") ;
-            GobbleThis("all") ;
+        }
+        ;
+        if (result.exp.tokens.size() == 0) {
+            ParsingError("Empty all expression at ");
+        }
+        ;
+        if (pSyntax && PeekAtAlgToken(1).equals("do")) {
+            GobbleThis("do");
+            result.Do = GetStmtSeq();
+            GobbleThis("end");
+            GobbleThis("all");
             GobbleThis(";");
+        } else if (cSyntax && PeekAtAlgToken(1).equals(")")) {
+            MustGobbleThis(")");
+            result.Do = GetCStmt();
+        } else {
+            result.Do = new Vector();
+            result.Do.addElement(InnerGetAll(depth + 1, begLoc));
         }
-        else if (cSyntax && PeekAtAlgToken(1).equals(")"))
-        { MustGobbleThis(")") ;
-            result.Do = GetCStmt() ;
-        }
-        else
-        { result.Do = new Vector() ;
-            result.Do.addElement(InnerGetAll(depth+1, begLoc)) ;
-        };
+        ;
         try {
             result.setOrigin(new Region(begLoc,
-                    ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;
+                    ((AST) result.Do.elementAt(result.Do.size() - 1)).getOrigin().getEnd()));
         } catch (ArrayIndexOutOfBoundsException e) {
             throw new ParseAlgorithmException("Missing body of all statement", result);
         }
-        return result ;
+        return result;
     }
 
-    public static AST.Task GetTask() throws ParseAlgorithmException
-    {
+    public static AST.Task GetTask() throws ParseAlgorithmException {
 //        if (depth == 0)
 //        {
-        GobbleThis("task") ;
-        PCalLocation begLoc = GetLastLocationStart() ;
+        GobbleThis("task");
+        PCalLocation begLoc = GetLastLocationStart();
 //            if (cSyntax) { GobbleThis("(") ; } ;
 //        } ;
 
         AST.Task result = new AST.Task();
-        result.col  = lastTokCol ;
-        result.line = lastTokLine ;
-        result.label = GetAlgToken() ;
+        result.col = lastTokCol;
+        result.line = lastTokLine;
+        result.label = GetAlgToken();
 //        result.isEq = GobbleEqualOrIf() ;
 //        result.exp  = GetExpr() ;
 //        if (pSyntax || ! PeekAtAlgToken(1).equals(")"))
@@ -120,17 +124,16 @@ public class PlusCalExtensions {
 //        } ;
 //        if (result.exp.tokens.size() == 0)
 //        { ParsingError("Empty all expression at ") ;} ;
-        if (pSyntax && PeekAtAlgToken(1).equals("do"))
-        { GobbleThis("do") ;
-            result.Do   = GetStmtSeq() ;
-            GobbleThis("end") ;
+        if (pSyntax && PeekAtAlgToken(1).equals("do")) {
+            GobbleThis("do");
+            result.Do = GetStmtSeq();
+            GobbleThis("end");
 //            GobbleThis("all") ;
-            GobbleThis("task") ;
+            GobbleThis("task");
             GobbleThis(";");
-        }
-        else if (cSyntax) // && PeekAtAlgToken(1).equals(")"))
+        } else if (cSyntax) // && PeekAtAlgToken(1).equals(")"))
         { //MustGobbleThis(")") ;
-            result.Do = GetCStmt() ;
+            result.Do = GetCStmt();
         }
 //        else
 //        { result.Do = new Vector() ;
@@ -138,14 +141,12 @@ public class PlusCalExtensions {
 //        };
         try {
             result.setOrigin(new Region(begLoc,
-                    ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;
+                    ((AST) result.Do.elementAt(result.Do.size() - 1)).getOrigin().getEnd()));
         } catch (ArrayIndexOutOfBoundsException e) {
             throw new ParseAlgorithmException("Missing body of task statement", result);
         }
-        return result ;
+        return result;
     }
-
-//    public static Map<String, AST.Cancel> cancellations;
 
     public static List<AST.Process> GetChoreography(Vector<AST.VarDecl> globals,
                                                     Vector<AST.Macro> macros) throws ParseAlgorithmException {
@@ -178,9 +179,9 @@ public class PlusCalExtensions {
             }
         }
 
-        GobbleBeginOrLeftBrace() ;
+        GobbleBeginOrLeftBrace();
         Vector<AST> stmts = GetStmtSeq();
-        GobbleEndOrRightBrace("choreography") ;
+        GobbleEndOrRightBrace("choreography");
 
         //////
         // Translate into regular PlusCal
@@ -203,6 +204,10 @@ public class PlusCalExtensions {
         ownership.putAll(quantified);
         Map<Party, AST.Process> res = project(globals, ownership, partyDecls, cancellations, stmts);
 
+        res.forEach((k, v) -> System.out.printf("Projection of %s:\n\n%s\n\n",
+                Printer.show(k.partySet),
+                Printer.show(0, v)));
+
         // Post-projection elaboration
         List<AST.Process> res1 = res.entrySet().stream()
                 .flatMap(p -> expandAllStatement(p.getKey(), ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
@@ -213,6 +218,9 @@ public class PlusCalExtensions {
                 .collect(Collectors.toList());
 
         // TODO optimize, remove the no-op processes entirely
+
+        System.out.println("Final processes:\n");
+        res1.forEach(p -> Printer.print(0, p));
 
         return res1;
     }
@@ -271,65 +279,71 @@ public class PlusCalExtensions {
     /**
      * This is essentially {@link ParseAlgorithm#GetEither()} with the keywords changed
      */
-    public static AST.Par  GetPar() throws ParseAlgorithmException
-    { MustGobbleThis("par") ;
-        PCalLocation beginLoc = GetLastLocationStart() ;
-        AST.Par result = new AST.Par() ;
-        result.col  = lastTokCol ;
-        result.line = lastTokLine ;
-        result.clauses = new Vector() ;
-        boolean done = false ;
-        boolean hasOr = false ;
-        while (! done)
-        { AST.Clause nextClause = new AST.Clause() ;
-            nextClause.labOr = new Vector() ;
-            if (pSyntax)
-            { nextClause.unlabOr = GetStmtSeq() ; }
-            else
-            { nextClause.unlabOr = GetCStmt() ; }
-            if (nextClause.unlabOr.size() == 0)
-            {throw new ParseAlgorithmException(
-                    "`par' statement with empty `and' clause", result) ; } ;
+    public static AST.Par GetPar() throws ParseAlgorithmException {
+        MustGobbleThis("par");
+        PCalLocation beginLoc = GetLastLocationStart();
+        AST.Par result = new AST.Par();
+        result.col = lastTokCol;
+        result.line = lastTokLine;
+        result.clauses = new Vector();
+        boolean done = false;
+        boolean hasOr = false;
+        while (!done) {
+            AST.Clause nextClause = new AST.Clause();
+            nextClause.labOr = new Vector();
+            if (pSyntax) {
+                nextClause.unlabOr = GetStmtSeq();
+            } else {
+                nextClause.unlabOr = GetCStmt();
+            }
+            if (nextClause.unlabOr.size() == 0) {
+                throw new ParseAlgorithmException(
+                        "`par' statement with empty `and' clause", result);
+            }
+            ;
             nextClause.setOrigin(new Region(
                     ((AST) nextClause.unlabOr.elementAt(0)).getOrigin().getBegin(),
-                    ((AST) nextClause.unlabOr.elementAt(nextClause.unlabOr.size()-1))
-                            .getOrigin().getEnd())) ;
-            result.clauses.addElement(nextClause) ;
-            String nextTok = PeekAtAlgToken(1) ;
-            if (nextTok.equals("and"))
-            { MustGobbleThis("and") ;
-                hasOr = true ;
+                    ((AST) nextClause.unlabOr.elementAt(nextClause.unlabOr.size() - 1))
+                            .getOrigin().getEnd()));
+            result.clauses.addElement(nextClause);
+            String nextTok = PeekAtAlgToken(1);
+            if (nextTok.equals("and")) {
+                MustGobbleThis("and");
+                hasOr = true;
+            } else {
+                done = true;
             }
-            else
-            { done = true ; }
-        } ;
-        if (pSyntax)
-        { MustGobbleThis("end") ;
-            GobbleThis("par") ;
-            GobbleThis(";") ;
-        } ;
-        if (! hasOr)
-        { throw new ParseAlgorithmException("`par' statement has no `and'", result) ;
-        } ;
+        }
+        ;
+        if (pSyntax) {
+            MustGobbleThis("end");
+            GobbleThis("par");
+            GobbleThis(";");
+        }
+        ;
+        if (!hasOr) {
+            throw new ParseAlgorithmException("`par' statement has no `and'", result);
+        }
+        ;
         result.setOrigin(new Region(beginLoc,
-                ((AST) result.clauses.elementAt(result.clauses.size()-1))
-                        .getOrigin().getEnd())) ;
-        return result ;
+                ((AST) result.clauses.elementAt(result.clauses.size() - 1))
+                        .getOrigin().getEnd()));
+        return result;
     }
 
     /**
      * Very similar to {@link ParseAlgorithm#GetGoto()}
      */
-    public static AST.Cancel GetCancel() throws ParseAlgorithmException
-    { MustGobbleThis("cancel") ;
-        AST.Cancel result = new AST.Cancel() ;
-        result.col  = lastTokCol ;
-        result.line = lastTokLine ;
-        result.who   = GetAlgToken() ;
-        result.to   = GetAlgToken() ;
-        result.setOrigin(new Region(new PCalLocation(result.line-1, result.col-1),
-                new PCalLocation(lastTokLine-1, lastTokCol-1+result.to.length()))) ;
-        gotoUsed = true ;
+    public static AST.Cancel GetCancel() throws ParseAlgorithmException {
+        MustGobbleThis("cancel");
+        AST.Cancel result = new AST.Cancel();
+        result.col = lastTokCol;
+        result.line = lastTokLine;
+        result.who = GetAlgToken();
+        result.to = GetAlgToken();
+        result.setOrigin(new Region(new PCalLocation(result.line - 1, result.col - 1),
+                new PCalLocation(lastTokLine - 1, lastTokCol - 1 + result.to.length())));
+        gotoUsed = true;
         // The translator accepts `goto "Done"' and treats it like
         // `goto Done'.  Testing reveals that the outer
         // parentheses seem to be removed before we get here, but I
@@ -337,8 +351,8 @@ public class PlusCalExtensions {
         if (result.to.equals("Done") || result.to.equals("\"Done\"")) {
             gotoDoneUsed = true;
         }
-        GobbleThis(";") ;
-        return result ;
+        GobbleThis(";");
+        return result;
     }
 
     private static List<AST.Process> expandCancellations(AST.Process proc) {
@@ -548,7 +562,7 @@ public class PlusCalExtensions {
     }
 
     private static TLAExpr tlaExpr(String fmt, Object... args) {
-        for (int i=0; i<args.length; i++) {
+        for (int i = 0; i < args.length; i++) {
             if (args[i] instanceof TLAExpr) {
                 args[i] = Printer.show((TLAExpr) args[i]);
             }
@@ -567,6 +581,7 @@ public class PlusCalExtensions {
     }
 
     private static int varI;
+
     static String fresh(String prefix) {
         return prefix + "_" + (varI++);
     }
@@ -742,6 +757,7 @@ public class PlusCalExtensions {
         });
         return result;
     }
+
     static Map<String, Party> computeOwnership(Map<String, Party> partyDecls, AST ast) {
         if (ast instanceof AST.All) {
             String var = ((AST.All) ast).var;
@@ -774,11 +790,12 @@ public class PlusCalExtensions {
     private static Map<Party, AST.Process> project(Vector<AST.VarDecl> globals,
                                                    Map<String, Party> ownership,
                                                    Map<String, Party> partyDecls,
-                                                   Map<String, AST.Cancel> cancellations, Vector<AST> stmts) {
+                                                   Map<String, AST.Cancel> cancellations,
+                                                   Vector<AST> stmts) {
         return partyDecls.entrySet().stream().map(e -> {
             Party party = e.getValue();
             Vector<AST> stmts1 = stmts.stream()
-                    .map(s -> project(globals, ownership, cancellations, party, s))
+                    .flatMap(s -> project(globals, ownership, cancellations, party, s).stream())
                     .collect(Collectors.toCollection(Vector::new));
             AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet,
                     stmts1, new Vector(party.localVars));
@@ -786,25 +803,41 @@ public class PlusCalExtensions {
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
+    // the role predicate from the paper, true iff e interpreted as a role is r
+    public static boolean exprRole(TLAExpr e, Party r) {
+        return equalModuloPrinting(e, r.partySet);
+    }
+
+    public static boolean equalModuloPrinting(TLAExpr a, TLAExpr b) {
+        return Printer.show(a).equals(Printer.show(b));
+    }
+
     /**
      * Main projection function, splitting a statement into its local equivalent for the given party,
      * with ownership as context
      */
-    private static AST project(Vector<AST.VarDecl> globals,
-                               Map<String, Party> ownership,
-                               Map<String, AST.Cancel> cancellations,
-                               Party party,
-                               AST stmt) {
+    private static Vector<AST> project(Vector<AST.VarDecl> globals,
+                                       Map<String, Party> ownership,
+                                       Map<String, AST.Cancel> cancellations,
+                                       Party party,
+                                       AST stmt) {
+        Vector<AST> result = new Vector<>();
         // System.out.printf("project(%s, %s)\n", party.partyVar, stmt.getClass().getSimpleName());
         if (stmt instanceof AST.All) {
             AST.All e = (AST.All) stmt;
-            AST.All e1 = new AST.All();
-            e1.var = e.var;
-            e1.isEq = e.isEq;
-            e1.exp = e.exp;
-            e1.Do = projectAll(globals, ownership, cancellations, e.Do, party);
-            copyInto(e1, e);
-            return e1;
+            if (exprRole(e.exp, party)) {
+                // same role, so lose the quantifier
+                result.addAll(projectAll(globals, ownership, cancellations, party, e.Do));
+            } else {
+                // different role, keep quantifier
+                AST.All e1 = new AST.All();
+                e1.var = e.var;
+                e1.isEq = e.isEq;
+                e1.exp = e.exp;
+                e1.Do = projectAll(globals, ownership, cancellations, party, e.Do);
+                copyInto(e1, e);
+                result.add(e1);
+            }
 //        } else if (stmt instanceof AST.Either) {
 //            AST.Either e = (AST.Either) stmt;
 //            AST.Either e1 = new AST.Either();
@@ -813,69 +846,70 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = new AST.LabelEither();
-            e1.clauses = projectAll(globals, ownership, cancellations, e.clauses, party);
+            e1.clauses = projectAll(globals, ownership, cancellations, party, e.clauses);
             copyInto(e1, e);
-            return e1;
+            result.add(e1);
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = new AST.Par();
-            e1.clauses = projectAll(globals, ownership, cancellations, e.clauses, party);
+            e1.clauses = projectAll(globals, ownership, cancellations, party, e.clauses);
             copyInto(e1, e);
-            return e1;
+            result.add(e1);
         } else if (stmt instanceof AST.Task) {
             boolean thisParty = cancellations.get(((AST.Task) stmt).label).who.equals(party.partyVar);
             if (thisParty) {
                 AST.Task e = (AST.Task) stmt;
                 AST.Task e1 = new AST.Task();
                 e1.label = e.label;
-                e1.Do = projectAll(globals, ownership, cancellations, e.Do, party);
+                e1.Do = projectAll(globals, ownership, cancellations, party, e.Do);
                 copyInto(e1, e);
-                return e1;
+                result.add(e1);
             } else {
                 AST.Skip e2 = new AST.Skip();
                 e2.setOrigin(stmt.getOrigin());
-                return e2;
+                result.add(e2);
             }
 //        } else if (stmt instanceof AST.With) {
-             // TODO
+            // TODO
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
             AST.LabelIf e1 = new AST.LabelIf();
             // TODO check if test expressions all reside on same party
             e1.test = e.test;
-            e1.unlabElse = projectAll(globals, ownership, cancellations, e.unlabElse, party);
-            e1.unlabThen = projectAll(globals, ownership, cancellations, e.unlabThen, party);
-            e1.labElse = projectAll(globals, ownership, cancellations, e.labElse, party);
-            e1.labThen = projectAll(globals, ownership, cancellations, e.labThen, party);
+            e1.unlabElse = projectAll(globals, ownership, cancellations, party, e.unlabElse);
+            e1.unlabThen = projectAll(globals, ownership, cancellations, party, e.unlabThen);
+            e1.labElse = projectAll(globals, ownership, cancellations, party, e.labElse);
+            e1.labThen = projectAll(globals, ownership, cancellations, party, e.labThen);
             copyInto(e1, e);
-            return e1;
+            result.add(e1);
         } else if (stmt instanceof AST.When) {
             AST.When e = (AST.When) stmt;
 //            AST.When e1 = new AST.When();
 //            copyInto(e1, e);
             // TODO check if test expressions all reside on same party
-            return e;
+            result.add(e);
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
-            e1.labOr = projectAll(globals, ownership, cancellations, e.labOr, party);
-            e1.unlabOr = projectAll(globals, ownership, cancellations, e.unlabOr, party);
+            e1.labOr = projectAll(globals, ownership, cancellations, party, e.labOr);
+            e1.unlabOr = projectAll(globals, ownership, cancellations, party, e.unlabOr);
             copyInto(e1, e);
-            return e1;
+            result.add(e1);
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
             AST.Assign e1 = new AST.Assign();
-            e1.ass = new Vector<>(((Vector<AST>) projectAll(globals, ownership, cancellations, e.ass, party)).stream()
+            e1.ass = new Vector<>(((Vector<AST>) projectAll(globals, ownership, cancellations, party, e.ass)).stream()
                     // projection may create skips here; in that case drop those nodes
                     .filter(sa -> sa instanceof AST.SingleAssign)
                     .collect(Collectors.toList()));
             if (e1.ass.isEmpty()) {
                 AST.Skip e2 = new AST.Skip();
                 e2.setOrigin(e.getOrigin());
-                return e2;
+                result.add(e2);
+            } else {
+                copyInto(e1, e);
+                result.add(e1);
             }
-            copyInto(e1, e);
-            return e1;
         } else if (stmt instanceof AST.SingleAssign) {
             AST.SingleAssign e = (AST.SingleAssign) stmt;
             AST.Lhs lhs = e.lhs;
@@ -885,21 +919,21 @@ public class PlusCalExtensions {
             // try locals first
             Optional<AST.VarDecl> first = party.localVars.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
             if (first.isPresent()) {
-                return e;
+                result.add(e);
+            } else {
+                // try globals
+                Optional<AST.VarDecl> global = globals.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
+                if (global.isPresent()) {
+                    result.add(e);
+                } else {
+                    // this assignment must not involve this party
+                    AST.Skip e1 = new AST.Skip();
+                    // AST.Assert e1 = new AST.Assert();
+                    // e1.exp = tlaExpr("TRUE");
+                    copyInto(e1, e);
+                    result.add(e1);
+                }
             }
-
-            // try globals
-            Optional<AST.VarDecl> global = globals.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
-            if (global.isPresent()) {
-                return e;
-            }
-
-            // this assignment must not involve this party
-            AST.Skip e1 = new AST.Skip();
-            // AST.Assert e1 = new AST.Assert();
-            // e1.exp = tlaExpr("TRUE");
-            copyInto(e1, e);
-            return e1;
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel e = (AST.Cancel) stmt;
             AST e1;
@@ -912,7 +946,7 @@ public class PlusCalExtensions {
                 e1 = new AST.Skip();
             }
             copyInto(e1, e);
-            return e1;
+            result.add(e1);
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Send")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
             String receiver = ithMacroArgAsVar((AST.MacroCall) stmt, 1);
@@ -932,7 +966,7 @@ public class PlusCalExtensions {
                 e.addToken(new TLAToken("self", 0, TLAToken.IDENT, 0));
                 send.args.add(e);
                 send.args.add(((AST.MacroCall) stmt).args.get(2));
-                return send;
+                result.add(send);
             } else if (isRecv) {
                 AST.MacroCall recv = new AST.MacroCall();
                 recv.setOrigin(stmt.getOrigin());
@@ -946,14 +980,15 @@ public class PlusCalExtensions {
                 e.addToken(new TLAToken("self", 0, TLAToken.IDENT, 0));
                 recv.args.add(e);
                 recv.args.add(((AST.MacroCall) stmt).args.get(2));
-                return recv;
+                result.add(recv);
+            } else {
+                // TODO self-send
+                fail("TODO self-send");
             }
-            // TODO self-send
-            return null;
         } else {
             fail("unimplemented project(Party, AST) " + stmt);
-            return null;
         }
+        return result;
     }
 
     private static Vector<AST> transformCancellations(Vector<AST> stmts) {
@@ -1058,11 +1093,15 @@ public class PlusCalExtensions {
     }
 
     /**
-     * For recursive calls
+     * To simplify recursive calls
      */
-    private static Vector<AST> projectAll(Vector<AST.VarDecl> globals, Map<String, Party> ownership, Map<String, AST.Cancel> cancellations, Vector<AST> all, Party party) {
+    private static Vector<AST> projectAll(Vector<AST.VarDecl> globals,
+                                          Map<String, Party> ownership,
+                                          Map<String, AST.Cancel> cancellations,
+                                          Party party,
+                                          Vector<AST> all) {
         return all.stream()
-                .map(s -> project(globals, ownership, cancellations, party, s))
+                .flatMap(s -> project(globals, ownership, cancellations, party, s).stream())
                 .collect(Collectors.toCollection(Vector::new));
     }
 
