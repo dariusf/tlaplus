@@ -210,8 +210,8 @@ public class PlusCalExtensions {
 
         // Post-projection elaboration
         List<AST.Process> res1 = res.entrySet().stream()
-                .flatMap(p -> expandAllStatement(p.getKey(), ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandParStatement(ownership, partyDecls, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .flatMap(p -> expandAllStatement(p.getKey(), ownership, partyDecls, p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .map(Map.Entry::getValue)
                 .map(PlusCalExtensions::expandTask)
@@ -478,23 +478,6 @@ public class PlusCalExtensions {
                                                         Party which,
                                                         AST.Process proc) {
         return transformProcessBody(proc, s -> expandParStatement(ownership, partyDecls, which, s));
-////         TODO this is the same as expandAllStatement except for the function passed to map here
-//        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
-//                .map()
-//                .collect(Collectors.toList());
-//
-//        List<AST> body1 = res.stream()
-//                .map(wp -> wp.thing)
-//                .collect(Collectors.toList());
-//        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
-//
-//        List<AST.Process> newProcesses = res.stream()
-//                .flatMap(wp -> wp.procs.stream())
-//                .collect(Collectors.toCollection(ArrayList::new));
-//
-//        newProcesses.add(proc1);
-//
-//        return newProcesses;
     }
 
     /**
@@ -526,23 +509,6 @@ public class PlusCalExtensions {
                                                         Map<String, Party> partyDecls,
                                                         AST.Process proc) {
         return transformProcessBody(proc, s -> expandAllStatement(party, ownership, partyDecls, s));
-
-//        List<WithProc<AST>> res = ((Vector<AST>) proc.body).stream()
-//                .map(s -> expandAllStatement(ownership, partyDecls, s))
-//                .collect(Collectors.toList());
-//
-//        List<AST> body1 = res.stream()
-//                .map(wp -> wp.thing)
-//                .collect(Collectors.toList());
-//        AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, new Vector<>(body1), proc.decls);
-//
-//        List<AST.Process> newProcesses = res.stream()
-//                .flatMap(wp -> wp.procs.stream())
-//                .collect(Collectors.toCollection(ArrayList::new));
-//
-//        newProcesses.add(proc1);
-//
-//        return newProcesses;
     }
 
     private static AST.Process createProcess(String name, boolean isEq, TLAExpr id,
@@ -589,10 +555,14 @@ public class PlusCalExtensions {
     /**
      * Turn a single par clause into its own process
      */
-    private static AST.Process parStatementProcess(TLAExpr set, AST.Clause cl) {
+    private static AST.Process parStatementProcess(String label, TLAExpr set, AST.Clause cl) {
         String processActionName = fresh("proc");
         Vector<AST.VarDecl> decls = new Vector<>();
         Vector<AST> body = new Vector<>();
+        AST.When wait = new AST.When();
+        wait.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
+        wait.setOrigin(set.getOrigin());
+        body.add(wait);
         // TODO rename variables?
         if (cl.unlabOr != null) {
             body.addAll(cl.unlabOr);
@@ -634,52 +604,6 @@ public class PlusCalExtensions {
      */
     private static AST.Process allStatementProcess(Party party, String label,
                                                    String q, TLAExpr qs, Vector<AST> body) {
-
-//        String p = fresh("proc");
-//        String auxps = fresh("ps");
-//
-//        Vector<AST.VarDecl> decls = new Vector<>();
-//        {
-//            AST.VarDecl varDecl = new AST.VarDecl();
-//            varDecl.var = auxps;
-//            varDecl.isEq = true;
-//            varDecl.val = ps;
-//            decls.add(varDecl);
-//        }
-//        Vector<AST> body = new Vector<>();
-//        AST.With with = new AST.With();
-//        with.setOrigin(ps.getOrigin());
-//        String pp = fresh("pp");
-//        String pr = fresh("pr");
-//        String paLabel = fresh("pa"); // TODO
-//        with.exp = tlaExpr("%s \\in { %s \\in %s : pc[%s] = \"%s\"}", pp, pr, ps, pr, paLabel);
-//        // TODO rename q->self, p->pp
-////        substituteForAll
-//        with.Do = new Vector<AST>();
-//        AST.Assign assign1 = new AST.Assign();
-//        assign1.setOrigin(ps.getOrigin());
-//        assign1.ass = new Vector<AST>();
-//        AST.SingleAssign a1 = new AST.SingleAssign();
-//        a1.setOrigin(ps.getOrigin());
-//        assign1.ass.add(a1);
-//        AST.Lhs lhs = new AST.Lhs();
-//        {
-//            lhs.setOrigin(ps.getOrigin());
-//            lhs.var = auxps;
-////            lhs.sub = tlaExpr(""); // has to be initialized
-//            lhs.sub = PcalTranslate.MakeExpr(new Vector());
-//        }
-//        a1.lhs = lhs;
-//        a1.rhs = tlaExpr("%s \\ {{%s}}", auxps, pp);
-//        // TODO add the body here
-//        with.Do.add(assign1);
-//        AST.While loop = new AST.While();
-//        loop.test = tlaExpr("%s # {}", auxps);
-//        loop.unlabDo = new Vector<>();
-//        loop.unlabDo.add(with);
-//        loop.setOrigin(ps.getOrigin());
-//        body.add(loop);
-
         AST.When await = new AST.When();
         await.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
         await.setOrigin(qs.getOrigin());
@@ -699,22 +623,32 @@ public class PlusCalExtensions {
                                                     Map<String, Party> partyDecls,
                                                     Party which,
                                                     AST stmt) {
+        // This could be translated into an All over a constant set with an if in each branch,
+        // but then the output would be significantly uglier
         if (stmt instanceof AST.Par) {
             AST.Par par = (AST.Par) stmt;
+
+            String label = fresh("par");
+
             AST.When wait = new AST.When();
             wait.setOrigin(stmt.getOrigin());
             Vector<AST.Clause> clauses = par.clauses;
             List<AbstractMap.SimpleEntry<String, AST.Process>> threads = clauses.stream().map(c -> {
                 String p = fresh(which.partyVar + "_par");
                 String id = String.format("\"%s\"", p);
-                TLAExpr set = tlaExpr("{%s}", id);
-                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(set, c));
+                TLAExpr set = tlaExpr("(%s \\X {%s})", which.partySet, id);
+                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(label, set, c));
             }).collect(Collectors.toList());
 
             String var = fresh("v");
-            String s = threads.stream().map(AbstractMap.SimpleEntry::getKey).collect(Collectors.joining(", "));
-            List<AST.Process> processes = threads.stream().map(AbstractMap.SimpleEntry::getValue).collect(Collectors.toList());
-            wait.exp = tlaExpr("\\A %s \\in {%s} : pc[%s] = \"Done\"", var, s, var);
+            String tids = threads.stream()
+                    .map(AbstractMap.SimpleEntry::getKey)
+                    .collect(Collectors.joining(", "));
+            List<AST.Process> processes = threads.stream()
+                    .map(AbstractMap.SimpleEntry::getValue)
+                    .collect(Collectors.toList());
+            wait.exp = tlaExpr("\\A %s \\in (%s \\X {%s}) : pc[%s] = \"Done\"", var, which.partySet, tids, var);
+            wait.lbl = label;
 //           TODO recurse into proc?
             return new WithProc<>(wait, processes);
         } else {

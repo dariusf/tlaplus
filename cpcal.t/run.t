@@ -50,11 +50,74 @@
   Translation completed.
   New file Chor.tla written.
 
-$ cpluscal -nocfg Par.tla | make_det
-++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans -label Par.tla
-pcal.trans Version 1.11 of 31 December 2020
-Labels added.
-Parsing completed.
-Translation completed.
-New file Par.tla written.
-New file Par.cfg written.
+  $ cpluscal -nocfg Par.tla
+  ++ cpluscal -nocfg Par.tla
+  ++ pluscal -label -nocfg Par.tla
+  ++ tlatools pcal.trans -label -nocfg Par.tla
+  ++ name=pcal.trans
+  ++ shift
+  ++ set -x
+  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans -label -nocfg Par.tla
+  pcal.trans Version 1.11 of 31 December 2020
+  Projection of coord:
+  
+  process (C = coord)
+    variables
+      x = 1;
+  {
+    par {
+      x := x + 1;
+    } and {
+      x := x + 2;
+    }
+  }
+  
+  Projection of participants:
+  
+  process (P \in participants)
+  {
+    par {
+      skip;
+    } and {
+      skip;
+    }
+  }
+  
+  Final processes:
+  
+  process (proc_2 \in ( coord \X { "C_par_1" } ))
+  {
+    await pc [ Head ( self ) ] = "par_0";;
+    x := x + 1;
+  }
+  process (proc_4 \in ( coord \X { "C_par_3" } ))
+  {
+    await pc [ Head ( self ) ] = "par_0";;
+    x := x + 2;
+  }
+  process (C = coord)
+    variables
+      x = 1;
+  {
+    par_0:
+    await \A v_5 \in ( coord \X { "C_par_1" , "C_par_3" } ) : pc [ v_5 ] = "Done";
+  }
+  process (proc_8 \in ( participants \X { "P_par_7" } ))
+  {
+    await pc [ Head ( self ) ] = "par_6";;
+    skip;
+  }
+  process (proc_10 \in ( participants \X { "P_par_9" } ))
+  {
+    await pc [ Head ( self ) ] = "par_6";;
+    skip;
+  }
+  process (P \in participants)
+  {
+    par_6:
+    await \A v_11 \in ( participants \X { "P_par_7" , "P_par_9" } ) : pc [ v_11 ] = "Done";
+  }
+  Labels added.
+  Parsing completed.
+  Translation completed.
+  New file Par.tla written.

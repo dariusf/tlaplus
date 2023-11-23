@@ -53,7 +53,9 @@ public class Printer {
             ((Vector<AST>) p1.Do).forEach(b -> result.add(show(1, b)));
             result.add("}");
         } else if (p instanceof AST.Clause) {
-            int a = 1;
+            AST.Clause p1 = (AST.Clause) p;
+            Vector<AST> stmts = p1.unlabOr != null && !p1.unlabOr.isEmpty() ? p1.unlabOr : p1.labOr;
+            stmts.forEach(s -> result.add(show(0, s)));
         } else if (p instanceof AST.Par) {
             AST.Par p1 = (AST.Par) p;
             result.add("par {");
@@ -64,9 +66,10 @@ public class Printer {
         } else if (p instanceof AST.Skip) {
             result.add("skip;");
         } else if (p instanceof AST.MacroCall) {
+            AST.MacroCall p1 = (AST.MacroCall) p;
             result.add(String.format("%s(%s)",
-                    ((AST.MacroCall) p).name,
-                    ((AST.MacroCall) p).args.stream()
+                    p1.name,
+                    p1.args.stream()
                             .map(a -> show((TLAExpr) a))
                             .collect(Collectors.joining(", "))));
         } else {

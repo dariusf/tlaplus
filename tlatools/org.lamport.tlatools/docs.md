@@ -12,7 +12,7 @@ IntelliJ project is in tlatools/org.lamport.tlatools
 
 Entry points:
 
-- CPCal: most of the changes are in src/pcal/PlusCalExtensions.java, extends PlusCal translator pcal.trans
+- CPCal: extends PlusCal translator pcal.trans, most of the changes are in src/pcal/PlusCalExtensions.java, start at src/pcal/ParseAlgorithm.java, GetChoreography
 - Monitoring: src/tlc2/TLC.java, extends normal TLC frontend
 - MBTC: src/tlc2/mbtc/RunMBTC.java
 
