@@ -1129,6 +1129,6 @@
 
   $ monitor_check raft
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor raft.tla
-  1839 lines
+  1834 lines
   parse ok
   compile ok
