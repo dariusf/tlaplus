@@ -75,7 +75,7 @@ public class Printer {
             result.add("}");
         } else if (p instanceof AST.Task) {
             AST.Task p1 = (AST.Task) p;
-            result.add(String.format("task %s, %s {", show(p1.set), p1.label));
+            result.add(String.format("task %s, %s {", show(p1.partyId), p1.taskId));
             ((Vector<AST>) p1.Do).forEach(s -> result.addAll(showLines(1, s)));
             result.add("}");
         } else if (p instanceof AST.Skip) {

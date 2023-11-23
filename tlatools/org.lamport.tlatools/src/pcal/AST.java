@@ -669,8 +669,8 @@ public class AST
 
     public static class Task extends AST
     {
-      public String label = "" ;
-      public TLAExpr set = null;
+      public String taskId = "" ;
+      public TLAExpr partyId = null;
       public Vector    Do   = null ; // of SimpleStmt
       /*****************************************************************
        * Can't use "do" because that's a Java keyword.                  *

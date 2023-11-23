@@ -152,7 +152,7 @@
     variables
       x = 0;
   {
-    if (a = 1) {
+    if (~ cancelled_a) {
       par_0:
       await \A v_5 \in ( participants \X { "P_par_1" , "P_par_3" } ) : pc [ v_5 ] = "Done";
     } else {

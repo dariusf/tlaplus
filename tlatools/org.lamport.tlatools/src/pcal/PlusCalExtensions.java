@@ -2,7 +2,6 @@ package pcal;
 
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
-import tlc2.util.Vect;
 
 import java.util.*;
 import java.util.function.Function;
@@ -130,9 +129,9 @@ public class PlusCalExtensions {
         AST.Task result = new AST.Task();
         result.col = lastTokCol;
         result.line = lastTokLine;
-        result.set = GetExpr();
+        result.partyId = GetExpr();
         GobbleCommaOrSemicolon();
-        result.label = GetAlgToken();
+        result.taskId = GetAlgToken();
 //        result.isEq = GobbleEqualOrIf() ;
 //        result.exp  = GetExpr() ;
 //        if (pSyntax || ! PeekAtAlgToken(1).equals(")"))
@@ -276,7 +275,7 @@ public class PlusCalExtensions {
             findTasks(ctx, res, ((AST.With) stmt).Do);
         } else if (stmt instanceof AST.Task) {
             AST.Task task = (AST.Task) stmt;
-            res.put(task.label, ctx.partyDecls.get(Printer.show(task.set)));
+            res.put(task.taskId, ctx.partyDecls.get(Printer.show(task.partyId)));
             findTasks(ctx, res, task.Do);
         } else if (stmt instanceof AST.When) {
             // nothing to do
@@ -579,7 +578,8 @@ public class PlusCalExtensions {
             // if not inside a task
             return res;
         } else {
-            AST.LabelIf check = makeConditional(res, tlaExpr("a = 1"));
+            String v = String.format("cancelled_%s", task.get().taskId);
+            AST.LabelIf check = makeConditional(res, tlaExpr("~ %s", v));
             return Stream.of(check);
         }
     }
@@ -981,7 +981,7 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Task) {
             AST.Task task = (AST.Task) stmt;
 //            boolean thisParty = cancellations.get(task.label).task.equals(party.partyVar);
-            boolean thisParty = Printer.show(task.set).equals(party.partyVar);
+            boolean thisParty = Printer.show(task.partyId).equals(party.partyVar);
             if (thisParty) {
                 AST.Task e1 = newTask(task);
                 e1.Do = projectAll(ctx, party, task.Do);
@@ -1111,8 +1111,8 @@ public class PlusCalExtensions {
 
     private static AST.Task newTask(AST.Task task) {
         AST.Task e1 = new AST.Task();
-        e1.label = task.label;
-        e1.set = task.set;
+        e1.taskId = task.taskId;
+        e1.partyId = task.partyId;
         e1.Do = task.Do;
         copyInto(e1, task);
         return e1;
