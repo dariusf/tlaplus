@@ -171,8 +171,5 @@
   }
   Labels added.
   Parsing completed.
-  
-  Unrecoverable error:
-   -- Assignment to undeclared variable cancelled_a.
-  
-  [255]
+  Translation completed.
+  New file Cancel.tla written.

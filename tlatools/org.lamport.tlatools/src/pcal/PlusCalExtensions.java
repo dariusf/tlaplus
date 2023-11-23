@@ -213,14 +213,16 @@ public class PlusCalExtensions {
         ctx.cancellations = new HashMap<>();
         ctx.taskOwnership = new HashMap<>();
         findTasks(ctx, ctx.taskOwnership, stmts);
-//        findCancellations(ctx.cancellations, stmts);
-//        ctx.cancellations.forEach((key, value) -> {
-//            AST.VarDecl v = new AST.VarDecl();
-//            v.var = String.format("cancelled_%s", key);
-//            v.val = tlaExpr("FALSE");
-//            v.isEq = true;
-//            globals.add(v);
-//        });
+
+        // Add global variables corresponding to cancellations
+        findCancellations(ctx.cancellations, stmts);
+        ctx.cancellations.forEach((key, value) -> {
+            AST.VarDecl v = new AST.VarDecl();
+            v.var = String.format("cancelled_%s", key);
+            v.val = tlaExpr("FALSE");
+            v.isEq = true;
+            globals.add(v);
+        });
 
         // don't transform away cancellations until after projection
 
