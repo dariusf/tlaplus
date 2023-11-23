@@ -2,7 +2,6 @@ package pcal;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.Vector;
 import java.util.stream.Collectors;
 
@@ -52,6 +51,15 @@ public class Printer {
             AST.All p1 = (AST.All) p;
             result.add(String.format("all (%s %s %s) {", p1.var, p1.isEq ? "=" : "\\in", show(p1.exp)));
             ((Vector<AST>) p1.Do).forEach(b -> result.add(show(1, b)));
+            result.add("}");
+        } else if (p instanceof AST.Clause) {
+            int a = 1;
+        } else if (p instanceof AST.Par) {
+            AST.Par p1 = (AST.Par) p;
+            result.add("par {");
+            result.add(show(1, ((Vector<AST>) p1.clauses).get(0)));
+            result.add("} and {");
+            result.add(show(1, ((Vector<AST>) p1.clauses).get(1)));
             result.add("}");
         } else if (p instanceof AST.Skip) {
             result.add("skip;");
