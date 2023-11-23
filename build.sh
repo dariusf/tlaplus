@@ -34,7 +34,7 @@ tlatools() {
 }
 
 pluscal() {
-  tlatools pcal.trans "$@"
+  tlatools pcal.trans -label "$@"
 }
 
 tlc() {
