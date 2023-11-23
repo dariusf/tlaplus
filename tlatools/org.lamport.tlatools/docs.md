@@ -4,32 +4,26 @@ Some are described in the paper [Protocol Conformance with Choreographic PlusCal
 
 # Project structure
 
-benchmarks.t/run.t contains cpcal tests
+cpcal.t/run.t contains CPCal tests
 
-Open IntelliJ in tlatools/org.lamport.tlatools
+mbtc.t/run.t contains MBTC inputs
+
+IntelliJ project is in tlatools/org.lamport.tlatools
 
 Entry points:
 
-- cpcal: most of the changes are in src/pcal/PlusCalExtensions.java, extends PlusCal translator
+- CPCal: most of the changes are in src/pcal/PlusCalExtensions.java, extends PlusCal translator pcal.trans
 - Monitoring: src/tlc2/TLC.java, extends normal TLC frontend
-- MBTC: src/tlc2/mbtc/Rectify.java
+- MBTC: src/tlc2/mbtc/RunMBTC.java
 
 # Development
 
-Build
+Build tla2tools.jar
 
 ```sh
 source build.sh
 compile
-```
-
-Ad hoc testing
-
-```sh
-cd benchmarks.t
-export tlaroot=..
-source ../build.sh
-tlc Chor.tla
+# tlatools/org.lamport.tlatools/dist/tla2tools.jar
 ```
 
 Running tests
@@ -40,10 +34,13 @@ dune test
 
 # Choreographic PlusCal
 
-Run PlusCal translator as usual:
+Ad hoc testing
 
 ```sh
-java -XX:+UseParallelGC -cp tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans benchmarks.t/Chor.tla
+cd cpcal.t
+export tlaroot=..
+source ../build.sh
+pluscal Chor.tla
 ```
 
 # MBTC flow
@@ -77,9 +74,9 @@ java -XX:+UseParallelGC -cp tlatools/org.lamport.tlatools/dist/tla2tools.jar pca
 
     MBTC.run reads log.json from raftexample and invokes TLC repeatedly to bisect the trace and find a counterexample.
 
-    It is started in benchmarks.t because raft.tla is there.
+    It is started in mbtc.t because raft.tla is there.
 
-    The last raw trace from bisecting is written to benchmarks.t/trace.json.
+    The last raw trace from bisecting is written to mbtc.t/trace.json.
 
     The counterexample is memoized to cex.json.
 

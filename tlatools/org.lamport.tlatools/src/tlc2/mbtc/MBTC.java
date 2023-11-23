@@ -328,6 +328,6 @@ public class MBTC {
             Misc.writeToJson(cex, "cex.json");
         }
 
-        Rectify.showCounterexample(tool, cex);
+        RunMBTC.showCounterexample(tool, cex);
     }
 }

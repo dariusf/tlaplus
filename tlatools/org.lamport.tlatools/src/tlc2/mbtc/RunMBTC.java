@@ -22,7 +22,7 @@ import static tlc2.tool.ToolGlobals.*;
 /**
  * Presentation of counterexamples
  */
-public class Rectify {
+public class RunMBTC {
 
     public static State project(State s, StringValue party) {
         State res = new State(new HashMap<>());
@@ -416,13 +416,13 @@ public class Rectify {
         if (value instanceof SetEnumValue) {
             return Build.setLiteral(
                     Arrays.stream(((SetEnumValue) value).elems.toArray())
-                            .map(Rectify::valueToOpAppl)
+                            .map(RunMBTC::valueToOpAppl)
                             .toArray(ExprOrOpArgNode[]::new));
         }
         if (value instanceof TupleValue) {
             return Build.seq(
                     Arrays.stream(((TupleValue) value).elems)
-                            .map(Rectify::valueToOpAppl)
+                            .map(RunMBTC::valueToOpAppl)
                             .toArray(ExprOrOpArgNode[]::new));
         }
         if (value instanceof RecordValue) {

@@ -2,4 +2,4 @@
 (cram
  (deps tlatools/org.lamport.tlatools/dist/tla2tools.jar build.sh))
 
-(dirs benchmarks.t tlatools)
+(dirs cpcal.t mbtc.t tlatools)
