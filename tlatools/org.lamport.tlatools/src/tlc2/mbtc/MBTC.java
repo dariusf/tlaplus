@@ -3,7 +3,6 @@ package tlc2.mbtc;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import gov.nasa.jpf.util.Pair;
 import tla2sany.semantic.ModuleNode;
 import tla2sany.semantic.OpDefOrDeclNode;
 import tlc2.TLCRunner;

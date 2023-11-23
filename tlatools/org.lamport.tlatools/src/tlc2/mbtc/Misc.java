@@ -15,7 +15,7 @@ public class Misc {
     static final boolean DEBUG = true;
 
     static void copyFiles(String suffix, Path specDir, Path dir) throws IOException {
-        Files.walkFileTree(specDir, new FileVisitor<>() {
+        Files.walkFileTree(specDir, new FileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                 return FileVisitResult.CONTINUE;
