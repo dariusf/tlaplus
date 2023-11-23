@@ -235,8 +235,8 @@ public class PlusCalExtensions {
 
         // Post-projection elaboration
         List<AST.Process> res1 = res.entrySet().stream()
-                .flatMap(p -> expandParStatement(ctx, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
-                .flatMap(p -> expandAllStatement(ctx, p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .flatMap(p -> expandParStatement(p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
+                .flatMap(p -> expandAllStatement(p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .map(Map.Entry::getValue)
                 .map(PlusCalExtensions::expandTask)
@@ -354,6 +354,18 @@ public class PlusCalExtensions {
 
         <B> WithProc<B> map(Function<T, B> f) {
             return new WithProc<>(f.apply(this.thing), procs);
+        }
+
+        WithProc<T> addAll(Collection<AST.Process> proc) {
+            List<AST.Process> ps = new ArrayList<>(procs);
+            ps.addAll(proc);
+            return new WithProc<>(thing, ps);
+        }
+
+        WithProc<T> add(AST.Process proc) {
+            List<AST.Process> ps = new ArrayList<>(procs);
+            ps.add(proc);
+            return new WithProc<>(thing, ps);
         }
 
         static <T> WithProc<List<T>> sequence(List<WithProc<T>> inp) {
@@ -676,8 +688,8 @@ public class PlusCalExtensions {
     /**
      * Expand occurrences of par statements in a process
      */
-    private static List<AST.Process> expandParStatement(Context ctx, Party which, AST.Process proc) {
-        return transformProcessBody(proc, s -> expandParStatement(ctx, which, s));
+    private static List<AST.Process> expandParStatement(Party which, AST.Process proc) {
+        return transformProcessBody(proc, s -> expandParStatement(which, s));
     }
 
     /**
@@ -704,8 +716,8 @@ public class PlusCalExtensions {
         return newProcesses;
     }
 
-    private static List<AST.Process> expandAllStatement(Context ctx, Party party, AST.Process proc) {
-        return transformProcessBody(proc, s -> expandAllStatement(ctx, party, s));
+    private static List<AST.Process> expandAllStatement(Party party, AST.Process proc) {
+        return transformProcessBody(proc, s -> expandAllStatement(party, s));
     }
 
     private static AST.Process createProcess(String name, boolean isEq, TLAExpr id,
@@ -815,7 +827,7 @@ public class PlusCalExtensions {
     /**
      * Called for each statement of a process, which may generate more processes
      */
-    private static WithProc<AST> expandParStatement(Context ctx, Party which, AST stmt) {
+    private static WithProc<AST> expandParStatement(Party which, AST stmt) {
         if (stmt instanceof AST.Par) {
             // This could be translated into an All over a constant set with an if in each branch,
             // but then the output would be significantly uglier, so we do it in a simple way
@@ -837,11 +849,11 @@ public class PlusCalExtensions {
                 // recurse and non-algebraically accumulate the new processes
                 AST.Clause c1 = new AST.Clause();
                 if (c.unlabOr != null) {
-                    WithProc<Vector<AST>> wp = expandParStatement(ctx, which, (Vector<AST>) c.unlabOr);
+                    WithProc<Vector<AST>> wp = expandParStatement(which, (Vector<AST>) c.unlabOr);
                     newProcesses.addAll(wp.procs);
                     c1.unlabOr = new Vector<>(wp.thing);
                 } else {
-                    WithProc<Vector<AST>> wp = expandParStatement(ctx, which, (Vector<AST>) c.labOr);
+                    WithProc<Vector<AST>> wp = expandParStatement(which, (Vector<AST>) c.labOr);
                     newProcesses.addAll(wp.procs);
                     c1.labOr = new Vector<>(wp.thing);
                 }
@@ -864,21 +876,21 @@ public class PlusCalExtensions {
             return new WithProc<>(wait, newProcesses);
         } else if (stmt instanceof AST.Task) {
             AST.Task task = (AST.Task) stmt;
-            return expandParStatement(ctx, which, (Vector<AST>) task.Do).map(d -> {
+            return expandParStatement(which, (Vector<AST>) task.Do).map(d -> {
                 AST.Task t1 = newTask(task);
                 t1.Do = d;
                 return t1;
             });
         } else if (stmt instanceof AST.All) {
             AST.All task = (AST.All) stmt;
-            return expandParStatement(ctx, which, (Vector<AST>) task.Do).map(d -> {
+            return expandParStatement(which, (Vector<AST>) task.Do).map(d -> {
                 AST.All t1 = newAll(task);
                 t1.Do = d;
                 return t1;
             });
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither task = (AST.LabelEither) stmt;
-            return expandParStatement(ctx, which, (Vector<AST>) task.clauses).map(c -> {
+            return expandParStatement(which, (Vector<AST>) task.clauses).map(c -> {
                 AST.LabelEither t1 = newEither(task);
                 t1.clauses = c;
                 return t1;
@@ -893,15 +905,15 @@ public class PlusCalExtensions {
         }
     }
 
-    private static WithProc<Vector<AST>> expandParStatement(Context ctx, Party which, Vector<AST> stmt) {
+    private static WithProc<Vector<AST>> expandParStatement(Party which, Vector<AST> stmt) {
         return WithProc.sequenceV(
-                stmt.stream().map(s -> expandParStatement(ctx, which, s))
+                stmt.stream().map(s -> expandParStatement(which, s))
                         .collect(Collectors.toList()));
     }
 
     // Given an all statement, returns the await statement it is replaced with,
     // together with the process created to support it
-    private static WithProc<AST> expandAllStatement(Context ctx, Party party, AST stmt) {
+    private static WithProc<AST> expandAllStatement(Party party, AST stmt) {
         if (stmt instanceof AST.All) {
             AST.All all = (AST.All) stmt;
             AST.When wait = new AST.When();
@@ -912,15 +924,32 @@ public class PlusCalExtensions {
                     all.var);
             wait.lbl = fresh("fork");
 
-            AST.Process proc = allStatementProcess(party, wait.lbl, all.var, all.exp, all.Do);
-
-//           TODO recurse into proc
-            return new WithProc<>(wait, List.of(proc));
-//        } else if (stmt instanceof AST.With) {
-//            return new WithProc<>(stmt, List.of());
-        } else {
+            List<AST.Process> procs = new ArrayList<>();
+            return expandAllStatement(party, (Vector<AST>) all.Do).map(d -> {
+                AST.Process proc = allStatementProcess(party, wait.lbl, all.var, all.exp, d);
+                procs.add(proc);
+                return (AST) wait;
+            }).addAll(procs);
+        } else if (stmt instanceof AST.Task) {
+            AST.Task t = (AST.Task) stmt;
+            return expandAllStatement(party, (Vector<AST>) t.Do).map(d -> {
+                AST.Task t1 = newTask(t);
+                t1.Do = d;
+                return t1;
+            });
+        } else if (stmt instanceof AST.When ||
+                stmt instanceof AST.Cancel ||
+                stmt instanceof AST.Assign) {
             return new WithProc<>(stmt, List.of());
+        } else {
+            throw new IllegalArgumentException("expandAllStatement: unhandled " + stmt.getClass().getSimpleName());
         }
+    }
+
+    private static WithProc<Vector<AST>> expandAllStatement(Party which, Vector<AST> stmt) {
+        return WithProc.sequenceV(
+                stmt.stream().map(s -> expandAllStatement(which, s))
+                        .collect(Collectors.toList()));
     }
 
     static Map<String, Party> computeOwnership(Map<String, Party> partyDecls, Vector<AST> ast) {
@@ -1249,6 +1278,13 @@ public class PlusCalExtensions {
         AST.With e1 = new AST.With();
         e1.var = e.var;
         e1.Do = e.Do;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.When newWhen(AST.When e) {
+        AST.When e1 = new AST.When();
+        e1.exp = e.exp;
         copyInto(e1, e);
         return e1;
     }
