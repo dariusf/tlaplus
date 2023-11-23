@@ -834,6 +834,7 @@ public class ParseAlgorithm
                  || PeekAtAlgToken(1).equals("{")
                  || PeekAtAlgToken(1).equals("procedure")
                  || PeekAtAlgToken(1).equals("process")
+               || PeekAtAlgToken(1).equals("choreography") // for globals
                  || PeekAtAlgToken(1).equals("fair")
                  || PeekAtAlgToken(1).equals("define")
                || PeekAtAlgToken(1).equals("(") // if another party is declared after in a choreography

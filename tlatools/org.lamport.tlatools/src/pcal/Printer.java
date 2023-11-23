@@ -66,6 +66,13 @@ public class Printer {
             result.add("} and {");
             result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(1)));
             result.add("}");
+        } else if (p instanceof AST.LabelEither) {
+            AST.LabelEither p1 = (AST.LabelEither) p;
+            result.add("either {");
+            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(0)));
+            result.add("} or {");
+            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(1)));
+            result.add("}");
         } else if (p instanceof AST.LabelIf) {
             AST.LabelIf p1 = (AST.LabelIf) p;
             result.add(String.format("if (%s) {", show(p1.test)));

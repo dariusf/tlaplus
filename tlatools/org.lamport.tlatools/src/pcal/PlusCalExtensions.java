@@ -230,7 +230,7 @@ public class PlusCalExtensions {
         // don't transform away cancellations until after projection
 
         // Ownership and projection
-        Map<String, Party> quantified = computeOwnership(ctx.partyDecls, stmts);
+        Map<String, Party> quantified = computeOwnership(ctx, stmts);
         ctx.ownership.putAll(quantified);
         Map<Party, AST.Process> res = project(ctx, stmts);
 
@@ -849,6 +849,27 @@ public class PlusCalExtensions {
                     return t1;
                 });
             }
+        } else if (stmt instanceof AST.LabelIf) {
+            AST.LabelIf task = (AST.LabelIf) stmt;
+            WithProc<Vector<AST>> c1 = expandParStatement(which, (Vector<AST>) task.labThen);
+            WithProc<Vector<AST>> c2 = expandParStatement(which, (Vector<AST>) task.labElse);
+            WithProc<Vector<AST>> c3 = expandParStatement(which, (Vector<AST>) task.unlabThen);
+            WithProc<Vector<AST>> c4 = expandParStatement(which, (Vector<AST>) task.unlabElse);
+
+            AST.LabelIf t1 = newIf(task);
+            t1.labThen = c1.thing;
+            t1.labElse = c2.thing;
+            t1.unlabThen = c3.thing;
+            t1.unlabElse = c4.thing;
+
+            List<AST.Process> procs = new ArrayList<>();
+            procs.addAll(c1.procs);
+            procs.addAll(c2.procs);
+            procs.addAll(c3.procs);
+            procs.addAll(c4.procs);
+
+            return new WithProc<>(t1, procs);
+
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither task = (AST.LabelEither) stmt;
             return expandParStatement(which, (Vector<AST>) task.clauses).map(c -> {
@@ -856,6 +877,21 @@ public class PlusCalExtensions {
                 t1.clauses = c;
                 return t1;
             });
+        } else if (stmt instanceof AST.Clause) {
+            AST.Clause c = (AST.Clause) stmt;
+            if (c.unlabOr != null) {
+                return expandParStatement(which, (Vector<AST>) c.unlabOr).map(cl -> {
+                    AST.Clause t1 = newClause(c);
+                    t1.unlabOr = cl;
+                    return t1;
+                });
+            } else {
+                return expandParStatement(which, (Vector<AST>) c.labOr).map(cl -> {
+                    AST.Clause t1 = newClause(c);
+                    t1.labOr = cl;
+                    return t1;
+                });
+            }
         } else if (stmt instanceof AST.Cancel ||
                 stmt instanceof AST.Assign ||
                 stmt instanceof AST.SingleAssign ||
@@ -901,6 +937,49 @@ public class PlusCalExtensions {
                 t1.Do = d;
                 return t1;
             });
+        } else if (stmt instanceof AST.LabelEither) {
+            AST.LabelEither t = (AST.LabelEither) stmt;
+            return expandAllStatement(party, (Vector<AST>) t.clauses).map(d -> {
+                AST.LabelEither t1 = newEither(t);
+                t1.clauses = d;
+                return t1;
+            });
+        } else if (stmt instanceof AST.LabelIf) {
+            AST.LabelIf task = (AST.LabelIf) stmt;
+            WithProc<Vector<AST>> c1 = expandAllStatement(party, (Vector<AST>) task.labThen);
+            WithProc<Vector<AST>> c2 = expandAllStatement(party, (Vector<AST>) task.labElse);
+            WithProc<Vector<AST>> c3 = expandAllStatement(party, (Vector<AST>) task.unlabThen);
+            WithProc<Vector<AST>> c4 = expandAllStatement(party, (Vector<AST>) task.unlabElse);
+
+            AST.LabelIf t1 = newIf(task);
+            t1.labThen = c1.thing;
+            t1.labElse = c2.thing;
+            t1.unlabThen = c3.thing;
+            t1.unlabElse = c4.thing;
+
+            List<AST.Process> procs = new ArrayList<>();
+            procs.addAll(c1.procs);
+            procs.addAll(c2.procs);
+            procs.addAll(c3.procs);
+            procs.addAll(c4.procs);
+
+            return new WithProc<>(t1, procs);
+
+        } else if (stmt instanceof AST.Clause) {
+            AST.Clause t = (AST.Clause) stmt;
+            if (t.unlabOr != null) {
+                return expandAllStatement(party, (Vector<AST>) t.unlabOr).map(d -> {
+                    AST.Clause t1 = newClause(t);
+                    t1.unlabOr = d;
+                    return t1;
+                });
+            } else {
+                return expandAllStatement(party, (Vector<AST>) t.labOr).map(d -> {
+                    AST.Clause t1 = newClause(t);
+                    t1.labOr = d;
+                    return t1;
+                });
+            }
         } else if (stmt instanceof AST.While) {
             AST.While t = (AST.While) stmt;
             if (t.unlabDo != null) {
@@ -933,36 +1012,46 @@ public class PlusCalExtensions {
                         .collect(Collectors.toList()));
     }
 
-    static Map<String, Party> computeOwnership(Map<String, Party> partyDecls, Vector<AST> ast) {
+    static Map<String, Party> computeOwnership(Context ctx,
+                                               Vector<AST> ast) {
         Map<String, Party> result = new HashMap<>();
         ast.forEach(a -> {
-            Map<String, Party> r = computeOwnership(partyDecls, a);
-            result.putAll(r);
+            computeOwnership(ctx, result, a);
         });
         return result;
     }
 
-    static Map<String, Party> computeOwnership(Map<String, Party> partyDecls, AST ast) {
+    static void computeOwnership(Context ctx, Map<String, Party> res, Vector<AST> ast) {
+        for (AST ast1 : ast) {
+            computeOwnership(ctx, res, ast1);
+        }
+    }
+
+    static void computeOwnership(Context ctx, Map<String, Party> res, AST ast) {
         if (ast instanceof AST.All) {
             String var = ((AST.All) ast).var;
             TLAExpr exp = ((AST.All) ast).exp;
-            Optional<Party> first = partyDecls.values().stream()
+            Optional<Party> first = ctx.partyDecls.values().stream()
                     .filter(p -> p.partySet.toString().equals(exp.toString()))
                     .findFirst();
             if (first.isPresent()) {
-                Map<String, Party> res = new HashMap<>();
                 res.put(var, first.get());
-                res.putAll(computeOwnership(partyDecls, ((AST.All) ast).Do));
-                return res;
+                computeOwnership(ctx, res, ((AST.All) ast).Do);
             } else {
                 fail("non constant set quantified over " + exp);
             }
-            return null;
-//        } else if (ast instanceof AST.MacroCall && ((AST.MacroCall) ast).name.equals("Send")) {
-//            return null;
+        } else if (ast instanceof AST.Task) {
+            computeOwnership(ctx, res, ((AST.Task) ast).Do);
+        } else if (ast instanceof AST.LabelEither) {
+            computeOwnership(ctx, res, ((AST.LabelEither) ast).clauses);
+        } else if (ast instanceof AST.MacroCall && ((AST.MacroCall) ast).name.equals("Transmit")) {
+            int a = 1;
+        } else if (ast instanceof AST.MacroCall) {
+        } else if (ast instanceof AST.Clause) {
+        } else if (ast instanceof AST.LabelIf) {
+        } else if (ast instanceof AST.LabelEither) {
         } else {
-//            fail("computeOwnership: " + ast);
-            return Map.of();
+            throw new IllegalArgumentException("computeOwnership: unhandled " + ast.getClass().getSimpleName());
         }
     }
 
