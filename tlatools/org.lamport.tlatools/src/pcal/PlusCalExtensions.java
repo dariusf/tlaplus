@@ -190,6 +190,10 @@ public class PlusCalExtensions {
             List<AST.VarDecl> localVars = new ArrayList<>();
             if (PeekAtAlgToken(1).equals("variables")) {
                 localVars = new ArrayList<>(GetVarDecls());
+            } else {
+                // no variables declared, so consume the delimiter which would otherwise
+                // be consumed by var decls
+                GobbleCommaOrSemicolon();
             }
             Party party = new Party(partyVar, eqOrIn, partySet, localVars);
             ctx.partyDecls.put(partyVar, party);
@@ -197,9 +201,6 @@ public class PlusCalExtensions {
             if (eqOrIn) { // is equal
                 // add constant exprs to ownership
                 ctx.ownership.put(tlaExprAsVar(partySet), party);
-            }
-            if (!PeekAtAlgToken(1).equals("(")) {
-                break;
             }
         }
 
