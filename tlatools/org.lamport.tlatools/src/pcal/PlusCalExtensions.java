@@ -229,9 +229,11 @@ public class PlusCalExtensions {
         ctx.ownership.putAll(quantified);
         Map<Party, AST.Process> res = project(ctx, stmts);
 
-        res.forEach((k, v) -> System.out.printf("Projection of %s:\n\n%s\n\n",
-                Printer.show(k.partySet),
-                Printer.show(v)));
+        res.entrySet().stream()
+                .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
+                .forEach(e -> System.out.printf("Projection of %s:\n\n%s\n\n",
+                        Printer.show(e.getKey().partySet),
+                        Printer.show(e.getValue())));
 
         // Post-projection elaboration
         List<AST.Process> res1 = res.entrySet().stream()
@@ -245,7 +247,9 @@ public class PlusCalExtensions {
         // TODO optimize, remove the no-op processes entirely
 
         System.out.println("Final processes:\n");
-        res1.forEach(p -> System.out.println(Printer.show(p)));
+        res1.stream().map(Printer::show)
+                .sorted() // det
+                .forEach(System.out::println);
 
         return res1;
     }
@@ -898,7 +902,10 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Cancel ||
                 stmt instanceof AST.Assign ||
                 stmt instanceof AST.SingleAssign ||
-                stmt instanceof AST.When) {
+                stmt instanceof AST.When ||
+                stmt instanceof AST.MacroCall ||
+                stmt instanceof AST.Skip
+        ) {
             return new WithProc<>(stmt, List.of());
         } else {
             throw new IllegalArgumentException("expandParStatement: unhandled " + stmt.getClass().getSimpleName());
@@ -939,6 +946,8 @@ public class PlusCalExtensions {
             });
         } else if (stmt instanceof AST.When ||
                 stmt instanceof AST.Cancel ||
+                stmt instanceof AST.Skip ||
+                stmt instanceof AST.MacroCall ||
                 stmt instanceof AST.Assign) {
             return new WithProc<>(stmt, List.of());
         } else {

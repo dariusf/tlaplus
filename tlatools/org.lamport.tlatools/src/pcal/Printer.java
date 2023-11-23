@@ -84,7 +84,7 @@ public class Printer {
             result.add(String.format("cancel %s;", ((AST.Cancel) p).task));
         } else if (p instanceof AST.MacroCall) {
             AST.MacroCall p1 = (AST.MacroCall) p;
-            result.add(String.format("%s(%s)",
+            result.add(String.format("%s(%s);",
                     p1.name,
                     p1.args.stream()
                             .map(a -> show((TLAExpr) a))
