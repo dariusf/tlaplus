@@ -23,7 +23,7 @@ CONSTANTS p1, p2, coord
         committed = {};
   {
     all (p \in participants) {
-      Send(coord, p, "prepare");
+      Transmit(coord, p, "prepare");
       committed := committed \union {<<p, coord>>};
     }
   }

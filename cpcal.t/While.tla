@@ -24,7 +24,7 @@ CONSTANTS p1, p2, coord
   {
     all (p \in participants) {
       while (y > 1), (x < 3) {
-        Send(coord, p, 5);
+        Transmit(coord, p, 5);
         y := y - 1;
         x := x + 1;
       }

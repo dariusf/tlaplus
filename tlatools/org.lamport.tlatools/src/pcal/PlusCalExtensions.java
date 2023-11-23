@@ -1133,7 +1133,7 @@ public class PlusCalExtensions {
             w1.unlabDo = projectAll(ctx, party, w1.unlabDo);
             w1.labDo = projectAll(ctx, party, w1.labDo);
             result.add(w1);
-        } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Send")) {
+        } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Transmit")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
             String receiver = ithMacroArgAsVar((AST.MacroCall) stmt, 1);
             boolean isSend = ctx.ownership.get(sender).partyVar.equals(party.partyVar);
