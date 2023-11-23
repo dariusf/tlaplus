@@ -173,3 +173,73 @@
   Parsing completed.
   Translation completed.
   New file Cancel.tla written.
+
+  $ cpluscal -nocfg While.tla
+  ++ cpluscal -nocfg While.tla
+  ++ pluscal -label -nocfg While.tla
+  ++ tlatools pcal.trans -label -nocfg While.tla
+  ++ name=pcal.trans
+  ++ shift
+  ++ set -x
+  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans -label -nocfg While.tla
+  pcal.trans Version 1.11 of 31 December 2020
+  Projection of coord:
+  
+  process (C = coord)
+    variables
+      y = 3;
+  {
+    all (p \in participants) {
+      while (y > 1) {
+        Send(p, self, 5);
+        y := y - 1;
+        skip;
+      }
+    }
+  }
+  
+  Projection of participants:
+  
+  process (P \in participants)
+    variables
+      x = 1;
+  {
+    while (x < 3) {
+      Receive(coord, self, 5);
+      skip;
+      x := x + 1;
+    }
+  }
+  
+  Final processes:
+  
+  process (C = coord)
+    variables
+      y = 3;
+  {
+    fork_0:
+    await \A p \in ( coord \X participants ) : pc [ p ] = "Done";
+  }
+  process (P \in participants)
+    variables
+      x = 1;
+  {
+    while (x < 3) {
+      Receive(coord, self, 5);
+      skip;
+      x := x + 1;
+    }
+  }
+  process (proc_1 \in ( coord \X participants ))
+  {
+    await pc [ Head ( self ) ] = "fork_0";
+    while (y > 1) {
+      Send(p, self, 5);
+      y := y - 1;
+      skip;
+    }
+  }
+  Labels added.
+  Parsing completed.
+  Translation completed.
+  New file While.tla written.
