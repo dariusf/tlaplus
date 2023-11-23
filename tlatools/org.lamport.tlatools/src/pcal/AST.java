@@ -670,8 +670,7 @@ public class AST
     public static class Task extends AST
     {
       public String label = "" ;
-//      public boolean   isEq = true ; // true means "=", false "\\in"
-//      public TLAExpr   exp  = null ;
+      public TLAExpr set = null;
       public Vector    Do   = null ; // of SimpleStmt
       /*****************************************************************
        * Can't use "do" because that's a Java keyword.                  *
@@ -935,15 +934,13 @@ public class AST
       }
 
     public static class Cancel extends AST
-    { public String    to       = "" ;
-      public String    who       = "" ;
+    { public String task = "" ;
       public Cancel() {};
       public String toString()
       { return
               lineCol() +
                       "[type |-> \"cancel\", " +
-                      " who |-> \"" + who + "\", " +
-                      " to |-> \"" + to + "\"]" ;
+                      " task |-> \"" + task + "\"]" ;
       }
     }
 

@@ -3,7 +3,7 @@ EXTENDS Naturals, TLC, Sequences
 
 CONSTANTS p1, p2, coord
 
-(* --algorithm Chor {
+(* --algorithm Par {
   \* variables x = 1;
 
   macro Receive(from, to, type) {
