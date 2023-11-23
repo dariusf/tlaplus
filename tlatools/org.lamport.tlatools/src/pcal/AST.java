@@ -62,6 +62,7 @@
 * it in the Java Reference Manual.                                         *
 ***************************************************************************/
 package pcal;
+import java.util.List;
 import java.util.Vector;
 
 public class AST
@@ -508,6 +509,7 @@ public class AST
 
     public static class While extends AST
       { public TLAExpr   test    = null ;
+        public List<TLAExpr> extraTests = null ;
         public Vector    unlabDo = null ; // a LabelSeq
         public Vector    labDo   = null ; // of LabeledStmt 
         public While() { };
@@ -671,7 +673,7 @@ public class AST
     {
       public String taskId = "" ;
       public TLAExpr partyId = null;
-      public Vector    Do   = null ; // of SimpleStmt
+      public Vector Do   = null ; // of SimpleStmt
       /*****************************************************************
        * Can't use "do" because that's a Java keyword.                  *
        *****************************************************************/

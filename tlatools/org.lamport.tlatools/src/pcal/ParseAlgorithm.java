@@ -836,6 +836,7 @@ public class ParseAlgorithm
                  || PeekAtAlgToken(1).equals("process")
                  || PeekAtAlgToken(1).equals("fair")
                  || PeekAtAlgToken(1).equals("define")
+               || PeekAtAlgToken(1).equals("(") // if another party is declared after in a choreography
                  || PeekAtAlgToken(1).equals("macro")   ) )
          { result.addElement(GetVarDecl());
           } ;
@@ -955,11 +956,20 @@ public class ParseAlgorithm
      { MustGobbleThis("while") ;
        PCalLocation beginLoc = GetLastLocationStart() ;
        AST.While result = new AST.While() ;
+       result.extraTests = new ArrayList<>();
        result.col  = lastTokCol ;
        result.line = lastTokLine ;
        if (cSyntax) { GobbleThis("(") ; } ;
        result.test = GetExpr();
        if (cSyntax) { GobbleThis(")") ; } ;
+
+         while (PeekAtAlgToken(1).equals(",")) {
+             GobbleCommaOrSemicolon();
+             if (cSyntax) { GobbleThis("(") ; } ;
+             result.extraTests.add(GetExpr());
+             if (cSyntax) { GobbleThis(")") ; } ;
+         }
+
        if (result.test.tokens.size()==0)
          { ParsingError("Empty while test at ") ;} ;
        if (pSyntax)

@@ -55,6 +55,9 @@ public class PlusCalExtensions {
 
         // variable -> party
         Map<String, Party> ownership;
+
+        // For things like while, which use positional expressions for parties
+        List<Party> partiesOrdered;
     }
 
     public static AST GetAll(int depth) throws ParseAlgorithmException {
@@ -175,6 +178,7 @@ public class PlusCalExtensions {
         ctx.globals = globals;
         ctx.partyDecls = new HashMap<>();
         ctx.ownership = new HashMap<>();
+        ctx.partiesOrdered = new ArrayList<>();
 
         // Parse party declarations
         while (PeekAtAlgToken(1).equals("(")) {
@@ -189,13 +193,12 @@ public class PlusCalExtensions {
             }
             Party party = new Party(partyVar, eqOrIn, partySet, localVars);
             ctx.partyDecls.put(partyVar, party);
+            ctx.partiesOrdered.add(party);
             if (eqOrIn) { // is equal
                 // add constant exprs to ownership
                 ctx.ownership.put(tlaExprAsVar(partySet), party);
             }
-            if (PeekAtAlgToken(1).equals(",")) {
-                GobbleThis(",");
-            } else {
+            if (!PeekAtAlgToken(1).equals("(")) {
                 break;
             }
         }
@@ -277,6 +280,10 @@ public class PlusCalExtensions {
             AST.Task task = (AST.Task) stmt;
             res.put(task.taskId, ctx.partyDecls.get(Printer.show(task.partyId)));
             findTasks(ctx, res, task.Do);
+        } else if (stmt instanceof AST.While) {
+            AST.While w = (AST.While) stmt;
+            findTasks(ctx, res, w.unlabDo);
+            findTasks(ctx, res, w.labDo);
         } else if (stmt instanceof AST.When) {
             // nothing to do
         } else if (stmt instanceof AST.Clause) {
@@ -321,6 +328,9 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Clause) {
             findCancellations(res, ((AST.Clause) stmt).labOr);
             findCancellations(res, ((AST.Clause) stmt).unlabOr);
+        } else if (stmt instanceof AST.While) {
+            findCancellations(res, ((AST.While) stmt).labDo);
+            findCancellations(res, ((AST.While) stmt).unlabDo);
         } else if (stmt instanceof AST.Assign) {
             // nothing
         } else if (stmt instanceof AST.SingleAssign) {
@@ -516,6 +526,12 @@ public class PlusCalExtensions {
             AST.All e = (AST.All) stmt;
             AST.All e1 = newAll(e);
             e1.Do = ((Stream<AST>) transformTask(e.Do, task)).collect(Collectors.toCollection(Vector::new));
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.While) {
+            AST.While e = (AST.While) stmt;
+            AST.While e1 = newWhile(e);
+            e1.unlabDo = ((Stream<AST>) transformTask(e.unlabDo, task)).collect(Collectors.toCollection(Vector::new));
+            e1.labDo = ((Stream<AST>) transformTask(e.labDo, task)).collect(Collectors.toCollection(Vector::new));
             res = Stream.of(e1);
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
@@ -817,6 +833,21 @@ public class PlusCalExtensions {
                 t1.Do = d;
                 return t1;
             });
+        } else if (stmt instanceof AST.While) {
+            AST.While task = (AST.While) stmt;
+            if (task.unlabDo != null) {
+                return expandParStatement(which, (Vector<AST>) task.unlabDo).map(d -> {
+                    AST.While t1 = newWhile(task);
+                    t1.unlabDo = d;
+                    return t1;
+                });
+            } else {
+                return expandParStatement(which, (Vector<AST>) task.labDo).map(d -> {
+                    AST.While t1 = newWhile(task);
+                    t1.labDo = d;
+                    return t1;
+                });
+            }
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither task = (AST.LabelEither) stmt;
             return expandParStatement(which, (Vector<AST>) task.clauses).map(c -> {
@@ -869,6 +900,21 @@ public class PlusCalExtensions {
                 t1.Do = d;
                 return t1;
             });
+        } else if (stmt instanceof AST.While) {
+            AST.While t = (AST.While) stmt;
+            if (t.unlabDo != null) {
+                return expandAllStatement(party, (Vector<AST>) t.unlabDo).map(d -> {
+                    AST.While t1 = newWhile(t);
+                    t1.unlabDo = d;
+                    return t1;
+                });
+            } else {
+                return expandAllStatement(party, (Vector<AST>) t.labDo).map(d -> {
+                    AST.While t1 = newWhile(t);
+                    t1.labDo = d;
+                    return t1;
+                });
+            }
         } else if (stmt instanceof AST.When ||
                 stmt instanceof AST.Cancel ||
                 stmt instanceof AST.Skip ||
@@ -1065,6 +1111,27 @@ public class PlusCalExtensions {
             }
             copyInto(e1, e);
             result.add(e1);
+        } else if (stmt instanceof AST.While) {
+
+            int index = -1;
+            for (int i = 0; i < ctx.partiesOrdered.size(); i++) {
+                if (ctx.partiesOrdered.get(i).partyVar.equals(party.partyVar)) {
+                    index = i;
+                }
+            }
+            if (index == -1) {
+                fail("party not found?");
+            }
+
+            AST.While w = (AST.While) stmt;
+
+            TLAExpr cond = index == 0 ? w.test : w.extraTests.get(index - 1);
+            AST.While w1 = newWhile(w);
+            w1.test = cond;
+            w1.extraTests = new ArrayList<>();
+            w1.unlabDo = projectAll(ctx, party, w1.unlabDo);
+            w1.labDo = projectAll(ctx, party, w1.labDo);
+            result.add(w1);
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Send")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
             String receiver = ithMacroArgAsVar((AST.MacroCall) stmt, 1);
@@ -1161,6 +1228,12 @@ public class PlusCalExtensions {
             AST.Task e1 = newTask(e);
             e1.Do = transformCancellations(e.Do);
             return e1;
+        } else if (stmt instanceof AST.While) {
+            AST.While e = (AST.While) stmt;
+            AST.While e1 = newWhile(e);
+            e1.unlabDo = transformCancellations(e.unlabDo);
+            e1.labDo = transformCancellations(e.labDo);
+            return e1;
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = newClause(e);
@@ -1240,6 +1313,16 @@ public class PlusCalExtensions {
         e1.isEq = e.isEq;
         e1.exp = e.exp;
         e1.Do = e.Do;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.While newWhile(AST.While e) {
+        AST.While e1 = new AST.While();
+        e1.test = e.test;
+        e1.extraTests = e.extraTests;
+        e1.unlabDo = e.unlabDo;
+        e1.labDo = e.labDo;
         copyInto(e1, e);
         return e1;
     }

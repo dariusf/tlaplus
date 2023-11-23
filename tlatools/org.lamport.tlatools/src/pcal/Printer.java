@@ -73,6 +73,16 @@ public class Printer {
             result.add("} else {");
             ((Vector<AST>) p1.unlabElse).forEach(b -> result.addAll(showLines(1, b)));
             result.add("}");
+        } else if (p instanceof AST.While) {
+            AST.While p1 = (AST.While) p;
+            result.add(String.format("while (%s)%s {",
+                    show(p1.test),
+                    p1.extraTests.isEmpty() ? "" : ", " + p1.extraTests.stream()
+                            .map(e -> show(e))
+                            .collect(Collectors.joining(", "))));
+            ((Vector<AST>) p1.labDo).forEach(b -> result.addAll(showLines(1, b)));
+            ((Vector<AST>) p1.unlabDo).forEach(b -> result.addAll(showLines(1, b)));
+            result.add("}");
         } else if (p instanceof AST.Task) {
             AST.Task p1 = (AST.Task) p;
             result.add(String.format("task %s, %s {", show(p1.partyId), p1.taskId));

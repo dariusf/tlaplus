@@ -1,4 +1,4 @@
---------------------- MODULE Par ----------------------
+--------------------- MODULE Cancel ----------------------
 EXTENDS Naturals, TLC, Sequences
 
 CONSTANTS p1, p2, coord
@@ -20,7 +20,7 @@ CONSTANTS p1, p2, coord
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "db3b2b88" /\ chksum(tla) = "d1a31436")
+\* BEGIN TRANSLATION (chksum(pcal) = "ccf2a011" /\ chksum(tla) = "e8bcd617")
 VARIABLES cancelled_a, pc, x
 
 vars == << cancelled_a, pc, x >>
@@ -52,7 +52,7 @@ Lbl_2(self) == /\ pc[self] = "Lbl_2"
 proc_4(self) == Lbl_2(self)
 
 Lbl_3(self) == /\ pc[self] = "Lbl_3"
-               /\ IF a = 1
+               /\ IF ~ cancelled_a
                      THEN /\ pc' = [pc EXCEPT ![self] = "par_0"]
                      ELSE /\ TRUE
                           /\ pc' = [pc EXCEPT ![self] = "Done"]
