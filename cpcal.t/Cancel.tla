@@ -9,7 +9,7 @@ CONSTANTS p1, p2, coord
     (P \in participants)
       variables x = 0;
   {
-    task participants, "a" {
+    task P, "a" {
       par {
         cancel "a";
       } and {
@@ -20,51 +20,30 @@ CONSTANTS p1, p2, coord
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "60f403e" /\ chksum(tla) = "f5a4f9c")
-VARIABLES cancelled_a, pc, x
+\* BEGIN TRANSLATION (chksum(pcal) = "e2a73678" /\ chksum(tla) = "594037b8")
+VARIABLES pc, x
 
-vars == << cancelled_a, pc, x >>
+vars == << pc, x >>
 
-ProcSet == ((participants \X {"P_par_1"})) \cup ((participants \X {"P_par_3"})) \cup (participants)
+ProcSet == (participants)
 
-Init == (* Global variables *)
-        /\ cancelled_a = FALSE
-        (* Process P *)
+Init == (* Process P *)
         /\ x = [self \in participants |-> 0]
-        /\ pc = [self \in ProcSet |-> CASE self \in (participants \X {"P_par_1"}) -> "Lbl_1"
-                                        [] self \in (participants \X {"P_par_3"}) -> "Lbl_2"
-                                        [] self \in participants -> "par_0"]
+        /\ pc = [self \in ProcSet |-> "Lbl_1"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ pc[Head(self)] = "par_0"
-               /\ TRUE
+               /\ IF a = 1
+                     ELSE /\ TRUE
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << cancelled_a, x >>
+               /\ x' = x
 
-proc_2(self) == Lbl_1(self)
-
-Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Head(self)] = "par_0"
-               /\ x' = [x EXCEPT ![self] = x[self] + 2]
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED cancelled_a
-
-proc_4(self) == Lbl_2(self)
-
-par_0(self) == /\ pc[self] = "par_0"
-               /\ \A v_5 \in (participants \X {"P_par_1", "P_par_3"}) : pc[v_5] = "Done"
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << cancelled_a, x >>
-
-P(self) == par_0(self)
+P(self) == Lbl_1(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
-Next == (\E self \in (participants \X {"P_par_1"}): proc_2(self))
-           \/ (\E self \in (participants \X {"P_par_3"}): proc_4(self))
-           \/ (\E self \in participants: P(self))
+Next == (\E self \in participants: P(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars

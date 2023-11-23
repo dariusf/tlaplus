@@ -2,6 +2,7 @@ package pcal;
 
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
+import tlc2.util.Vect;
 
 import java.util.*;
 import java.util.function.Function;
@@ -41,9 +42,19 @@ public class PlusCalExtensions {
     }
 
     static class Context {
+
+        // task id -> Party
+        Map<String, Party> taskOwnership;
+
+        // TODO remove
         Map<String, AST.Cancel> cancellations;
+
         Vector<AST.VarDecl> globals;
+
+        // party task id variable -> party
         Map<String, Party> partyDecls;
+
+        // variable -> party
         Map<String, Party> ownership;
     }
 
@@ -179,8 +190,8 @@ public class PlusCalExtensions {
             }
             Party party = new Party(partyVar, eqOrIn, partySet, localVars);
             ctx.partyDecls.put(partyVar, party);
-            if (eqOrIn) {
-                // if equal, add constant exprs to ownership
+            if (eqOrIn) { // is equal
+                // add constant exprs to ownership
                 ctx.ownership.put(tlaExprAsVar(partySet), party);
             }
             if (PeekAtAlgToken(1).equals(",")) {
@@ -200,14 +211,17 @@ public class PlusCalExtensions {
 
         // Preprocessing to handle cancellations
         ctx.cancellations = new HashMap<>();
-        findCancellations(ctx.cancellations, stmts);
-        ctx.cancellations.forEach((key, value) -> {
-            AST.VarDecl v = new AST.VarDecl();
-            v.var = String.format("cancelled_%s", key);
-            v.val = tlaExpr("FALSE");
-            v.isEq = true;
-            globals.add(v);
-        });
+        ctx.taskOwnership = new HashMap<>();
+        findTasks(ctx, ctx.taskOwnership, stmts);
+//        findCancellations(ctx.cancellations, stmts);
+//        ctx.cancellations.forEach((key, value) -> {
+//            AST.VarDecl v = new AST.VarDecl();
+//            v.var = String.format("cancelled_%s", key);
+//            v.val = tlaExpr("FALSE");
+//            v.isEq = true;
+//            globals.add(v);
+//        });
+
         // don't transform away cancellations until after projection
 
         // Ownership and projection
@@ -217,7 +231,7 @@ public class PlusCalExtensions {
 
         res.forEach((k, v) -> System.out.printf("Projection of %s:\n\n%s\n\n",
                 Printer.show(k.partySet),
-                Printer.show(0, v)));
+                Printer.show(v)));
 
         // Post-projection elaboration
         List<AST.Process> res1 = res.entrySet().stream()
@@ -231,9 +245,49 @@ public class PlusCalExtensions {
         // TODO optimize, remove the no-op processes entirely
 
         System.out.println("Final processes:\n");
-        res1.forEach(p -> Printer.print(0, p));
+        res1.forEach(p -> System.out.println(Printer.show(p)));
 
         return res1;
+    }
+
+    private static void findTasks(Context ctx, Map<String, Party> tasks, Vector<AST> stmts) {
+        stmts.forEach(s -> findTasks(ctx, tasks, s));
+    }
+
+    private static void findTasks(Context ctx, Map<String, Party> res, AST stmt) {
+        if (stmt instanceof AST.All) {
+            findTasks(ctx, res, ((AST.All) stmt).Do);
+        } else if (stmt instanceof AST.LabelEither) {
+            findTasks(ctx, res, ((AST.LabelEither) stmt).clauses);
+        } else if (stmt instanceof AST.Par) {
+            findTasks(ctx, res, ((AST.Par) stmt).clauses);
+        } else if (stmt instanceof AST.LabelIf) {
+            findTasks(ctx, res, ((AST.LabelIf) stmt).unlabElse);
+            findTasks(ctx, res, ((AST.LabelIf) stmt).unlabThen);
+            findTasks(ctx, res, ((AST.LabelIf) stmt).labElse);
+            findTasks(ctx, res, ((AST.LabelIf) stmt).labThen);
+        } else if (stmt instanceof AST.With) {
+            findTasks(ctx, res, ((AST.With) stmt).Do);
+        } else if (stmt instanceof AST.Task) {
+            AST.Task task = (AST.Task) stmt;
+            res.put(task.label, ctx.partyDecls.get(Printer.show(task.set)));
+            findTasks(ctx, res, task.Do);
+        } else if (stmt instanceof AST.When) {
+            // nothing to do
+        } else if (stmt instanceof AST.Clause) {
+            findTasks(ctx, res, ((AST.Clause) stmt).labOr);
+            findTasks(ctx, res, ((AST.Clause) stmt).unlabOr);
+        } else if (stmt instanceof AST.Assign) {
+            // nothing
+        } else if (stmt instanceof AST.SingleAssign) {
+            // nothing
+        } else if (stmt instanceof AST.Cancel) {
+            // nothing
+        } else if (stmt instanceof AST.MacroCall) {
+            // nothing
+        } else {
+            fail("unimplemented findTasks " + stmt);
+        }
     }
 
     private static void findCancellations(Map<String, AST.Cancel> res, Vector<AST> stmts) {
@@ -285,6 +339,35 @@ public class PlusCalExtensions {
         public WithProc(T thing, List<AST.Process> procs) {
             this.thing = thing;
             this.procs = procs;
+        }
+
+        /**
+         * Merges these two WithProcs, but throws away the result of the other
+         * (hence the name; this subsumes)
+         */
+//        WithProc<T> subsume(WithProc<T> other) {
+//            List<AST.Process> ps = new ArrayList<>();
+//            ps.addAll(procs);
+//            ps.addAll(other.procs);
+//            return new WithProc<>(thing, ps);
+//        }
+
+        <B> WithProc<B> map(Function<T, B> f) {
+            return new WithProc<>(f.apply(this.thing), procs);
+        }
+
+        static <T> WithProc<List<T>> sequence(List<WithProc<T>> inp) {
+            List<T> res = new ArrayList<>();
+            List<AST.Process> procs = new ArrayList<>();
+            inp.forEach(i -> {
+                procs.addAll(i.procs);
+                res.add(i.thing);
+            });
+            return new WithProc<>(res, procs);
+        }
+
+        static <T> WithProc<Vector<T>> sequenceV(List<WithProc<T>> inp) {
+            return sequence(inp).map(Vector::new);
         }
     }
 
@@ -394,54 +477,51 @@ public class PlusCalExtensions {
         to.setOrigin(from.getOrigin());
     }
 
-    private static Stream<AST> transformTask(AST stmt, Optional<AST.Task> task) {
+    // DEFUNCT, just for posterity
+    // stmt is the statement we are transforming, task is the closest enclosing task
+    // returns a stream because it adds an await before every statement
+    private static Stream<AST> transformTaskAwait(AST stmt, Optional<AST.Task> task) {
         Stream<AST> res;
         if (stmt instanceof AST.All) {
             AST.All e = (AST.All) stmt;
-            AST.All e1 = new AST.All();
-            e1.var = e.var;
-            e1.isEq = e.isEq;
-            e1.exp = e.exp;
+            AST.All e1 = newAll(e);
             e1.Do = ((Stream<AST>) transformTask(e.Do, task)).collect(Collectors.toCollection(Vector::new));
-            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
-            AST.LabelEither e1 = new AST.LabelEither();
+            AST.LabelEither e1 = newEither(e);
             e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
-            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
-            AST.Par e1 = new AST.Par();
+            AST.Par e1 = newPar(e);
             e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
-            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Task) {
             AST.Task e = (AST.Task) stmt;
-            if (e.lbl != null) {
-                fail("tasks cannot have labels, as it is unclear how many statements in their body the label should apply to");
-            }
+//            if (e.lbl != null) {
+//                fail("tasks cannot have labels, as it is unclear how many statements in their body the label should apply to");
+//            }
             res = ((Stream<AST>) transformTask(e.Do, Optional.of(e)));
 //        } else if (stmt instanceof AST.With) {
             // TODO
 //            res = Stream.of(e1);
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
-            AST.LabelIf e1 = new AST.LabelIf();
-            e1.test = e.test;
+            AST.LabelIf e1 = newIf(e);
             e1.labElse = ((Stream<AST>) transformTask(e.labElse, task)).collect(Collectors.toCollection(Vector::new));
             e1.labThen = ((Stream<AST>) transformTask(e.labThen, task)).collect(Collectors.toCollection(Vector::new));
             e1.unlabElse = ((Stream<AST>) transformTask(e.unlabElse, task)).collect(Collectors.toCollection(Vector::new));
             e1.unlabThen = ((Stream<AST>) transformTask(e.unlabThen, task)).collect(Collectors.toCollection(Vector::new));
-            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = new AST.Clause();
+            e1.labOr = e.labOr;
+            e1.unlabOr = e1.unlabOr;
+            copyInto(e1, e);
             e1.labOr = ((Stream<AST>) transformTask(e.labOr, task)).collect(Collectors.toCollection(Vector::new));
             e1.unlabOr = ((Stream<AST>) transformTask(e.unlabOr, task)).collect(Collectors.toCollection(Vector::new));
-            copyInto(e1, e);
             res = Stream.of(e1);
         } else if (stmt instanceof AST.When) {
             res = Stream.of(stmt);
@@ -460,14 +540,136 @@ public class PlusCalExtensions {
             return null;
         }
         if (task.isEmpty()) {
+            // if not inside a task
             return res;
         } else {
-            AST.When guard = convertTask(task.get());
+            // if inside a task
+            AST.Task task1 = task.get();
+
+            AST.When when = new AST.When();
+            when.exp = tlaExpr("~ cancelled_%s", task1.label);
+            when.setOrigin(task1.getOrigin());
+            AST.When guard = when;
             return Stream.concat(Stream.of(guard), res);
         }
     }
 
+    private static AST.Par newPar(AST.Par e) {
+        AST.Par e1 = new AST.Par();
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.LabelEither newEither(AST.LabelEither e) {
+        AST.LabelEither e1 = new AST.LabelEither();
+        e1.clauses = e.clauses;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    // stmt is the statement we are transforming, task is the closest enclosing task
+    // returns a stream because this may remove a task, resulting in a bunch of statements
+    private static Stream<AST> transformTask(AST stmt, Optional<AST.Task> task) {
+        Stream<AST> res;
+        boolean statefulMaybe = false;
+        if (stmt instanceof AST.All) {
+            AST.All e = (AST.All) stmt;
+            AST.All e1 = newAll(e);
+            e1.Do = ((Stream<AST>) transformTask(e.Do, task)).collect(Collectors.toCollection(Vector::new));
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.LabelEither) {
+            AST.LabelEither e = (AST.LabelEither) stmt;
+            AST.LabelEither e1 = newEither(e);
+            e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.Par) {
+            AST.Par e = (AST.Par) stmt;
+            AST.Par e1 = newPar(e);
+            e1.clauses = ((Stream<AST>) transformTask(e.clauses, task)).collect(Collectors.toCollection(Vector::new));
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.Task) {
+            AST.Task e = (AST.Task) stmt;
+//            if (e.lbl != null) {
+//                fail("tasks cannot have labels, as it is unclear how many statements in their body the label should apply to");
+//            }
+            res = ((Stream<AST>) transformTask(e.Do, Optional.of(e)));
+//        } else if (stmt instanceof AST.With) {
+            // TODO
+//            res = Stream.of(e1);
+        } else if (stmt instanceof AST.LabelIf) {
+            AST.LabelIf e = (AST.LabelIf) stmt;
+            AST.LabelIf e1 = newIf(e);
+            e1.labElse = ((Stream<AST>) transformTask(e.labElse, task)).collect(Collectors.toCollection(Vector::new));
+            e1.labThen = ((Stream<AST>) transformTask(e.labThen, task)).collect(Collectors.toCollection(Vector::new));
+            e1.unlabElse = ((Stream<AST>) transformTask(e.unlabElse, task)).collect(Collectors.toCollection(Vector::new));
+            e1.unlabThen = ((Stream<AST>) transformTask(e.unlabThen, task)).collect(Collectors.toCollection(Vector::new));
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.Clause) {
+            AST.Clause e = (AST.Clause) stmt;
+            AST.Clause e1 = new AST.Clause();
+            e1.labOr = e.labOr;
+            e1.unlabOr = e1.labOr;
+            copyInto(e1, e);
+            e1.labOr = ((Stream<AST>) transformTask(e.labOr, task)).collect(Collectors.toCollection(Vector::new));
+            e1.unlabOr = ((Stream<AST>) transformTask(e.unlabOr, task)).collect(Collectors.toCollection(Vector::new));
+            res = Stream.of(e1);
+        } else if (stmt instanceof AST.When) {
+            statefulMaybe = true;
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.Assign) {
+            statefulMaybe = true;
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.SingleAssign) {
+            statefulMaybe = true;
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.Cancel) {
+            statefulMaybe = true;
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.MacroCall) {
+            statefulMaybe = true;
+            res = Stream.of(stmt);
+        } else if (stmt instanceof AST.Skip) {
+            res = Stream.of(stmt);
+        } else {
+            fail("transformTask: unimplemented " + stmt);
+            return null;
+        }
+        if (task.isEmpty() || !statefulMaybe) {
+            // if not inside a task
+            return res;
+        } else {
+            AST.LabelIf check = makeConditional(res, tlaExpr("a = 1"));
+            return Stream.of(check);
+        }
+    }
+
+    public static void require(boolean precondition) {
+        if (!precondition) {
+            throw new IllegalArgumentException();
+        }
+    }
+
+    private static AST.LabelIf makeConditional(Stream<AST> res, TLAExpr test) {
+        List<AST> thenContents = res.collect(Collectors.toList());
+        require(!thenContents.isEmpty());
+
+        AST.LabelIf check = new AST.LabelIf();
+        check.setOrigin(thenContents.get(0).getOrigin());
+        check.test = test;
+
+        Vector<AST> then1 = new Vector<>();
+        then1.addAll(thenContents);
+        check.unlabThen = then1;
+
+        AST noop = new AST.Skip();
+        Vector<AST> else1 = new Vector<>();
+        else1.add(noop);
+        check.unlabElse = else1;
+        return check;
+    }
+
     private static Stream<AST> transformTask(Vector<AST> s, Optional<AST.Task> task) {
+//        return s.stream().flatMap(s1 -> transformTaskAwait(s1, task));
         return s.stream().flatMap(s1 -> transformTask(s1, task));
     }
 
@@ -558,7 +760,6 @@ public class PlusCalExtensions {
         wait.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
         wait.setOrigin(set.getOrigin());
         body.add(wait);
-        // TODO rename variables?
         if (cl.unlabOr != null) {
             body.addAll(cl.unlabOr);
         } else {
@@ -615,37 +816,87 @@ public class PlusCalExtensions {
      * Called for each statement of a process, which may generate more processes
      */
     private static WithProc<AST> expandParStatement(Context ctx, Party which, AST stmt) {
-        // This could be translated into an All over a constant set with an if in each branch,
-        // but then the output would be significantly uglier
         if (stmt instanceof AST.Par) {
+            // This could be translated into an All over a constant set with an if in each branch,
+            // but then the output would be significantly uglier, so we do it in a simple way
             AST.Par par = (AST.Par) stmt;
 
             String label = fresh("par");
 
             AST.When wait = new AST.When();
             wait.setOrigin(stmt.getOrigin());
+
+            List<AST.Process> newProcesses = new ArrayList<>();
+
             Vector<AST.Clause> clauses = par.clauses;
             List<AbstractMap.SimpleEntry<String, AST.Process>> threads = clauses.stream().map(c -> {
                 String p = fresh(which.partyVar + "_par");
                 String id = String.format("\"%s\"", p);
                 TLAExpr set = tlaExpr("(%s \\X {%s})", which.partySet, id);
-                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(label, set, c));
+
+                // recurse and non-algebraically accumulate the new processes
+                AST.Clause c1 = new AST.Clause();
+                if (c.unlabOr != null) {
+                    WithProc<Vector<AST>> wp = expandParStatement(ctx, which, (Vector<AST>) c.unlabOr);
+                    newProcesses.addAll(wp.procs);
+                    c1.unlabOr = new Vector<>(wp.thing);
+                } else {
+                    WithProc<Vector<AST>> wp = expandParStatement(ctx, which, (Vector<AST>) c.labOr);
+                    newProcesses.addAll(wp.procs);
+                    c1.labOr = new Vector<>(wp.thing);
+                }
+                copyInto(c1, c);
+
+                return new AbstractMap.SimpleEntry<>(id, parStatementProcess(label, set, c1));
             }).collect(Collectors.toList());
 
             String var = fresh("v");
             String tids = threads.stream()
                     .map(AbstractMap.SimpleEntry::getKey)
                     .collect(Collectors.joining(", "));
-            List<AST.Process> processes = threads.stream()
+            List<AST.Process> processesFromHere = threads.stream()
                     .map(AbstractMap.SimpleEntry::getValue)
                     .collect(Collectors.toList());
             wait.exp = tlaExpr("\\A %s \\in (%s \\X {%s}) : pc[%s] = \"Done\"", var, which.partySet, tids, var);
             wait.lbl = label;
-//           TODO recurse into proc?
-            return new WithProc<>(wait, processes);
-        } else {
+
+            newProcesses.addAll(processesFromHere);
+            return new WithProc<>(wait, newProcesses);
+        } else if (stmt instanceof AST.Task) {
+            AST.Task task = (AST.Task) stmt;
+            return expandParStatement(ctx, which, (Vector<AST>) task.Do).map(d -> {
+                AST.Task t1 = newTask(task);
+                t1.Do = d;
+                return t1;
+            });
+        } else if (stmt instanceof AST.All) {
+            AST.All task = (AST.All) stmt;
+            return expandParStatement(ctx, which, (Vector<AST>) task.Do).map(d -> {
+                AST.All t1 = newAll(task);
+                t1.Do = d;
+                return t1;
+            });
+        } else if (stmt instanceof AST.LabelEither) {
+            AST.LabelEither task = (AST.LabelEither) stmt;
+            return expandParStatement(ctx, which, (Vector<AST>) task.clauses).map(c -> {
+                AST.LabelEither t1 = newEither(task);
+                t1.clauses = c;
+                return t1;
+            });
+        } else if (stmt instanceof AST.Cancel ||
+                stmt instanceof AST.Assign ||
+                stmt instanceof AST.SingleAssign ||
+                stmt instanceof AST.When) {
             return new WithProc<>(stmt, List.of());
+        } else {
+            throw new IllegalArgumentException("expandParStatement: unhandled " + stmt.getClass().getSimpleName());
         }
+    }
+
+    private static WithProc<Vector<AST>> expandParStatement(Context ctx, Party which, Vector<AST> stmt) {
+        return WithProc.sequenceV(
+                stmt.stream().map(s -> expandParStatement(ctx, which, s))
+                        .collect(Collectors.toList()));
     }
 
     // Given an all statement, returns the await statement it is replaced with,
@@ -717,7 +968,7 @@ public class PlusCalExtensions {
                     .flatMap(s -> project(ctx, party, s).stream())
                     .collect(Collectors.toCollection(Vector::new));
             AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet,
-                    stmts1, new Vector(party.localVars));
+                    stmts1, new Vector<>(party.localVars));
             return new AbstractMap.SimpleEntry<>(party, process);
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
@@ -745,12 +996,8 @@ public class PlusCalExtensions {
                 result.addAll(projectAll(ctx, party, e.Do));
             } else {
                 // different role, keep quantifier
-                AST.All e1 = new AST.All();
-                e1.var = e.var;
-                e1.isEq = e.isEq;
-                e1.exp = e.exp;
+                AST.All e1 = newAll(e);
                 e1.Do = projectAll(ctx, party, e.Do);
-                copyInto(e1, e);
                 result.add(e1);
             }
 //        } else if (stmt instanceof AST.Either) {
@@ -760,25 +1007,21 @@ public class PlusCalExtensions {
 //            return e1;
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
-            AST.LabelEither e1 = new AST.LabelEither();
+            AST.LabelEither e1 = newEither(e);
             e1.clauses = projectAll(ctx, party, e.clauses);
-            copyInto(e1, e);
             result.add(e1);
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
-            AST.Par e1 = new AST.Par();
+            AST.Par e1 = newPar(e);
             e1.clauses = projectAll(ctx, party, e.clauses);
-            copyInto(e1, e);
             result.add(e1);
         } else if (stmt instanceof AST.Task) {
             AST.Task task = (AST.Task) stmt;
 //            boolean thisParty = cancellations.get(task.label).task.equals(party.partyVar);
             boolean thisParty = Printer.show(task.set).equals(party.partyVar);
             if (thisParty) {
-                AST.Task e1 = new AST.Task();
-                e1.label = task.label;
+                AST.Task e1 = newTask(task);
                 e1.Do = projectAll(ctx, party, task.Do);
-                copyInto(e1, task);
                 result.add(e1);
             } else {
 //                AST.Skip e2 = new AST.Skip();
@@ -789,14 +1032,12 @@ public class PlusCalExtensions {
             // TODO
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
-            AST.LabelIf e1 = new AST.LabelIf();
             // TODO check if test expressions all reside on same party
-            e1.test = e.test;
+            AST.LabelIf e1 = newIf(e);
             e1.unlabElse = projectAll(ctx, party, e.unlabElse);
             e1.unlabThen = projectAll(ctx, party, e.unlabThen);
             e1.labElse = projectAll(ctx, party, e.labElse);
             e1.labThen = projectAll(ctx, party, e.labThen);
-            copyInto(e1, e);
             result.add(e1);
         } else if (stmt instanceof AST.When) {
             AST.When e = (AST.When) stmt;
@@ -806,10 +1047,9 @@ public class PlusCalExtensions {
             result.add(e);
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
-            AST.Clause e1 = new AST.Clause();
+            AST.Clause e1 = newClause(e);
             e1.labOr = projectAll(ctx, party, e.labOr);
             e1.unlabOr = projectAll(ctx, party, e.unlabOr);
-            copyInto(e1, e);
             result.add(e1);
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
@@ -853,7 +1093,7 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel e = (AST.Cancel) stmt;
             AST e1;
-            if (party.partyVar.equals(e.task)) {
+            if (party.partyVar.equals(ctx.taskOwnership.get(e.task).partyVar)) {
                 AST.Cancel e2 = new AST.Cancel();
                 e2.task = e.task;
                 e1 = e2;
@@ -906,66 +1146,63 @@ public class PlusCalExtensions {
         return result;
     }
 
+    private static AST.Task newTask(AST.Task task) {
+        AST.Task e1 = new AST.Task();
+        e1.label = task.label;
+        e1.set = task.set;
+        e1.Do = task.Do;
+        copyInto(e1, task);
+        return e1;
+    }
+
     private static Vector<AST> transformCancellations(Vector<AST> stmts) {
         return stmts.stream()
                 .map(PlusCalExtensions::transformCancellations)
                 .collect(Collectors.toCollection(Vector::new));
     }
 
+
     private static AST transformCancellations(AST stmt) {
         if (stmt instanceof AST.All) {
             AST.All e = (AST.All) stmt;
-            AST.All e1 = new AST.All();
-            e1.var = e.var;
-            e1.isEq = e.isEq;
-            e1.exp = e.exp;
+            AST.All e1 = newAll(e);
             e1.Do = transformCancellations(e.Do);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
-            AST.LabelEither e1 = new AST.LabelEither();
+            AST.LabelEither e1 = newEither(e);
             e1.clauses = transformCancellations(e.clauses);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
-            AST.Par e1 = new AST.Par();
+            AST.Par e1 = newPar(e);
             e1.clauses = transformCancellations(e.clauses);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf e = (AST.LabelIf) stmt;
-            AST.LabelIf e1 = new AST.LabelIf();
-            e1.test = e.test;
+            AST.LabelIf e1 = newIf(e);
             e1.unlabElse = transformCancellations(e.unlabElse);
             e1.unlabThen = transformCancellations(e.unlabThen);
             e1.labElse = transformCancellations(e.labElse);
             e1.labThen = transformCancellations(e.labThen);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.When) {
             return stmt;
         } else if (stmt instanceof AST.With) {
             AST.With e = (AST.With) stmt;
-            AST.With e1 = new AST.With();
-            e1.var = e.var;
+            AST.With e1 = newWith(e);
             e1.Do = transformCancellations(e.Do);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Task) {
             AST.Task e = (AST.Task) stmt;
-            AST.Task e1 = new AST.Task();
-            e1.label = e.label;
+            AST.Task e1 = newTask(e);
             e1.Do = transformCancellations(e.Do);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
-            AST.Clause e1 = new AST.Clause();
+            AST.Clause e1 = newClause(e);
             e1.labOr = transformCancellations(e.labOr);
             e1.unlabOr = transformCancellations(e.unlabOr);
-            copyInto(e1, e);
             return e1;
         } else if (stmt instanceof AST.Assign) {
             return stmt;
@@ -1000,11 +1237,41 @@ public class PlusCalExtensions {
         }
     }
 
-    public static AST.When convertTask(AST.Task task) {
-        AST.When when = new AST.When();
-        when.exp = tlaExpr("~ cancelled_%s", task.label);
-        when.setOrigin(task.getOrigin());
-        return when;
+    private static AST.Clause newClause(AST.Clause e) {
+        AST.Clause e1 = new AST.Clause();
+        e1.labOr = e.labOr;
+        e1.unlabOr = e.unlabOr;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.With newWith(AST.With e) {
+        AST.With e1 = new AST.With();
+        e1.var = e.var;
+        e1.Do = e.Do;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.LabelIf newIf(AST.LabelIf e) {
+        AST.LabelIf e1 = new AST.LabelIf();
+        e1.test = e.test;
+        e1.labThen = e.labThen;
+        e1.labElse = e.labElse;
+        e1.unlabThen = e.unlabThen;
+        e1.unlabElse = e.unlabElse;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.All newAll(AST.All e) {
+        AST.All e1 = new AST.All();
+        e1.var = e.var;
+        e1.isEq = e.isEq;
+        e1.exp = e.exp;
+        e1.Do = e.Do;
+        copyInto(e1, e);
+        return e1;
     }
 
     /**

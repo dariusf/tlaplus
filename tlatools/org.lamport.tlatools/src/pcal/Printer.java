@@ -6,10 +6,6 @@ import java.util.Vector;
 import java.util.stream.Collectors;
 
 public class Printer {
-    public static void print(int indent, AST p) {
-        System.out.println(show(indent, p));
-    }
-
     public static String show(TLAExpr p) {
         return ((Vector<Vector<TLAToken>>) p.tokens).stream()
                 .map(t -> t.stream().map(t1 -> {
@@ -23,25 +19,32 @@ public class Printer {
                 .collect(Collectors.joining(" ")); // each line
     }
 
+    public static String show(AST p) {
+        return showLines(0, p).stream().collect(Collectors.joining("\n"));
+    }
+
     // PlusCal statements are printed with no trailing newline
     // Expressions are TLAExprs
-    public static String show(int indent, AST p) {
+    private static List<String> showLines(int indent, AST p) {
         List<String> result = new ArrayList<>();
         if (p.lbl != null && !p.lbl.isEmpty()) {
             result.add("%s:".formatted(p.lbl));
         }
         if (p instanceof AST.Process) {
             AST.Process p1 = (AST.Process) p;
-            String decls = p1.decls.isEmpty() ? "" :
-                    ("\n" + indentStr(1, "variables") + "\n" +
-                            indentLines(2, ((Vector<AST.VarDecl>) p1.decls).stream()
-                                    .map(d -> String.format("%s %s %s;", d.var, d.isEq ? "=" : "in", show(d.val)))
-                                    .collect(Collectors.toList())));
-            String body = ((Vector<AST>) p1.body).stream()
-                    .map(b -> show(1, (AST) b))
-                    .collect(Collectors.joining(";\n"));
-            result.add(String.format("process (%s %s %s)%s\n{\n%s\n}",
-                    p1.name, p1.isEq ? "=" : "\\in", show(p1.id), decls, body));
+            result.add(String.format("process (%s %s %s)",
+                    p1.name, p1.isEq ? "=" : "\\in", show(p1.id)));
+            if (!p1.decls.isEmpty()) {
+                result.add(indentStr(1, "variables"));
+                result.addAll(indentLines(2, ((Vector<AST.VarDecl>) p1.decls).stream()
+                        .map(d -> String.format("%s %s %s;", d.var, d.isEq ? "=" : "in", show(d.val)))
+                        .collect(Collectors.toList())));
+            }
+            result.add("{");
+            ((Vector<AST>) p1.body).stream()
+                    .flatMap(b -> showLines(1, (AST) b).stream())
+                    .forEach(b -> result.add(b));
+            result.add("}");
         } else if (p instanceof AST.Assign) {
             Vector<AST.SingleAssign> ass = ((AST.Assign) p).ass;
             ass.forEach(a -> result.add(String.format("%s := %s;", a.lhs.var, show(a.rhs))));
@@ -50,21 +53,35 @@ public class Printer {
         } else if (p instanceof AST.All) {
             AST.All p1 = (AST.All) p;
             result.add(String.format("all (%s %s %s) {", p1.var, p1.isEq ? "=" : "\\in", show(p1.exp)));
-            ((Vector<AST>) p1.Do).forEach(b -> result.add(show(1, b)));
+            ((Vector<AST>) p1.Do).forEach(b -> result.addAll(showLines(1, b)));
             result.add("}");
         } else if (p instanceof AST.Clause) {
             AST.Clause p1 = (AST.Clause) p;
             Vector<AST> stmts = p1.unlabOr != null && !p1.unlabOr.isEmpty() ? p1.unlabOr : p1.labOr;
-            stmts.forEach(s -> result.add(show(0, s)));
+            stmts.forEach(s -> result.addAll(showLines(0, s)));
         } else if (p instanceof AST.Par) {
             AST.Par p1 = (AST.Par) p;
             result.add("par {");
-            result.add(show(1, ((Vector<AST>) p1.clauses).get(0)));
+            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(0)));
             result.add("} and {");
-            result.add(show(1, ((Vector<AST>) p1.clauses).get(1)));
+            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(1)));
+            result.add("}");
+        } else if (p instanceof AST.LabelIf) {
+            AST.LabelIf p1 = (AST.LabelIf) p;
+            result.add(String.format("if (%s) {", show(p1.test)));
+            ((Vector<AST>) p1.unlabThen).forEach(b -> result.addAll(showLines(1, b)));
+            result.add("} else {");
+            ((Vector<AST>) p1.unlabElse).forEach(b -> result.addAll(showLines(1, b)));
+            result.add("}");
+        } else if (p instanceof AST.Task) {
+            AST.Task p1 = (AST.Task) p;
+            result.add(String.format("task %s, %s {", show(p1.set), p1.label));
+            ((Vector<AST>) p1.Do).forEach(s -> result.addAll(showLines(1, s)));
             result.add("}");
         } else if (p instanceof AST.Skip) {
             result.add("skip;");
+        } else if (p instanceof AST.Cancel) {
+            result.add(String.format("cancel %s;", ((AST.Cancel) p).task));
         } else if (p instanceof AST.MacroCall) {
             AST.MacroCall p1 = (AST.MacroCall) p;
             result.add(String.format("%s(%s)",
@@ -91,7 +108,11 @@ public class Printer {
         return spaces(n * 2, " ") + s;
     }
 
-    public static String indentLines(int indent, List<String> result) {
-        return result.stream().map(l -> indentStr(indent, l)).collect(Collectors.joining("\n"));
+//    public static String indentLines(int indent, List<String> result) {
+//        return result.stream().map(l -> indentStr(indent, l)).collect(Collectors.joining("\n"));
+//    }
+
+    public static List<String> indentLines(int indent, List<String> result) {
+        return result.stream().map(l -> indentStr(indent, l)).collect(Collectors.toList());
     }
 }
