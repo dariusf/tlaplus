@@ -3,7 +3,6 @@ package pcal;
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
 import tlc2.mbtc.Pair;
-import tlc2.util.Vect;
 
 import java.util.*;
 import java.util.function.Function;
@@ -260,6 +259,9 @@ public class PlusCalExtensions {
         Map<String, Role> quantified = computeOwnership(ctx, stmts);
         ctx.ownership.putAll(quantified);
         Map<Role, AST.Process> res = project(ctx, stmts);
+        res = res.entrySet().stream()
+                .collect(Collectors.toMap(e -> e.getKey(),
+                        e -> (AST.Process) normalize(e.getValue())));
 
         res.entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
@@ -1204,6 +1206,101 @@ public class PlusCalExtensions {
     private static Vector<AST> subst(String var, String with, Vector<AST> stmts) {
         return stmts.stream().map(s -> subst(var, with, s))
                 .collect(Collectors.toCollection(Vector::new));
+    }
+
+    private static AST normalizeStep(AST in) {
+        if (in instanceof AST.Process) {
+            AST.Process proc = (AST.Process) in;
+            Vector<AST> body = normalizeStep(proc.body);
+            AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, body, proc.decls);
+            return proc1;
+        } else if (in instanceof AST.All) {
+            AST.All a = (AST.All) in;
+            Vector<AST> stmts = ((Vector<AST>) a.Do).stream()
+                    .filter(b -> !(b instanceof AST.Skip))
+                    .collect(Collectors.toCollection(Vector::new));
+            if (stmts.isEmpty()) {
+                AST.Skip skip = new AST.Skip();
+                skip.setOrigin(in.getOrigin());
+                return skip;
+            }
+            AST.All a1 = newAll(a);
+            a1.Do = normalizeStep(stmts);
+            return a1;
+        } else if (in instanceof AST.Par) {
+            AST.Par a = (AST.Par) in;
+            Vector<AST> clauses = ((Vector<AST>) a.clauses).stream()
+                    .map(c -> normalizeStep(c))
+                    .filter(c -> {
+                        AST.Clause cl = (AST.Clause) c;
+                        if (cl.unlabOr != null) {
+                            return !cl.unlabOr.isEmpty();
+                        } else {
+                            return !cl.labOr.isEmpty();
+                        }
+                    })
+                    .collect(Collectors.toCollection(Vector::new));
+            if (clauses.isEmpty()) {
+                AST.Skip skip = new AST.Skip();
+                skip.setOrigin(in.getOrigin());
+                return skip;
+            } else if (clauses.size() == 1) {
+                AST.Clause cl = (AST.Clause) clauses.get(0);
+                if (cl.unlabOr != null) {
+                    if (cl.unlabOr.size() != 1) {
+                        throw new IllegalArgumentException("clause has more things than can be returned");
+                    }
+                    return (AST) cl.unlabOr.get(0);
+                } else {
+                    if (cl.labOr.size() != 1) {
+                        throw new IllegalArgumentException("clause has more things than can be returned");
+                    }
+                    return (AST) cl.labOr.get(0);
+                }
+            }
+            AST.Par a1 = newPar(a);
+            a1.clauses = clauses;
+            return a1;
+        } else if (in instanceof AST.MacroCall ||
+                in instanceof AST.Skip) {
+            // nothing
+            return in;
+        } else if (in instanceof AST.Clause) {
+            AST.Clause i = newClause((AST.Clause) in);
+            if (i.unlabOr != null) {
+                i.unlabOr = normalizeStep((Vector<AST>) i.unlabOr).stream()
+                        .filter(b -> !(b instanceof AST.Skip))
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                i.labOr = normalizeStep((Vector<AST>) i.labOr).stream()
+                        .filter(b -> !(b instanceof AST.Skip))
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return i;
+        } else {
+            throw new IllegalArgumentException("normalizeStep: unimplemented " + in.getClass().getSimpleName());
+        }
+    }
+
+    private static Vector<AST> normalizeStep(Vector<AST> stmts) {
+        return stmts.stream().map(s -> normalizeStep(s))
+                .collect(Collectors.toCollection(Vector::new));
+    }
+
+    static AST normalize(AST a) {
+        AST a1 = normalizeStep(a);
+//        System.out.println(Printer.show(a));
+//        System.out.println("---");
+//        System.out.println(Printer.show(a1));
+        while (!Printer.show(a).equals(Printer.show(a1))) {
+            a = a1;
+            a1 = normalizeStep(a);
+//            System.out.println(Printer.show(a));
+//            System.out.println("---");
+//            System.out.println(Printer.show(a1));
+            int x = 1;
+        }
+        return a1;
     }
 
     /**

@@ -65,10 +65,15 @@ public class Printer {
             stmts.forEach(s -> result.addAll(showLines(0, s)));
         } else if (p instanceof AST.Par) {
             AST.Par p1 = (AST.Par) p;
+            if (p1.clauses.size() < 2) {
+                throw new IllegalArgumentException("invalid par");
+            }
             result.add("par {");
-            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(0)));
-            result.add("} and {");
-            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(1)));
+            for (int i=0; i<p1.clauses.size()-1; i++) {
+                result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(0)));
+                result.add("} and {");
+            }
+            result.addAll(showLines(1, ((Vector<AST>) p1.clauses).get(p1.clauses.size() - 1)));
             result.add("}");
         } else if (p instanceof AST.LabelEither) {
             AST.LabelEither p1 = (AST.LabelEither) p;

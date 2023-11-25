@@ -41,116 +41,78 @@ CONSTANTS p1, p2, coord
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "246ea10" /\ chksum(tla) = "e7db024d")
+\* BEGIN TRANSLATION (chksum(pcal) = "94a9e80" /\ chksum(tla) = "b6e5fee2")
 VARIABLES ps, messages, pc
 
 vars == << ps, messages, pc >>
 
-ProcSet == ((participants \X {"P_par_5"})) \cup ((participants \X participants \ { p , self })) \cup ((participants \X {"P_par_7"})) \cup ((participants \X participants \ { self })) \cup ((participants \X {"P_par_1"})) \cup ((participants \X participants \ { self })) \cup ((participants \X {"P_par_3"})) \cup (participants)
+ProcSet == ((participants \X participants \ { self })) \cup (participants) \cup ((qs \X ps)) \cup (qs) \cup ((ps \X qs)) \cup (ps)
 
 Init == (* Global variables *)
         /\ ps = {p1, p2}
         /\ messages = {}
-        /\ pc = [self \in ProcSet |-> CASE self \in (participants \X {"P_par_5"}) -> "Lbl_1"
-                                        [] self \in (participants \X participants \ { p , self }) -> "Lbl_2"
-                                        [] self \in (participants \X {"P_par_7"}) -> "Lbl_3"
-                                        [] self \in (participants \X participants \ { self }) -> "Lbl_4"
-                                        [] self \in (participants \X {"P_par_1"}) -> "Lbl_5"
-                                        [] self \in (participants \X participants \ { self }) -> "Lbl_6"
-                                        [] self \in (participants \X {"P_par_3"}) -> "Lbl_7"
-                                        [] self \in participants -> "par_0"]
+        /\ pc = [self \in ProcSet |-> CASE self \in (participants \X participants \ { self }) -> "Lbl_1"
+                                        [] self \in participants -> "fork_0"
+                                        [] self \in (qs \X ps) -> "Lbl_2"
+                                        [] self \in qs -> "fork_2"
+                                        [] self \in (ps \X qs) -> "Lbl_3"
+                                        [] self \in ps -> "fork_4"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ pc[Head(self)] = "par_4"
-               /\ [To |-> self, From |-> p, Type |-> "prepare"] \in messages
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << ps, messages >>
-
-proc_6(self) == Lbl_1(self)
-
-Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Head(self)] = "fork_12"
-               /\ TRUE
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << ps, messages >>
-
-proc_13(self) == Lbl_2(self)
-
-Lbl_3(self) == /\ pc[self] = "Lbl_3"
-               /\ pc[Head(self)] = "par_4"
-               /\ pc' = [pc EXCEPT ![self] = "fork_12"]
-               /\ UNCHANGED << ps, messages >>
-
-fork_12(self) == /\ pc[self] = "fork_12"
-                 /\ \A q \in (participants \X participants \ { p , self }) : pc[q] = "Done"
-                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                 /\ UNCHANGED << ps, messages >>
-
-proc_8(self) == Lbl_3(self) \/ fork_12(self)
-
-Lbl_4(self) == /\ pc[self] = "Lbl_4"
-               /\ pc[Head(self)] = "fork_14"
+               /\ pc[Head(self)] = "fork_0"
                /\ messages' = (messages \union {[To |-> q, From |-> self, Type |-> "prepare"]})
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ ps' = ps
 
-proc_15(self) == Lbl_4(self)
+proc_1(self) == Lbl_1(self)
 
-Lbl_5(self) == /\ pc[self] = "Lbl_5"
-               /\ pc[Head(self)] = "par_0"
-               /\ pc' = [pc EXCEPT ![self] = "fork_14"]
-               /\ UNCHANGED << ps, messages >>
+fork_0(self) == /\ pc[self] = "fork_0"
+                /\ \A q \in (participants \X participants \ { self }) : pc[q] = "Done"
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << ps, messages >>
 
-fork_14(self) == /\ pc[self] = "fork_14"
-                 /\ \A q \in (participants \X participants \ { self }) : pc[q] = "Done"
-                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                 /\ UNCHANGED << ps, messages >>
+P(self) == fork_0(self)
 
-proc_2(self) == Lbl_5(self) \/ fork_14(self)
-
-Lbl_6(self) == /\ pc[self] = "Lbl_6"
-               /\ pc[Head(self)] = "fork_16"
-               /\ pc' = [pc EXCEPT ![self] = "par_4"]
-               /\ UNCHANGED << ps, messages >>
-
-par_4(self) == /\ pc[self] = "par_4"
-               /\ \A v_9 \in (participants \X {"P_par_5", "P_par_7"}) : pc[v_9] = "Done"
+Lbl_2(self) == /\ pc[self] = "Lbl_2"
+               /\ pc[Head(self)] = "fork_2"
+               /\ [To |-> self, From |-> p, Type |-> "prepare"] \in messages
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << ps, messages >>
 
-proc_17(self) == Lbl_6(self) \/ par_4(self)
+proc_3(self) == Lbl_2(self)
 
-Lbl_7(self) == /\ pc[self] = "Lbl_7"
-               /\ pc[Head(self)] = "par_0"
-               /\ pc' = [pc EXCEPT ![self] = "fork_16"]
-               /\ UNCHANGED << ps, messages >>
+fork_2(self) == /\ pc[self] = "fork_2"
+                /\ \A p \in (qs \X ps) : pc[p] = "Done"
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << ps, messages >>
 
-fork_16(self) == /\ pc[self] = "fork_16"
-                 /\ \A p \in (participants \X participants \ { self }) : pc[p] = "Done"
-                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                 /\ UNCHANGED << ps, messages >>
+Q(self) == fork_2(self)
 
-proc_10(self) == Lbl_7(self) \/ fork_16(self)
-
-par_0(self) == /\ pc[self] = "par_0"
-               /\ \A v_11 \in (participants \X {"P_par_1", "P_par_3"}) : pc[v_11] = "Done"
+Lbl_3(self) == /\ pc[self] = "Lbl_3"
+               /\ pc[Head(self)] = "fork_4"
+               /\ messages' = (messages \union {[To |-> q, From |-> self, Type |-> "prepare"]})
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << ps, messages >>
+               /\ ps' = ps
 
-P(self) == par_0(self)
+proc_5(self) == Lbl_3(self)
+
+fork_4(self) == /\ pc[self] = "fork_4"
+                /\ \A q \in (ps \X qs) : pc[q] = "Done"
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << ps, messages >>
+
+P1(self) == fork_4(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
-Next == (\E self \in (participants \X {"P_par_5"}): proc_6(self))
-           \/ (\E self \in (participants \X participants \ { p , self }): proc_13(self))
-           \/ (\E self \in (participants \X {"P_par_7"}): proc_8(self))
-           \/ (\E self \in (participants \X participants \ { self }): proc_15(self))
-           \/ (\E self \in (participants \X {"P_par_1"}): proc_2(self))
-           \/ (\E self \in (participants \X participants \ { self }): proc_17(self))
-           \/ (\E self \in (participants \X {"P_par_3"}): proc_10(self))
+Next == (\E self \in (participants \X participants \ { self }): proc_1(self))
            \/ (\E self \in participants: P(self))
+           \/ (\E self \in (qs \X ps): proc_3(self))
+           \/ (\E self \in qs: Q(self))
+           \/ (\E self \in (ps \X qs): proc_5(self))
+           \/ (\E self \in ps: P1(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars
