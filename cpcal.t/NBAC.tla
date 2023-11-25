@@ -1,12 +1,12 @@
---------------------- MODULE TwoPhaseCommit ----------------------
+--------------------- MODULE NBAC ----------------------
 EXTENDS Naturals, TLC, Sequences
 
-CONSTANTS p1, p2, c
+CONSTANTS p1, p2, f
 
-(* --algorithm TwoPhaseCommit {
+(* --algorithm NBAC {
   variables
     participants = {p1, p2};
-    coordinators = {c};
+    failure_detectors = {f};
     messages = {};
 
   macro Send(from, to, type) {
@@ -18,29 +18,46 @@ CONSTANTS p1, p2, c
   }
 
   choreography
-    (C = c);
-    (P \in participants);
+    (F \in failure_detectors),
+    (P \in participants)
+    variables
+      voted_yes = {},
+      voted_no = FALSE,
+      outcome = "none";
   {
-    task C, "phase1" {
-      all (p \in participants) {
-        Transmit(c, p, "prepare");
-        either {
-          Transmit(p, c, "prepared");
-        } or {
-          Transmit(p, c, "aborted");
-          cancel "phase1";
+    par {
+      task P, "votes" {
+        all (p \in participants) {
+          all (q \in participants) {
+            either {
+              Transmit(p, q, "yes");
+              voted_yes[q] := voted_yes[q] \cup {p};
+            } or {
+              Transmit(p, q, "no");
+              voted_no[q] := TRUE;
+              cancel "votes";
+            }
+          }
         }
       }
-    };
-    if (aborted) {
+    } and {
       all (p \in participants) {
-        Transmit(c, p, "abort");
-        Transmit(p, c, "aborted");
+        either {
+          await voted_no \/ some_failed; \* ?
+          outcome := "abort";
+        } or {
+          await voted_yes = participants;
+          outcome := "commit";
+        }
       }
-    } else {
-      all (p \in participants) {
-        Transmit(c, p, "commit");
-        Transmit(p, c, "committed");
+    } and {
+      all (f \in failure_detectors) {
+        all (p \in participants) {
+          all (q \in participants \ {p}) {
+            Transmit(f, p, <<"failed", q>>);
+            some_failed[p] := TRUE;
+          }
+        }
       }
     }
   }

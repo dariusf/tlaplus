@@ -2,6 +2,8 @@ package pcal;
 
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
+import tlc2.mbtc.Pair;
+import tlc2.util.Vect;
 
 import java.util.*;
 import java.util.function.Function;
@@ -12,14 +14,14 @@ import static pcal.ParseAlgorithm.*;
 
 public class PlusCalExtensions {
 
-    private static class Party {
+    private static class Role {
         final String partyVar;
         final boolean equalOrIn;
         final TLAExpr partySet;
 
         final List<AST.VarDecl> localVars;
 
-        private Party(String partyVar, boolean equalOrIn, TLAExpr partySet, List<AST.VarDecl> localVars) {
+        private Role(String partyVar, boolean equalOrIn, TLAExpr partySet, List<AST.VarDecl> localVars) {
             this.partyVar = partyVar;
             this.equalOrIn = equalOrIn;
             this.partySet = partySet;
@@ -30,20 +32,30 @@ public class PlusCalExtensions {
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Party party = (Party) o;
-            return equalOrIn == party.equalOrIn && Objects.equals(partyVar, party.partyVar) && Objects.equals(partySet, party.partySet) && Objects.equals(localVars, party.localVars);
+            Role role = (Role) o;
+            return equalOrIn == role.equalOrIn && Objects.equals(partyVar, role.partyVar) && Objects.equals(partySet, role.partySet) && Objects.equals(localVars, role.localVars);
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(partyVar, equalOrIn, partySet, localVars);
         }
+
+        @Override
+        public String toString() {
+            return "Party{" +
+                    "partyVar='" + partyVar + '\'' +
+                    ", equalOrIn=" + equalOrIn +
+                    ", partySet=" + partySet +
+                    ", localVars=" + localVars +
+                    '}';
+        }
     }
 
     static class Context {
 
         // task id -> Party
-        Map<String, Party> taskOwnership;
+        Map<String, Role> taskOwnership;
 
         // TODO remove
         Map<String, AST.Cancel> cancellations;
@@ -51,13 +63,20 @@ public class PlusCalExtensions {
         Vector<AST.VarDecl> globals;
 
         // party task id variable -> party
-        Map<String, Party> partyDecls;
+        Map<String, Role> roleDecls;
 
         // variable -> party
-        Map<String, Party> ownership;
+        Map<String, Role> ownership;
 
         // For things like while, which use positional expressions for parties
-        List<Party> partiesOrdered;
+        List<Role> partiesOrdered;
+
+        // Relations from the paper
+        // expression -> role
+        Map<String, Role> role;
+        // expression -> role
+        Map<String, Role> party;
+        // loc is stored in party decl
     }
 
     public static AST GetAll(int depth) throws ParseAlgorithmException {
@@ -176,7 +195,7 @@ public class PlusCalExtensions {
 
         Context ctx = new Context();
         ctx.globals = globals;
-        ctx.partyDecls = new HashMap<>();
+        ctx.roleDecls = new HashMap<>();
         ctx.ownership = new HashMap<>();
         ctx.partiesOrdered = new ArrayList<>();
 
@@ -195,12 +214,12 @@ public class PlusCalExtensions {
                 // be consumed by var decls
                 GobbleCommaOrSemicolon();
             }
-            Party party = new Party(partyVar, eqOrIn, partySet, localVars);
-            ctx.partyDecls.put(partyVar, party);
-            ctx.partiesOrdered.add(party);
+            Role role = new Role(partyVar, eqOrIn, partySet, localVars);
+            ctx.roleDecls.put(partyVar, role);
+            ctx.partiesOrdered.add(role);
             if (eqOrIn) { // is equal
                 // add constant exprs to ownership
-                ctx.ownership.put(tlaExprAsVar(partySet), party);
+                ctx.ownership.put(tlaExprAsVar(partySet), role);
             }
         }
 
@@ -230,9 +249,17 @@ public class PlusCalExtensions {
         // don't transform away cancellations until after projection
 
         // Ownership and projection
-        Map<String, Party> quantified = computeOwnership(ctx, stmts);
+        ctx.role = new HashMap<>();
+        ctx.party = new HashMap<>();
+        ctx.roleDecls.values().forEach(r -> {
+//            r.localVars.forEach(v -> {
+//                ctx.role.put(v.var, r);
+//            });
+            ctx.role.put(Printer.show(r.partySet), r);
+        });
+        Map<String, Role> quantified = computeOwnership(ctx, stmts);
         ctx.ownership.putAll(quantified);
-        Map<Party, AST.Process> res = project(ctx, stmts);
+        Map<Role, AST.Process> res = project(ctx, stmts);
 
         res.entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
@@ -259,11 +286,11 @@ public class PlusCalExtensions {
         return res1;
     }
 
-    private static void findTasks(Context ctx, Map<String, Party> tasks, Vector<AST> stmts) {
+    private static void findTasks(Context ctx, Map<String, Role> tasks, Vector<AST> stmts) {
         stmts.forEach(s -> findTasks(ctx, tasks, s));
     }
 
-    private static void findTasks(Context ctx, Map<String, Party> res, AST stmt) {
+    private static void findTasks(Context ctx, Map<String, Role> res, AST stmt) {
         if (stmt instanceof AST.All) {
             findTasks(ctx, res, ((AST.All) stmt).Do);
         } else if (stmt instanceof AST.LabelEither) {
@@ -279,7 +306,7 @@ public class PlusCalExtensions {
             findTasks(ctx, res, ((AST.With) stmt).Do);
         } else if (stmt instanceof AST.Task) {
             AST.Task task = (AST.Task) stmt;
-            res.put(task.taskId, ctx.partyDecls.get(Printer.show(task.partyId)));
+            res.put(task.taskId, ctx.roleDecls.get(Printer.show(task.partyId)));
             findTasks(ctx, res, task.Do);
         } else if (stmt instanceof AST.While) {
             AST.While w = (AST.While) stmt;
@@ -507,6 +534,7 @@ public class PlusCalExtensions {
 
     private static AST.Par newPar(AST.Par e) {
         AST.Par e1 = new AST.Par();
+        e1.clauses = e.clauses;
         copyInto(e1, e);
         return e1;
     }
@@ -634,7 +662,7 @@ public class PlusCalExtensions {
     /**
      * Expand occurrences of par statements in a process
      */
-    private static List<AST.Process> expandParStatement(Party which, AST.Process proc) {
+    private static List<AST.Process> expandParStatement(Role which, AST.Process proc) {
         return transformProcessBody(proc, s -> expandParStatement(which, s));
     }
 
@@ -662,8 +690,8 @@ public class PlusCalExtensions {
         return newProcesses;
     }
 
-    private static List<AST.Process> expandAllStatement(Party party, AST.Process proc) {
-        return transformProcessBody(proc, s -> expandAllStatement(party, s));
+    private static List<AST.Process> expandAllStatement(Role role, AST.Process proc) {
+        return transformProcessBody(proc, s -> expandAllStatement(role, s));
     }
 
     private static AST.Process createProcess(String name, boolean isEq, TLAExpr id,
@@ -756,7 +784,7 @@ public class PlusCalExtensions {
         }
      }
      */
-    private static AST.Process allStatementProcess(Party party, String label,
+    private static AST.Process allStatementProcess(Role role, String label,
                                                    String q, TLAExpr qs, Vector<AST> body) {
         AST.When await = new AST.When();
         await.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
@@ -766,14 +794,14 @@ public class PlusCalExtensions {
         body1.add(await);
         body1.addAll(body);
 
-        TLAExpr product = tlaExpr("(%s \\X %s)", party.partySet, qs);
+        TLAExpr product = tlaExpr("(%s \\X %s)", role.partySet, qs);
         return createProcess(fresh("proc"), false, product, body1, new Vector<>());
     }
 
     /**
      * Called for each statement of a process, which may generate more processes
      */
-    private static WithProc<AST> expandParStatement(Party which, AST stmt) {
+    private static WithProc<AST> expandParStatement(Role which, AST stmt) {
         if (stmt instanceof AST.Par) {
             // This could be translated into an All over a constant set with an if in each branch,
             // but then the output would be significantly uglier, so we do it in a simple way
@@ -905,7 +933,7 @@ public class PlusCalExtensions {
         }
     }
 
-    private static WithProc<Vector<AST>> expandParStatement(Party which, Vector<AST> stmt) {
+    private static WithProc<Vector<AST>> expandParStatement(Role which, Vector<AST> stmt) {
         return WithProc.sequenceV(
                 stmt.stream().map(s -> expandParStatement(which, s))
                         .collect(Collectors.toList()));
@@ -913,43 +941,43 @@ public class PlusCalExtensions {
 
     // Given an all statement, returns the await statement it is replaced with,
     // together with the process created to support it
-    private static WithProc<AST> expandAllStatement(Party party, AST stmt) {
+    private static WithProc<AST> expandAllStatement(Role role, AST stmt) {
         if (stmt instanceof AST.All) {
             AST.All all = (AST.All) stmt;
             AST.When wait = new AST.When();
             wait.setOrigin(stmt.getOrigin());
             wait.exp = tlaExpr("\\A %s %s (%s \\X %s) : pc[%s] = \"Done\"",
                     all.var, all.isEq ? "=" : "\\in",
-                    party.partySet, all.exp,
+                    role.partySet, all.exp,
                     all.var);
             wait.lbl = fresh("fork");
 
             List<AST.Process> procs = new ArrayList<>();
-            return expandAllStatement(party, (Vector<AST>) all.Do).map(d -> {
-                AST.Process proc = allStatementProcess(party, wait.lbl, all.var, all.exp, d);
+            return expandAllStatement(role, (Vector<AST>) all.Do).map(d -> {
+                AST.Process proc = allStatementProcess(role, wait.lbl, all.var, all.exp, d);
                 procs.add(proc);
                 return (AST) wait;
             }).addAll(procs);
         } else if (stmt instanceof AST.Task) {
             AST.Task t = (AST.Task) stmt;
-            return expandAllStatement(party, (Vector<AST>) t.Do).map(d -> {
+            return expandAllStatement(role, (Vector<AST>) t.Do).map(d -> {
                 AST.Task t1 = newTask(t);
                 t1.Do = d;
                 return t1;
             });
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither t = (AST.LabelEither) stmt;
-            return expandAllStatement(party, (Vector<AST>) t.clauses).map(d -> {
+            return expandAllStatement(role, (Vector<AST>) t.clauses).map(d -> {
                 AST.LabelEither t1 = newEither(t);
                 t1.clauses = d;
                 return t1;
             });
         } else if (stmt instanceof AST.LabelIf) {
             AST.LabelIf task = (AST.LabelIf) stmt;
-            WithProc<Vector<AST>> c1 = expandAllStatement(party, (Vector<AST>) task.labThen);
-            WithProc<Vector<AST>> c2 = expandAllStatement(party, (Vector<AST>) task.labElse);
-            WithProc<Vector<AST>> c3 = expandAllStatement(party, (Vector<AST>) task.unlabThen);
-            WithProc<Vector<AST>> c4 = expandAllStatement(party, (Vector<AST>) task.unlabElse);
+            WithProc<Vector<AST>> c1 = expandAllStatement(role, (Vector<AST>) task.labThen);
+            WithProc<Vector<AST>> c2 = expandAllStatement(role, (Vector<AST>) task.labElse);
+            WithProc<Vector<AST>> c3 = expandAllStatement(role, (Vector<AST>) task.unlabThen);
+            WithProc<Vector<AST>> c4 = expandAllStatement(role, (Vector<AST>) task.unlabElse);
 
             AST.LabelIf t1 = newIf(task);
             t1.labThen = c1.thing;
@@ -968,13 +996,13 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Clause) {
             AST.Clause t = (AST.Clause) stmt;
             if (t.unlabOr != null) {
-                return expandAllStatement(party, (Vector<AST>) t.unlabOr).map(d -> {
+                return expandAllStatement(role, (Vector<AST>) t.unlabOr).map(d -> {
                     AST.Clause t1 = newClause(t);
                     t1.unlabOr = d;
                     return t1;
                 });
             } else {
-                return expandAllStatement(party, (Vector<AST>) t.labOr).map(d -> {
+                return expandAllStatement(role, (Vector<AST>) t.labOr).map(d -> {
                     AST.Clause t1 = newClause(t);
                     t1.labOr = d;
                     return t1;
@@ -983,13 +1011,13 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.While) {
             AST.While t = (AST.While) stmt;
             if (t.unlabDo != null) {
-                return expandAllStatement(party, (Vector<AST>) t.unlabDo).map(d -> {
+                return expandAllStatement(role, (Vector<AST>) t.unlabDo).map(d -> {
                     AST.While t1 = newWhile(t);
                     t1.unlabDo = d;
                     return t1;
                 });
             } else {
-                return expandAllStatement(party, (Vector<AST>) t.labDo).map(d -> {
+                return expandAllStatement(role, (Vector<AST>) t.labDo).map(d -> {
                     AST.While t1 = newWhile(t);
                     t1.labDo = d;
                     return t1;
@@ -1006,50 +1034,73 @@ public class PlusCalExtensions {
         }
     }
 
-    private static WithProc<Vector<AST>> expandAllStatement(Party which, Vector<AST> stmt) {
+    private static WithProc<Vector<AST>> expandAllStatement(Role which, Vector<AST> stmt) {
         return WithProc.sequenceV(
                 stmt.stream().map(s -> expandAllStatement(which, s))
                         .collect(Collectors.toList()));
     }
 
-    static Map<String, Party> computeOwnership(Context ctx,
-                                               Vector<AST> ast) {
-        Map<String, Party> result = new HashMap<>();
+    static Map<String, Role> computeOwnership(Context ctx,
+                                              Vector<AST> ast) {
+        Map<String, Role> result = new HashMap<>();
         ast.forEach(a -> {
             computeOwnership(ctx, result, a);
         });
         return result;
     }
 
-    static void computeOwnership(Context ctx, Map<String, Party> res, Vector<AST> ast) {
+    static void computeOwnership(Context ctx, Map<String, Role> res, Vector<AST> ast) {
         for (AST ast1 : ast) {
             computeOwnership(ctx, res, ast1);
         }
     }
 
-    static void computeOwnership(Context ctx, Map<String, Party> res, AST ast) {
+    static void computeOwnership(Context ctx, Map<String, Role> res, AST ast) {
         if (ast instanceof AST.All) {
             String var = ((AST.All) ast).var;
             TLAExpr exp = ((AST.All) ast).exp;
-            Optional<Party> first = ctx.partyDecls.values().stream()
+
+            Pair<String, Set<String>> setEx = interpretAsSetAndExclusions(exp);
+
+            // build party relation
+            Role role = ctx.role.get(setEx._1);
+            ctx.party.put(var, role);
+
+            Optional<Role> first = ctx.roleDecls.values().stream()
                     .filter(p -> p.partySet.toString().equals(exp.toString()))
                     .findFirst();
             if (first.isPresent()) {
                 res.put(var, first.get());
-                computeOwnership(ctx, res, ((AST.All) ast).Do);
             } else {
-                fail("non constant set quantified over " + exp);
+//                fail("non constant set quantified over " + exp);
             }
+            computeOwnership(ctx, res, ((AST.All) ast).Do);
         } else if (ast instanceof AST.Task) {
             computeOwnership(ctx, res, ((AST.Task) ast).Do);
         } else if (ast instanceof AST.LabelEither) {
             computeOwnership(ctx, res, ((AST.LabelEither) ast).clauses);
+        } else if (ast instanceof AST.Par) {
+            computeOwnership(ctx, res, ((AST.Par) ast).clauses);
         } else if (ast instanceof AST.MacroCall && ((AST.MacroCall) ast).name.equals("Transmit")) {
-            int a = 1;
+            // nothing
         } else if (ast instanceof AST.MacroCall) {
+            // nothing
+        } else if (ast instanceof AST.Cancel) {
+            // nothing
+        } else if (ast instanceof AST.Assign) {
+            // nothing
+        } else if (ast instanceof AST.When) {
+            // nothing
         } else if (ast instanceof AST.Clause) {
+            computeOwnership(ctx, res, ((AST.Clause) ast).labOr);
+            computeOwnership(ctx, res, ((AST.Clause) ast).unlabOr);
         } else if (ast instanceof AST.LabelIf) {
+            computeOwnership(ctx, res, ((AST.LabelIf) ast).unlabElse);
+            computeOwnership(ctx, res, ((AST.LabelIf) ast).unlabThen);
+            computeOwnership(ctx, res, ((AST.LabelIf) ast).labElse);
+            computeOwnership(ctx, res, ((AST.LabelIf) ast).labThen);
         } else if (ast instanceof AST.LabelEither) {
+            computeOwnership(ctx, res, ((AST.LabelEither) ast).clauses);
         } else {
             throw new IllegalArgumentException("computeOwnership: unhandled " + ast.getClass().getSimpleName());
         }
@@ -1060,45 +1111,168 @@ public class PlusCalExtensions {
         throw new Error(s);
     }
 
-    private static Map<Party, AST.Process> project(Context ctx, Vector<AST> stmts) {
-        return ctx.partyDecls.entrySet().stream().map(e -> {
-            Party party = e.getValue();
+    private static Map<Role, AST.Process> project(Context ctx, Vector<AST> stmts) {
+        return ctx.roleDecls.entrySet().stream().map(e -> {
+            Role role = e.getValue();
             Vector<AST> stmts1 = stmts.stream()
-                    .flatMap(s -> project(ctx, party, s).stream())
+                    .flatMap(s -> project(ctx, role, s).stream())
                     .collect(Collectors.toCollection(Vector::new));
-            AST.Process process = createProcess(party.partyVar, party.equalOrIn, party.partySet,
-                    stmts1, new Vector<>(party.localVars));
-            return new AbstractMap.SimpleEntry<>(party, process);
+            AST.Process process = createProcess(role.partyVar, role.equalOrIn, role.partySet,
+                    stmts1, new Vector<>(role.localVars));
+            return new AbstractMap.SimpleEntry<>(role, process);
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    // the role predicate from the paper, true iff e interpreted as a role is r
-    public static boolean exprRole(TLAExpr e, Party r) {
-        return equalModuloPrinting(e, r.partySet);
+    /**
+     * Parses a TLAExpr expression of the form: set \ {a, ...}.
+     * Sadly we have to resort to this because TLA expressions are represented
+     * opaquely at the PlusCal level.
+     */
+    static Pair<String, Set<String>> interpretAsSetAndExclusions(TLAExpr a) {
+        String s = Printer.show(a);
+        String[] split = s.split("\\s*\\\\\\s*");
+        if (split.length == 1) {
+            return new Pair<>(s, new HashSet<>());
+        }
+        Set<String> elts = Arrays.stream(split[1].split("\\s*[{},]\\s*"))
+                .filter(s1 -> !s1.isEmpty())
+                .collect(Collectors.toSet());
+        return new Pair<>(split[0], elts);
     }
 
-    public static boolean equalModuloPrinting(TLAExpr a, TLAExpr b) {
-        return Printer.show(a).equals(Printer.show(b));
+    static TLAExpr addExclusion(TLAExpr a, String v) {
+        Pair<String, Set<String>> setEx = interpretAsSetAndExclusions(a);
+        Set<String> n = new HashSet<>(setEx._2);
+        n.add(v);
+        return tlaExpr("%s \\ {%s}", setEx._1, n.stream().collect(Collectors.joining(",")));
     }
 
     /**
-     * Main projection function, splitting a statement into its local equivalent for the given party,
+     * sad
+     */
+    private static TLAExpr subst(String var, String with, TLAExpr in) {
+        TLAExpr copy = tlaExpr(Printer.show(in));
+        Vector<Vector<TLAToken>> tokens = copy.tokens;
+        for (Vector<TLAToken> b : tokens) {
+            for (TLAToken s : b) {
+                if (s.type == TLAToken.IDENT) {
+                    s.string = s.string.replaceAll("^" + var + "$", with);
+                }
+            }
+        }
+        return copy;
+    }
+
+    private static AST subst(String var, String with, AST in) {
+        if (in instanceof AST.All) {
+            AST.All a = newAll((AST.All) in);
+            if (a.var.equals(var)) {
+                a.var = with;
+            }
+            a.exp = subst(var, with, a.exp);
+            a.Do = subst(var, with, a.Do);
+            return a;
+        } else if (in instanceof AST.MacroCall) {
+            AST.MacroCall i = newMacroCall((AST.MacroCall) in);
+            i.args = ((Vector<TLAExpr>) i.args).stream()
+                    .map(a -> subst(var, with, a))
+                    .collect(Collectors.toCollection(Vector::new));
+            return i;
+        } else if (in instanceof AST.Par) {
+            AST.Par i = newPar((AST.Par) in);
+            i.clauses = ((Vector<AST>) i.clauses).stream()
+                    .map(c -> subst(var, with, c))
+                    .collect(Collectors.toCollection(Vector::new));
+            return i;
+        } else if (in instanceof AST.Clause) {
+            AST.Clause i = newClause((AST.Clause) in);
+            if (i.unlabOr != null) {
+                i.unlabOr = ((Vector<AST>) i.unlabOr).stream()
+                        .map(c -> subst(var, with, c))
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                i.labOr = ((Vector<AST>) i.labOr).stream()
+                        .map(c -> subst(var, with, c))
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return i;
+        } else {
+            throw new IllegalArgumentException("subst: unimplemented " + in.getClass().getSimpleName());
+        }
+    }
+
+    private static Vector<AST> subst(String var, String with, Vector<AST> stmts) {
+        return stmts.stream().map(s -> subst(var, with, s))
+                .collect(Collectors.toCollection(Vector::new));
+    }
+
+    /**
+     * Main projection function, splitting a statement into its local equivalent for the given role,
      * with ownership as context
      */
-    private static Vector<AST> project(Context ctx, Party party, AST stmt) {
+    private static Vector<AST> project(Context ctx, Role role, AST stmt) {
         Vector<AST> result = new Vector<>();
         // System.out.printf("project(%s, %s)\n", party.partyVar, stmt.getClass().getSimpleName());
         if (stmt instanceof AST.All) {
             AST.All e = (AST.All) stmt;
-            if (exprRole(e.exp, party)) {
-                // same role, so lose the quantifier
-                result.addAll(projectAll(ctx, party, e.Do));
+
+            Pair<String, Set<String>> setEx = interpretAsSetAndExclusions(e.exp);
+            Set<String> excl = setEx._2;
+
+            String ee = Printer.show(e);
+
+            // We use "self" as the name of arbitrary member of role
+            if (!excl.contains("self") && ctx.role.get(Printer.show(e.exp)) == role) {
+                // self could be inside, so use self-send projection
+
+                Vector<AST> left = projectAll(ctx, role, subst(e.var, "self", e.Do));
+                String l = Printer.show(left);
+
+                AST.All right = newAll((AST.All) stmt);
+                right.exp = addExclusion(right.exp, "self");
+                right.Do = projectAll(ctx, role, right.Do);
+
+                String r = Printer.show(right);
+
+                // build par
+                AST.Clause c1 = new AST.Clause();
+                c1.setOrigin(stmt.getOrigin());
+                c1.unlabOr = new Vector<>();
+                c1.unlabOr.addAll(left);
+
+                AST.Clause c2 = new AST.Clause();
+                c2.setOrigin(stmt.getOrigin());
+                c2.unlabOr = new Vector<>();
+                c2.unlabOr.add(right);
+
+                AST.Par par = new AST.Par();
+                par.clauses = new Vector<>();
+                par.clauses.add(c1);
+                par.clauses.add(c2);
+                par.setOrigin(stmt.getOrigin());
+
+                result.add(par);
             } else {
-                // different role, keep quantifier
+                // use homomorphic projection, i.e. keep the quantifier
                 AST.All e1 = newAll(e);
-                e1.Do = projectAll(ctx, party, e.Do);
+                e1.Do = projectAll(ctx, role, e.Do);
                 result.add(e1);
             }
+
+//            if (Printer.show(e.exp).contains("\\")) {
+//               int a = 1;
+//            }
+//
+//            if (ctx.role.get(Printer.show(e.exp)) == role) {
+//                // same role, so lose the quantifier
+//                result.addAll(projectAll(ctx, role, e.Do));
+//            } else {
+//                // different role, keep quantifier
+//                AST.All e1 = newAll(e);
+//                e1.Do = projectAll(ctx, role, e.Do);
+//                result.add(e1);
+//            }
+
 //        } else if (stmt instanceof AST.Either) {
 //            AST.Either e = (AST.Either) stmt;
 //            AST.Either e1 = new AST.Either();
@@ -1107,25 +1281,25 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.LabelEither) {
             AST.LabelEither e = (AST.LabelEither) stmt;
             AST.LabelEither e1 = newEither(e);
-            e1.clauses = projectAll(ctx, party, e.clauses);
+            e1.clauses = projectAll(ctx, role, e.clauses);
             result.add(e1);
         } else if (stmt instanceof AST.Par) {
             AST.Par e = (AST.Par) stmt;
             AST.Par e1 = newPar(e);
-            e1.clauses = projectAll(ctx, party, e.clauses);
+            e1.clauses = projectAll(ctx, role, e.clauses);
             result.add(e1);
         } else if (stmt instanceof AST.Task) {
             AST.Task task = (AST.Task) stmt;
 //            boolean thisParty = cancellations.get(task.label).task.equals(party.partyVar);
-            boolean thisParty = Printer.show(task.partyId).equals(party.partyVar);
+            boolean thisParty = Printer.show(task.partyId).equals(role.partyVar);
             if (thisParty) {
                 AST.Task e1 = newTask(task);
-                e1.Do = projectAll(ctx, party, task.Do);
+                e1.Do = projectAll(ctx, role, task.Do);
                 result.add(e1);
             } else {
 //                AST.Skip e2 = new AST.Skip();
 //                e2.setOrigin(stmt.getOrigin());
-                result.addAll(projectAll(ctx, party, task.Do));
+                result.addAll(projectAll(ctx, role, task.Do));
             }
 //        } else if (stmt instanceof AST.With) {
             // TODO
@@ -1133,10 +1307,10 @@ public class PlusCalExtensions {
             AST.LabelIf e = (AST.LabelIf) stmt;
             // TODO check if test expressions all reside on same party
             AST.LabelIf e1 = newIf(e);
-            e1.unlabElse = projectAll(ctx, party, e.unlabElse);
-            e1.unlabThen = projectAll(ctx, party, e.unlabThen);
-            e1.labElse = projectAll(ctx, party, e.labElse);
-            e1.labThen = projectAll(ctx, party, e.labThen);
+            e1.unlabElse = projectAll(ctx, role, e.unlabElse);
+            e1.unlabThen = projectAll(ctx, role, e.unlabThen);
+            e1.labElse = projectAll(ctx, role, e.labElse);
+            e1.labThen = projectAll(ctx, role, e.labThen);
             result.add(e1);
         } else if (stmt instanceof AST.When) {
             AST.When e = (AST.When) stmt;
@@ -1147,13 +1321,13 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = newClause(e);
-            e1.labOr = projectAll(ctx, party, e.labOr);
-            e1.unlabOr = projectAll(ctx, party, e.unlabOr);
+            e1.labOr = projectAll(ctx, role, e.labOr);
+            e1.unlabOr = projectAll(ctx, role, e.unlabOr);
             result.add(e1);
         } else if (stmt instanceof AST.Assign) {
             AST.Assign e = (AST.Assign) stmt;
             AST.Assign e1 = new AST.Assign();
-            e1.ass = new Vector<>(((Vector<AST>) projectAll(ctx, party, e.ass)).stream()
+            e1.ass = new Vector<>(((Vector<AST>) projectAll(ctx, role, e.ass)).stream()
                     // projection may create skips here; in that case drop those nodes
                     .filter(sa -> sa instanceof AST.SingleAssign)
                     .collect(Collectors.toList()));
@@ -1172,7 +1346,7 @@ public class PlusCalExtensions {
             // TODO check the rhs uses only expressions available on this party
 
             // try locals first
-            Optional<AST.VarDecl> first = party.localVars.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
+            Optional<AST.VarDecl> first = role.localVars.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
             if (first.isPresent()) {
                 result.add(e);
             } else {
@@ -1192,7 +1366,7 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel e = (AST.Cancel) stmt;
             AST e1;
-            if (party.partyVar.equals(ctx.taskOwnership.get(e.task).partyVar)) {
+            if (role.partyVar.equals(ctx.taskOwnership.get(e.task).partyVar)) {
                 AST.Cancel e2 = new AST.Cancel();
                 e2.task = e.task;
                 e1 = e2;
@@ -1205,7 +1379,7 @@ public class PlusCalExtensions {
 
             int index = -1;
             for (int i = 0; i < ctx.partiesOrdered.size(); i++) {
-                if (ctx.partiesOrdered.get(i).partyVar.equals(party.partyVar)) {
+                if (ctx.partiesOrdered.get(i).partyVar.equals(role.partyVar)) {
                     index = i;
                 }
             }
@@ -1219,27 +1393,27 @@ public class PlusCalExtensions {
             AST.While w1 = newWhile(w);
             w1.test = cond;
             w1.extraTests = new ArrayList<>();
-            w1.unlabDo = projectAll(ctx, party, w1.unlabDo);
-            w1.labDo = projectAll(ctx, party, w1.labDo);
+            w1.unlabDo = projectAll(ctx, role, w1.unlabDo);
+            w1.labDo = projectAll(ctx, role, w1.labDo);
             result.add(w1);
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Transmit")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
             String receiver = ithMacroArgAsVar((AST.MacroCall) stmt, 1);
-            boolean isSend = ctx.ownership.get(sender).partyVar.equals(party.partyVar);
-            boolean isRecv = ctx.ownership.get(receiver).partyVar.equals(party.partyVar);
+            if (sender.equals("self") && sender.equals(receiver)) {
+                throw new IllegalArgumentException("invalid projection");
+            }
+//            boolean isSend = !receiver.equals("self") && (sender.equals("self") || ctx.party.get(sender).partyVar.equals(role.partyVar));
+//            boolean isRecv = !sender.equals("self") && (receiver.equals("self") || ctx.party.get(receiver).partyVar.equals(role.partyVar));
+            boolean isSend = sender.equals("self");
+            boolean isRecv = receiver.equals("self");
             // expand to user-provided macros
             if (isSend) {
                 AST.MacroCall send = new AST.MacroCall();
                 send.setOrigin(stmt.getOrigin());
                 send.name = "Send";
                 send.args = new Vector<TLAExpr>();
+                send.args.add(tlaExpr("self"));
                 send.args.add(((AST.MacroCall) stmt).args.get(1));
-                // TODO use tlaExpr
-                TLAExpr e = new TLAExpr();
-                e.tokens = new Vector<>(); // lines
-                e.tokens.add(new Vector<>()); // add a line
-                e.addToken(new TLAToken("self", 0, TLAToken.IDENT, 0));
-                send.args.add(e);
                 send.args.add(((AST.MacroCall) stmt).args.get(2));
                 result.add(send);
             } else if (isRecv) {
@@ -1248,17 +1422,13 @@ public class PlusCalExtensions {
                 recv.name = "Receive";
                 recv.args = new Vector<TLAExpr>();
                 recv.args.add(((AST.MacroCall) stmt).args.get(0));
-                // TODO use tlaExpr
-                TLAExpr e = new TLAExpr();
-                e.tokens = new Vector<>(); // lines
-                e.tokens.add(new Vector<>()); // add a line
-                e.addToken(new TLAToken("self", 0, TLAToken.IDENT, 0));
-                recv.args.add(e);
+                recv.args.add(tlaExpr("self"));
                 recv.args.add(((AST.MacroCall) stmt).args.get(2));
                 result.add(recv);
             } else {
-                // TODO self-send
-                fail("TODO self-send");
+                AST.Skip skip = new AST.Skip();
+                skip.setOrigin(stmt.getOrigin());
+                result.add(skip);
             }
         } else {
             fail("unimplemented project(Party, AST) " + stmt);
@@ -1397,6 +1567,14 @@ public class PlusCalExtensions {
         return e1;
     }
 
+    private static AST.MacroCall newMacroCall(AST.MacroCall e) {
+        AST.MacroCall e1 = new AST.MacroCall();
+        e1.name = e.name;
+        e1.args = new Vector<>(e.args);
+        copyInto(e1, e);
+        return e1;
+    }
+
     private static AST.All newAll(AST.All e) {
         AST.All e1 = new AST.All();
         e1.var = e.var;
@@ -1420,9 +1598,9 @@ public class PlusCalExtensions {
     /**
      * To simplify recursive calls
      */
-    private static Vector<AST> projectAll(Context ctx, Party party, Vector<AST> all) {
+    private static Vector<AST> projectAll(Context ctx, Role role, Vector<AST> all) {
         return all.stream()
-                .flatMap(s -> project(ctx, party, s).stream())
+                .flatMap(s -> project(ctx, role, s).stream())
                 .collect(Collectors.toCollection(Vector::new));
     }
 

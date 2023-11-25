@@ -3,8 +3,8 @@ package tlc2.mbtc;
 import java.util.Objects;
 
 public class Pair<A, B> {
-    A _1;
-    B _2;
+    public A _1;
+    public B _2;
 
     public Pair(A _1, B _2) {
         this._1 = _1;

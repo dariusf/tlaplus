@@ -19,6 +19,10 @@ public class Printer {
                 .collect(Collectors.joining(" ")); // each line
     }
 
+    public static String show(Vector<AST> p) {
+        return p.stream().map(Printer::show).collect(Collectors.joining("\n"));
+    }
+
     public static String show(AST p) {
         return showLines(0, p).stream().collect(Collectors.joining("\n"));
     }
@@ -92,7 +96,7 @@ public class Printer {
             result.add("}");
         } else if (p instanceof AST.Task) {
             AST.Task p1 = (AST.Task) p;
-            result.add(String.format("task %s, %s {", show(p1.partyId), p1.taskId));
+            result.add(String.format("task %s, \"%s\" {", show(p1.partyId), p1.taskId));
             ((Vector<AST>) p1.Do).forEach(s -> result.addAll(showLines(1, s)));
             result.add("}");
         } else if (p instanceof AST.Skip) {

@@ -243,3 +243,10 @@
   Parsing completed.
   Translation completed.
   New file While.tla written.
+
+  $ cpluscal -nocfg TwoPhaseCommit.tla
+
+  $ cpluscal -nocfg SelfSend.tla
+
+$ cpluscal -nocfg NBAC.tla
+$ cpluscal -nocfg Raft.tla
