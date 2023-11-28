@@ -30,52 +30,74 @@ CONSTANTS p1, p2, coord
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "2b5a45c2" /\ chksum(tla) = "bb44a8b9")
+\* BEGIN TRANSLATION (chksum(pcal) = "b3daf4a7" /\ chksum(tla) = "ce46790")
 VARIABLES participants, messages, pc, committed
 
 vars == << participants, messages, pc, committed >>
 
-ProcSet == ((coord \X participants)) \cup {coord} \cup (participants)
+ProcSet == {coord} \cup ((participants \X {"P_par_1"})) \cup ((participants \X participants \ { self })) \cup ((participants \X {"P_par_3"})) \cup (participants)
 
 Init == (* Global variables *)
         /\ participants = {p1, p2}
         /\ messages = {}
         (* Process P *)
         /\ committed = [self \in participants |-> {}]
-        /\ pc = [self \in ProcSet |-> CASE self \in (coord \X participants) -> "Lbl_1"
-                                        [] self = coord -> "fork_0"
-                                        [] self \in participants -> "Lbl_2"]
+        /\ pc = [self \in ProcSet |-> CASE self = coord -> "Lbl_1"
+                                        [] self \in (participants \X {"P_par_1"}) -> "Lbl_2"
+                                        [] self \in (participants \X participants \ { self }) -> "Lbl_3"
+                                        [] self \in (participants \X {"P_par_3"}) -> "Lbl_4"
+                                        [] self \in participants -> "par_0"]
 
-Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ pc[Head(self)] = "fork_0"
-               /\ messages' = (messages \union {[To |-> self, From |-> p, Type |-> "prepare"]})
-               /\ TRUE
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, committed >>
+Lbl_1 == /\ pc[coord] = "Lbl_1"
+         /\ TRUE
+         /\ pc' = [pc EXCEPT ![coord] = "Done"]
+         /\ UNCHANGED << participants, messages, committed >>
 
-proc_1(self) == Lbl_1(self)
-
-fork_0 == /\ pc[coord] = "fork_0"
-          /\ \A p \in (coord \X participants) : pc[p] = "Done"
-          /\ pc' = [pc EXCEPT ![coord] = "Done"]
-          /\ UNCHANGED << participants, messages, committed >>
-
-C == fork_0
+C == Lbl_1
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
+               /\ pc[Head(self)] = "par_0"
                /\ [To |-> self, From |-> coord, Type |-> "prepare"] \in messages
+               /\ pc' = [pc EXCEPT ![self] = "Done"]
+               /\ UNCHANGED << participants, messages, committed >>
+
+proc_2(self) == Lbl_2(self)
+
+Lbl_3(self) == /\ pc[self] = "Lbl_3"
+               /\ pc[Head(self)] = "fork_6"
                /\ committed' = [committed EXCEPT ![self] = committed[self] \union {<<p, coord>>}]
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, messages >>
 
-P(self) == Lbl_2(self)
+proc_7(self) == Lbl_3(self)
+
+Lbl_4(self) == /\ pc[self] = "Lbl_4"
+               /\ pc[Head(self)] = "par_0"
+               /\ pc' = [pc EXCEPT ![self] = "fork_6"]
+               /\ UNCHANGED << participants, messages, committed >>
+
+fork_6(self) == /\ pc[self] = "fork_6"
+                /\ \A p \in (participants \X participants \ { self }) : pc[p] = "Done"
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << participants, messages, committed >>
+
+proc_4(self) == Lbl_4(self) \/ fork_6(self)
+
+par_0(self) == /\ pc[self] = "par_0"
+               /\ \A v_5 \in (participants \X {"P_par_1", "P_par_3"}) : pc[v_5] = "Done"
+               /\ pc' = [pc EXCEPT ![self] = "Done"]
+               /\ UNCHANGED << participants, messages, committed >>
+
+P(self) == par_0(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
 Next == C
-           \/ (\E self \in (coord \X participants): proc_1(self))
+           \/ (\E self \in (participants \X {"P_par_1"}): proc_2(self))
+           \/ (\E self \in (participants \X participants \ { self }): proc_7(self))
+           \/ (\E self \in (participants \X {"P_par_3"}): proc_4(self))
            \/ (\E self \in participants: P(self))
            \/ Terminating
 

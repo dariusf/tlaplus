@@ -259,9 +259,14 @@ public class PlusCalExtensions {
         Map<String, Role> quantified = computeOwnership(ctx, stmts);
         ctx.ownership.putAll(quantified);
         Map<Role, AST.Process> res = project(ctx, stmts);
-        res = res.entrySet().stream()
-                .collect(Collectors.toMap(e -> e.getKey(),
-                        e -> (AST.Process) normalize(e.getValue())));
+
+//        boolean normalize = true;
+        boolean normalize = false;
+        if (normalize) {
+            res = res.entrySet().stream()
+                    .collect(Collectors.toMap(e -> e.getKey(),
+                            e -> (AST.Process) normalize(e.getValue())));
+        }
 
         res.entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
@@ -1165,6 +1170,16 @@ public class PlusCalExtensions {
         return copy;
     }
 
+    private static AST.Lhs subst(String var, String with, AST.Lhs in) {
+        AST.Lhs res = new AST.Lhs();
+        if (in.var != null && in.var.equals(var)) {
+            in.var = with;
+        }
+        in.sub = subst(var, with, in.sub);
+        copyInto(in, res);
+        return res;
+    }
+
     private static AST subst(String var, String with, AST in) {
         if (in instanceof AST.All) {
             AST.All a = newAll((AST.All) in);
@@ -1174,6 +1189,17 @@ public class PlusCalExtensions {
             a.exp = subst(var, with, a.exp);
             a.Do = subst(var, with, a.Do);
             return a;
+        } else if (in instanceof AST.Assign) {
+            AST.Assign i = newAssign((AST.Assign) in);
+            i.ass = ((Vector<AST.SingleAssign>) i.ass).stream()
+                    .map(a -> {
+                        AST.SingleAssign a1 = newSingleAssign(a);
+                        a1.rhs = subst(var, with, a.rhs);
+                        a1.lhs = subst(var, with, a.lhs);
+                        return a1;
+                    })
+                    .collect(Collectors.toCollection(Vector::new));
+            return i;
         } else if (in instanceof AST.MacroCall) {
             AST.MacroCall i = newMacroCall((AST.MacroCall) in);
             i.args = ((Vector<TLAExpr>) i.args).stream()
@@ -1262,7 +1288,8 @@ public class PlusCalExtensions {
             a1.clauses = clauses;
             return a1;
         } else if (in instanceof AST.MacroCall ||
-                in instanceof AST.Skip) {
+                in instanceof AST.Skip ||
+                in instanceof AST.Assign) {
             // nothing
             return in;
         } else if (in instanceof AST.Clause) {
@@ -1668,6 +1695,21 @@ public class PlusCalExtensions {
         AST.MacroCall e1 = new AST.MacroCall();
         e1.name = e.name;
         e1.args = new Vector<>(e.args);
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.Assign newAssign(AST.Assign e) {
+        AST.Assign e1 = new AST.Assign();
+        e1.ass = new Vector<>(e.ass);
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.SingleAssign newSingleAssign(AST.SingleAssign e) {
+        AST.SingleAssign e1 = new AST.SingleAssign();
+        e1.lhs = e.lhs;
+        e1.rhs = e.rhs;
         copyInto(e1, e);
         return e1;
     }
