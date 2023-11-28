@@ -2,6 +2,8 @@
   $ tlaroot=.. source ../build.sh
   tla2tools at ../tlatools/org.lamport.tlatools/dist/tla2tools.jar
 
+  $ cpluscal -nocfg Hello.tla
+
   $ cpluscal -nocfg Chor.tla
   ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar pcal.trans -label -nocfg Chor.tla
   pcal.trans Version 1.11 of 31 December 2020

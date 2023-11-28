@@ -260,12 +260,12 @@ public class PlusCalExtensions {
         ctx.ownership.putAll(quantified);
         Map<Role, AST.Process> res = project(ctx, stmts);
 
-//        boolean normalize = true;
-        boolean normalize = false;
+        boolean normalize = true;
+//        boolean normalize = false;
         if (normalize) {
             res = res.entrySet().stream()
                     .collect(Collectors.toMap(e -> e.getKey(),
-                            e -> (AST.Process) normalize(e.getValue())));
+                            e -> normalize(e.getValue())));
         }
 
         res.entrySet().stream()
@@ -598,12 +598,12 @@ public class PlusCalExtensions {
             res = Stream.of(e1);
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
-            AST.Clause e1 = new AST.Clause();
-            e1.labOr = e.labOr;
-            e1.unlabOr = e1.labOr;
-            copyInto(e1, e);
-            e1.labOr = ((Stream<AST>) transformTask(e.labOr, task)).collect(Collectors.toCollection(Vector::new));
-            e1.unlabOr = ((Stream<AST>) transformTask(e.unlabOr, task)).collect(Collectors.toCollection(Vector::new));
+            AST.Clause e1 = newClause(e);
+            if (e1.unlabOr != null) {
+                e1.unlabOr = ((Stream<AST>) transformTask(e.unlabOr, task)).collect(Collectors.toCollection(Vector::new));
+            } else {
+                e1.labOr = ((Stream<AST>) transformTask(e.labOr, task)).collect(Collectors.toCollection(Vector::new));
+            }
             res = Stream.of(e1);
         } else if (stmt instanceof AST.When) {
             statefulMaybe = true;
@@ -1234,13 +1234,9 @@ public class PlusCalExtensions {
                 .collect(Collectors.toCollection(Vector::new));
     }
 
-    private static AST normalizeStep(AST in) {
-        if (in instanceof AST.Process) {
-            AST.Process proc = (AST.Process) in;
-            Vector<AST> body = normalizeStep(proc.body);
-            AST.Process proc1 = createProcess(proc.name, proc.isEq, proc.id, body, proc.decls);
-            return proc1;
-        } else if (in instanceof AST.All) {
+    private static Vector<AST> normalizeStep(AST in) {
+        Vector<AST> result = new Vector<>();
+        if (in instanceof AST.All) {
             AST.All a = (AST.All) in;
             Vector<AST> stmts = ((Vector<AST>) a.Do).stream()
                     .filter(b -> !(b instanceof AST.Skip))
@@ -1248,15 +1244,16 @@ public class PlusCalExtensions {
             if (stmts.isEmpty()) {
                 AST.Skip skip = new AST.Skip();
                 skip.setOrigin(in.getOrigin());
-                return skip;
+                result.add(skip);
+            } else {
+                AST.All a1 = newAll(a);
+                a1.Do = normalizeStep(stmts);
+                result.add(a1);
             }
-            AST.All a1 = newAll(a);
-            a1.Do = normalizeStep(stmts);
-            return a1;
         } else if (in instanceof AST.Par) {
             AST.Par a = (AST.Par) in;
             Vector<AST> clauses = ((Vector<AST>) a.clauses).stream()
-                    .map(c -> normalizeStep(c))
+                    .flatMap(c -> normalizeStep(c).stream())
                     .filter(c -> {
                         AST.Clause cl = (AST.Clause) c;
                         if (cl.unlabOr != null) {
@@ -1269,65 +1266,75 @@ public class PlusCalExtensions {
             if (clauses.isEmpty()) {
                 AST.Skip skip = new AST.Skip();
                 skip.setOrigin(in.getOrigin());
-                return skip;
+                result.add(skip);
             } else if (clauses.size() == 1) {
                 AST.Clause cl = (AST.Clause) clauses.get(0);
                 if (cl.unlabOr != null) {
-                    if (cl.unlabOr.size() != 1) {
-                        throw new IllegalArgumentException("clause has more things than can be returned");
-                    }
-                    return (AST) cl.unlabOr.get(0);
+                    result.addAll(cl.unlabOr);
                 } else {
-                    if (cl.labOr.size() != 1) {
-                        throw new IllegalArgumentException("clause has more things than can be returned");
-                    }
-                    return (AST) cl.labOr.get(0);
+                    result.addAll(cl.labOr);
                 }
+            } else {
+                AST.Par a1 = newPar(a);
+                a1.clauses = clauses;
+                result.add(a1);
             }
-            AST.Par a1 = newPar(a);
-            a1.clauses = clauses;
-            return a1;
         } else if (in instanceof AST.MacroCall ||
                 in instanceof AST.Skip ||
                 in instanceof AST.Assign) {
             // nothing
-            return in;
+            result.add(in);
         } else if (in instanceof AST.Clause) {
-            AST.Clause i = newClause((AST.Clause) in);
-            if (i.unlabOr != null) {
-                i.unlabOr = normalizeStep((Vector<AST>) i.unlabOr).stream()
+            AST.Clause c = newClause((AST.Clause) in);
+            if (c.unlabOr != null) {
+                c.unlabOr = normalizeStep((Vector<AST>) c.unlabOr).stream()
                         .filter(b -> !(b instanceof AST.Skip))
                         .collect(Collectors.toCollection(Vector::new));
             } else {
-                i.labOr = normalizeStep((Vector<AST>) i.labOr).stream()
+                c.labOr = normalizeStep((Vector<AST>) c.labOr).stream()
                         .filter(b -> !(b instanceof AST.Skip))
                         .collect(Collectors.toCollection(Vector::new));
             }
-            return i;
+            result.add(c);
         } else {
             throw new IllegalArgumentException("normalizeStep: unimplemented " + in.getClass().getSimpleName());
         }
+        return result;
     }
 
     private static Vector<AST> normalizeStep(Vector<AST> stmts) {
-        return stmts.stream().map(s -> normalizeStep(s))
+        return stmts.stream().flatMap(s -> normalizeStep(s).stream())
                 .collect(Collectors.toCollection(Vector::new));
     }
 
-    static AST normalize(AST a) {
-        AST a1 = normalizeStep(a);
-//        System.out.println(Printer.show(a));
-//        System.out.println("---");
-//        System.out.println(Printer.show(a1));
+    static AST.Process normalize(AST.Process proc) {
+
+//        boolean debug = true;
+        boolean debug = false;
+
+        Vector a = proc.body;
+        Vector<AST> a1 = normalizeStep(a);
+
+        if (debug) {
+            System.out.println("DEBUG normalize\n---");
+            System.out.println(Printer.show(a));
+            System.out.println("---");
+            System.out.println(Printer.show(a1));
+        }
+
         while (!Printer.show(a).equals(Printer.show(a1))) {
             a = a1;
             a1 = normalizeStep(a);
-//            System.out.println(Printer.show(a));
-//            System.out.println("---");
-//            System.out.println(Printer.show(a1));
-            int x = 1;
+            if (debug) {
+                System.out.println("---");
+                System.out.println(Printer.show(a1));
+           }
         }
-        return a1;
+        if (debug) {
+            System.out.println("--- fixed point");
+        }
+
+        return createProcess(proc.name, proc.isEq, proc.id, a1, proc.decls);
     }
 
     /**
@@ -1621,8 +1628,11 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Clause) {
             AST.Clause e = (AST.Clause) stmt;
             AST.Clause e1 = newClause(e);
-            e1.labOr = transformCancellations(e.labOr);
-            e1.unlabOr = transformCancellations(e.unlabOr);
+            if (e.unlabOr != null) {
+                e1.unlabOr = transformCancellations(e.unlabOr);
+            } else {
+                e1.labOr = transformCancellations(e.labOr);
+            }
             return e1;
         } else if (stmt instanceof AST.Assign) {
             return stmt;
