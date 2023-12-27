@@ -249,6 +249,13 @@ public class PlusCalExtensions {
             globals.add(v);
         });
 
+        // Add me variable
+        AST.VarDecl v = new AST.VarDecl();
+        v.var = "me";
+        v.val = tlaExpr("FALSE");
+        v.isEq = true;
+        globals.add(v);
+
         // don't transform away cancellations until after projection
 
         // Ownership and projection
@@ -281,6 +288,9 @@ public class PlusCalExtensions {
                         Printer.show(e.getKey().partySet),
                         Printer.show(e.getValue())));
 
+        // do this before translating other constructs, which insert self in the case of stuff like par and all
+        projected = renameSelfToMe(projected);
+
         // Post-projection elaboration
         List<AST.Process> res1 = projected.entrySet().stream()
                 .flatMap(p -> expandParStatement(p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
@@ -298,6 +308,36 @@ public class PlusCalExtensions {
                 .forEach(System.out::println);
 
         return res1;
+    }
+
+    /**
+     * Why do this? self may not refer to the current party any more.
+     */
+    private static Map<Role, AST.Process> renameSelfToMe(Map<Role, AST.Process> projected) {
+        return projected.entrySet()
+                .stream()
+                .map(e -> {
+                    AST.Process v = flatMapProcessBody(e.getValue(),
+                            body -> {
+                                AST.Assign as1 = createInitialAssignment(body);
+                                return Stream.of(as1, subst("self", "me", body));
+                            });
+                    return new AbstractMap.SimpleEntry<>(e.getKey(), v);
+                })
+                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
+    }
+
+    private static AST.Assign createInitialAssignment(AST body) {
+        AST.Assign e1 = new AST.Assign();
+        AST.SingleAssign sa = new AST.SingleAssign();
+        sa.lhs = new AST.Lhs();
+        sa.lhs.var = "me";
+        sa.lhs.sub = tlaExpr("");
+        sa.rhs = tlaExpr("self");
+        e1.ass = new Vector<>();
+        e1.ass.add(sa);
+        copyInto(e1, body);
+        return e1;
     }
 
     private static Vector<AST> implicitlyQualify(Vector<AST> stmts, Context ctx) {
@@ -794,7 +834,6 @@ public class PlusCalExtensions {
 
     private static AST.Process createProcess(String name, boolean isEq, TLAExpr id,
                                              Vector<AST> body, Vector<AST.VarDecl> decls) {
-        // TODO see what else GetProcess does
         AST.Process proc1 = new AST.Process();
         proc1.name = name;
         proc1.isEq = isEq;

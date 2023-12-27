@@ -9,7 +9,7 @@ Some are described in the paper [Protocol Conformance with Choreographic PlusCal
 
 # Project structure
 
-cpcal.t/run.t contains CPCal tests
+cpcal.t/run.t contains Choreographic PlusCal tests
 
 mbtc.t/run.t contains MBTC inputs
 
@@ -17,7 +17,7 @@ IntelliJ project is in tlatools/org.lamport.tlatools
 
 Entry points:
 
-- CPCal: extends PlusCal translator pcal.trans, most of the changes are in src/pcal/PlusCalExtensions.java, start at src/pcal/ParseAlgorithm.java, GetChoreography
+- Choreographic PlusCal: extends PlusCal translator pcal.trans, most of the changes are in src/pcal/PlusCalExtensions.java, start at src/pcal/ParseAlgorithm.java, GetChoreography
 - Monitoring: src/tlc2/TLC.java, extends normal TLC frontend
 - MBTC: src/tlc2/mbtc/RunMBTC.java
 
