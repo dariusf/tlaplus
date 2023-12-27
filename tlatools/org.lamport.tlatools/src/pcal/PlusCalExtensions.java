@@ -1091,6 +1091,8 @@ public class PlusCalExtensions {
 
             List<AST.Process> procs = new ArrayList<>();
             return expandAllStatement(role, (Vector<AST>) all.Do).map(d -> {
+                // substitute bound variables away
+                d = subst(all.var, "Head(self)", d);
                 AST.Process proc = allStatementProcess(role, wait.lbl, all.var, all.exp, d);
                 procs.add(proc);
                 return (AST) wait;

@@ -29,7 +29,7 @@ CONSTANTS p1, p2, c1, c2
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "bbdbd15b" /\ chksum(tla) = "376ba544")
+\* BEGIN TRANSLATION (chksum(pcal) = "114cd95a" /\ chksum(tla) = "b4025a06")
 VARIABLES participants, coordinators, messages, me, pc, committed
 
 vars == << participants, coordinators, messages, me, pc, committed >>
@@ -58,7 +58,7 @@ proc_2(self) == Lbl_1(self)
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
                /\ pc[Tail(self)] = "fork_6"
-               /\ committed' = [committed EXCEPT ![self][ p ] = committed[self] [ p ] \union { << p , coord >> }]
+               /\ committed' = [committed EXCEPT ![self][ Head(self)] = committed[self] [ Head(self)] \union { << Head(self), coord >> }]
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, messages, me >>
 
@@ -84,7 +84,7 @@ Lbl_4(self) == /\ pc[self] = "Lbl_4"
                /\ UNCHANGED << participants, coordinators, messages, committed >>
 
 par_0(self) == /\ pc[self] = "par_0"
-               /\ \A v_5 \in ("P_par_1", "P_par_3" \X {participants}) : pc[v_5] = "Done"
+               /\ \A v_5 \in ({"P_par_1", "P_par_3"} \X {participants}) : pc[v_5] = "Done"
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, messages, me, 
                                committed >>
