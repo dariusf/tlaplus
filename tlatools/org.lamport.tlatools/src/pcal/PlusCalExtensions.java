@@ -365,18 +365,51 @@ public class PlusCalExtensions {
                         .collect(Collectors.toCollection(Vector::new));
             }
             return clause;
+        } else if (stmt instanceof AST.LabelIf) {
+            AST.LabelIf ei = newIf((AST.LabelIf) stmt);
+            if (ei.unlabThen != null) {
+                ei.unlabThen = ((Vector<AST>) ei.unlabThen).stream()
+                        .map(c -> implicitlyQualify(c, ctx))
+                        .collect(Collectors.toCollection(Vector::new));
+                ei.unlabElse = ((Vector<AST>) ei.unlabElse).stream()
+                        .map(c -> implicitlyQualify(c, ctx))
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                ei.labThen = ((Vector<AST>) ei.labThen).stream()
+                        .map(c -> implicitlyQualify(c, ctx))
+                        .collect(Collectors.toCollection(Vector::new));
+                ei.labElse = ((Vector<AST>) ei.labElse).stream()
+                        .map(c -> implicitlyQualify(c, ctx))
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return ei;
         } else if (stmt instanceof AST.Par) {
             AST.Par par = newPar((AST.Par) stmt);
             par.clauses = ((Vector<AST.Clause>) par.clauses).stream()
                     .map(a -> implicitlyQualify(a, ctx))
                     .collect(Collectors.toCollection(Vector::new));
             return par;
+        } else if (stmt instanceof AST.LabelEither) {
+            AST.LabelEither ei = newEither((AST.LabelEither) stmt);
+            ei.clauses = ((Vector<AST.Clause>) ei.clauses).stream()
+                    .map(a -> implicitlyQualify(a, ctx))
+                    .collect(Collectors.toCollection(Vector::new));
+            return ei;
         } else if (stmt instanceof AST.MacroCall) {
             AST.MacroCall call = newMacroCall((AST.MacroCall) stmt);
             call.args = ((Vector<TLAExpr>) call.args).stream()
                     .map(a -> implicitlyQualify(a, ctx))
                     .collect(Collectors.toCollection(Vector::new));
             return call;
+        } else if (stmt instanceof AST.Cancel ||
+                stmt instanceof AST.Skip) {
+            return stmt;
+        } else if (stmt instanceof AST.Task) {
+            AST.Task task = newTask((AST.Task) stmt);
+            task.Do = ((Vector<AST>) task.Do).stream()
+                    .map(a -> implicitlyQualify(a, ctx))
+                    .collect(Collectors.toCollection(Vector::new));
+            return task;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign assign = newAssign((AST.Assign) stmt);
             assign.ass = ((Vector<AST.SingleAssign>) assign.ass).stream()
@@ -391,8 +424,7 @@ public class PlusCalExtensions {
                     .collect(Collectors.toCollection(Vector::new));
             return assign;
         } else {
-            fail("unimplemented: implicitlyQualify " + stmt);
-            return null;
+            throw new IllegalArgumentException("implicitlyQualify: unimplemented " + stmt.getClass().getSimpleName());
         }
     }
 
@@ -417,9 +449,9 @@ public class PlusCalExtensions {
         Role role = possibleRoles.get(0);
         List<String> bound = ctx.binders.stream().filter(b -> ctx.party.get(b) == role)
                 .collect(Collectors.toList());
-        if (possibleRoles.size() > 1) {
+        if (bound.size() > 1) {
             fail(String.format("more than one binder %s", bound));
-        } else if (possibleRoles.isEmpty()) {
+        } else if (bound.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(bound.get(0));
@@ -1324,6 +1356,11 @@ public class PlusCalExtensions {
             a.exp = subst(var, with, a.exp);
             a.Do = subst(var, with, a.Do);
             return a;
+        } else if (in instanceof AST.Task) {
+            AST.Task a = newTask((AST.Task) in);
+            a.partyId = subst(var, with, a.partyId);
+            a.Do = subst(var, with, a.Do);
+            return a;
         } else if (in instanceof AST.Assign) {
             AST.Assign i = newAssign((AST.Assign) in);
             i.ass = ((Vector<AST.SingleAssign>) i.ass).stream()
@@ -1341,11 +1378,38 @@ public class PlusCalExtensions {
                     .map(a -> subst(var, with, a))
                     .collect(Collectors.toCollection(Vector::new));
             return i;
+        } else if (in instanceof AST.Skip ||
+                in instanceof AST.Cancel) {
+            return in;
+        } else if (in instanceof AST.LabelEither) {
+            AST.LabelEither i = newEither((AST.LabelEither) in);
+            i.clauses = ((Vector<AST>) i.clauses).stream()
+                    .map(c -> subst(var, with, c))
+                    .collect(Collectors.toCollection(Vector::new));
+            return i;
         } else if (in instanceof AST.Par) {
             AST.Par i = newPar((AST.Par) in);
             i.clauses = ((Vector<AST>) i.clauses).stream()
                     .map(c -> subst(var, with, c))
                     .collect(Collectors.toCollection(Vector::new));
+            return i;
+        } else if (in instanceof AST.LabelIf) {
+            AST.LabelIf i = newIf((AST.LabelIf) in);
+            if (i.unlabThen != null) {
+                i.unlabThen = ((Vector<AST>) i.unlabThen).stream()
+                        .map(c -> subst(var, with, c))
+                        .collect(Collectors.toCollection(Vector::new));
+                i.unlabElse = ((Vector<AST>) i.unlabElse).stream()
+                        .map(c -> subst(var, with, c))
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                i.labThen = ((Vector<AST>) i.labThen).stream()
+                        .map(c -> subst(var, with, c))
+                        .collect(Collectors.toCollection(Vector::new));
+                i.labElse = ((Vector<AST>) i.labElse).stream()
+                        .map(c -> subst(var, with, c))
+                        .collect(Collectors.toCollection(Vector::new));
+            }
             return i;
         } else if (in instanceof AST.Clause) {
             AST.Clause i = newClause((AST.Clause) in);
@@ -1385,6 +1449,35 @@ public class PlusCalExtensions {
                 a1.Do = normalizeStep(stmts);
                 result.add(a1);
             }
+        } else if (in instanceof AST.LabelEither) {
+            AST.LabelEither a = (AST.LabelEither) in;
+            Vector<AST> clauses = ((Vector<AST>) a.clauses).stream()
+                    .flatMap(c -> normalizeStep(c).stream())
+                    .filter(c -> {
+                        AST.Clause cl = (AST.Clause) c;
+                        if (cl.unlabOr != null) {
+                            return !cl.unlabOr.isEmpty();
+                        } else {
+                            return !cl.labOr.isEmpty();
+                        }
+                    })
+                    .collect(Collectors.toCollection(Vector::new));
+            if (clauses.isEmpty()) {
+                AST.Skip skip = new AST.Skip();
+                skip.setOrigin(in.getOrigin());
+                result.add(skip);
+            } else if (clauses.size() == 1) {
+                AST.Clause cl = (AST.Clause) clauses.get(0);
+                if (cl.unlabOr != null) {
+                    result.addAll(cl.unlabOr);
+                } else {
+                    result.addAll(cl.labOr);
+                }
+            } else {
+                AST.LabelEither a1 = newEither(a);
+                a1.clauses = clauses;
+                result.add(a1);
+            }
         } else if (in instanceof AST.Par) {
             AST.Par a = (AST.Par) in;
             Vector<AST> clauses = ((Vector<AST>) a.clauses).stream()
@@ -1416,7 +1509,8 @@ public class PlusCalExtensions {
             }
         } else if (in instanceof AST.MacroCall ||
                 in instanceof AST.Skip ||
-                in instanceof AST.Assign) {
+                in instanceof AST.Assign ||
+                in instanceof AST.Cancel) {
             // nothing
             result.add(in);
         } else if (in instanceof AST.Clause) {
@@ -1430,6 +1524,20 @@ public class PlusCalExtensions {
                         .filter(b -> !(b instanceof AST.Skip))
                         .collect(Collectors.toCollection(Vector::new));
             }
+            result.add(c);
+        } else if (in instanceof AST.LabelIf) {
+            AST.LabelIf c = newIf((AST.LabelIf) in);
+            if (c.unlabThen != null) {
+                c.unlabThen = normalizeStep((Vector<AST>) c.unlabThen);
+                c.unlabElse = normalizeStep((Vector<AST>) c.unlabElse);
+            } else {
+                c.labThen = normalizeStep((Vector<AST>) c.labThen);
+                c.labElse = normalizeStep((Vector<AST>) c.labElse);
+            }
+            result.add(c);
+        } else if (in instanceof AST.Task) {
+            AST.Task c = newTask((AST.Task) in);
+            c.Do = normalizeStep((Vector<AST>) c.Do);
             result.add(c);
         } else {
             throw new IllegalArgumentException("normalizeStep: unimplemented " + in.getClass().getSimpleName());
@@ -1708,6 +1816,13 @@ public class PlusCalExtensions {
         e1.partyId = task.partyId;
         e1.Do = task.Do;
         copyInto(e1, task);
+        return e1;
+    }
+
+    private static AST.Cancel newCancel(AST.Cancel cancel) {
+        AST.Cancel e1 = new AST.Cancel();
+        e1.task = cancel.task;
+        copyInto(e1, cancel);
         return e1;
     }
 

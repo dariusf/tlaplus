@@ -47,12 +47,12 @@ CONSTANTS p1, p2, c
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "4d062f60" /\ chksum(tla) = "35b74f5a")
+\* BEGIN TRANSLATION (chksum(pcal) = "653d9480" /\ chksum(tla) = "91985464")
 VARIABLES participants, coordinators, messages, cancelled_phase1, pc
 
 vars == << participants, coordinators, messages, cancelled_phase1, pc >>
 
-ProcSet == (participants) \cup ((c \X participants)) \cup ((c \X participants)) \cup ((c \X participants)) \cup {c}
+ProcSet == (participants) \cup ((participants \X c)) \cup {c}
 
 Init == (* Global variables *)
         /\ participants = {p1, p2}
@@ -60,99 +60,63 @@ Init == (* Global variables *)
         /\ messages = {}
         /\ cancelled_phase1 = FALSE
         /\ pc = [self \in ProcSet |-> CASE self \in participants -> "Lbl_1"
-                                        [] self \in (c \X participants) -> "Lbl_4"
-                                        [] self \in (c \X participants) -> "Lbl_5"
-                                        [] self \in (c \X participants) -> "Lbl_6"
-                                        [] self = c -> "Lbl_7"]
+                                        [] self \in (participants \X c) -> "Lbl_4"
+                                        [] self = c -> "Lbl_5"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ [To |-> self, From |-> c, Type |-> "prepare"] \in messages
-               /\ \/ /\ messages' = (messages \union {[To |-> c, From |-> self, Type |-> "prepared"]})
-                  \/ /\ messages' = (messages \union {[To |-> c, From |-> self, Type |-> "aborted"]})
-                     /\ TRUE
+               /\ [To |-> Tail(self), From |-> c, Type |-> prepare] \in messages
+               /\ \/ /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> prepared]})
+                  \/ /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> aborted]})
                /\ IF aborted
-                     THEN /\ [To |-> self, From |-> c, Type |-> "abort"] \in messages'
+                     THEN /\ [To |-> Tail(self), From |-> c, Type |-> abort] \in messages'
                           /\ pc' = [pc EXCEPT ![self] = "Lbl_2"]
-                     ELSE /\ [To |-> self, From |-> c, Type |-> "commit"] \in messages'
+                     ELSE /\ [To |-> Tail(self), From |-> c, Type |-> commit] \in messages'
                           /\ pc' = [pc EXCEPT ![self] = "Lbl_3"]
                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ messages' = (messages \union {[To |-> c, From |-> self, Type |-> "aborted"]})
+               /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> aborted]})
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
 
 Lbl_3(self) == /\ pc[self] = "Lbl_3"
-               /\ messages' = (messages \union {[To |-> c, From |-> self, Type |-> "committed"]})
+               /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> committed]})
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
 
 P(self) == Lbl_1(self) \/ Lbl_2(self) \/ Lbl_3(self)
 
 Lbl_4(self) == /\ pc[self] = "Lbl_4"
-               /\ pc[Head(self)] = "fork_0"
-               /\ messages' = (messages \union {[To |-> p, From |-> self, Type |-> "prepare"]})
-               /\ \/ /\ [To |-> self, From |-> p, Type |-> "prepared"] \in messages'
-                     /\ UNCHANGED cancelled_phase1
-                  \/ /\ [To |-> self, From |-> p, Type |-> "aborted"] \in messages'
-                     /\ cancelled_phase1' = TRUE
+               /\ pc[Tail(self)] = "fork_0"
+               /\ cancelled_phase1' = TRUE
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators >>
+               /\ UNCHANGED << participants, coordinators, messages >>
 
 proc_1(self) == Lbl_4(self)
 
-Lbl_5(self) == /\ pc[self] = "Lbl_5"
-               /\ pc[Head(self)] = "fork_2"
-               /\ messages' = (messages \union {[To |-> p, From |-> self, Type |-> "abort"]})
-               /\ [To |-> self, From |-> p, Type |-> "aborted"] \in messages'
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
-
-proc_3(self) == Lbl_5(self)
-
-Lbl_6(self) == /\ pc[self] = "Lbl_6"
-               /\ pc[Head(self)] = "fork_4"
-               /\ messages' = (messages \union {[To |-> p, From |-> self, Type |-> "commit"]})
-               /\ [To |-> self, From |-> p, Type |-> "committed"] \in messages'
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
-
-proc_5(self) == Lbl_6(self)
-
-Lbl_7 == /\ pc[c] = "Lbl_7"
+Lbl_5 == /\ pc[c] = "Lbl_5"
          /\ IF ~ cancelled_phase1
                THEN /\ pc' = [pc EXCEPT ![c] = "fork_0"]
                ELSE /\ TRUE
-                    /\ pc' = [pc EXCEPT ![c] = "Lbl_8"]
+                    /\ pc' = [pc EXCEPT ![c] = "Lbl_6"]
          /\ UNCHANGED << participants, coordinators, messages, 
                          cancelled_phase1 >>
 
 fork_0 == /\ pc[c] = "fork_0"
-          /\ \A p \in (c \X participants) : pc[p] = "Done"
-          /\ pc' = [pc EXCEPT ![c] = "Lbl_8"]
+          /\ \A p \in (participants \X c) : pc[p] = "Done"
+          /\ pc' = [pc EXCEPT ![c] = "Lbl_6"]
           /\ UNCHANGED << participants, coordinators, messages, 
                           cancelled_phase1 >>
 
-Lbl_8 == /\ pc[c] = "Lbl_8"
+Lbl_6 == /\ pc[c] = "Lbl_6"
          /\ IF aborted
-               THEN /\ pc' = [pc EXCEPT ![c] = "fork_2"]
-               ELSE /\ pc' = [pc EXCEPT ![c] = "fork_4"]
+               THEN /\ TRUE
+               ELSE /\ TRUE
+         /\ pc' = [pc EXCEPT ![c] = "Done"]
          /\ UNCHANGED << participants, coordinators, messages, 
                          cancelled_phase1 >>
 
-fork_2 == /\ pc[c] = "fork_2"
-          /\ \A p \in (c \X participants) : pc[p] = "Done"
-          /\ pc' = [pc EXCEPT ![c] = "Done"]
-          /\ UNCHANGED << participants, coordinators, messages, 
-                          cancelled_phase1 >>
-
-fork_4 == /\ pc[c] = "fork_4"
-          /\ \A p \in (c \X participants) : pc[p] = "Done"
-          /\ pc' = [pc EXCEPT ![c] = "Done"]
-          /\ UNCHANGED << participants, coordinators, messages, 
-                          cancelled_phase1 >>
-
-C == Lbl_7 \/ fork_0 \/ Lbl_8 \/ fork_2 \/ fork_4
+C == Lbl_5 \/ fork_0 \/ Lbl_6
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
@@ -160,9 +124,7 @@ Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
 
 Next == C
            \/ (\E self \in participants: P(self))
-           \/ (\E self \in (c \X participants): proc_1(self))
-           \/ (\E self \in (c \X participants): proc_3(self))
-           \/ (\E self \in (c \X participants): proc_5(self))
+           \/ (\E self \in (participants \X c): proc_1(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars

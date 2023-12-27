@@ -31,10 +31,10 @@ CONSTANTS p1, p2, c1, c2
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "9bedcdc1" /\ chksum(tla) = "bc4a2230")
-VARIABLES participants, coordinators, messages, me, pc
+\* BEGIN TRANSLATION (chksum(pcal) = "2186516e" /\ chksum(tla) = "6605347b")
+VARIABLES participants, coordinators, messages, pc
 
-vars == << participants, coordinators, messages, me, pc >>
+vars == << participants, coordinators, messages, pc >>
 
 ProcSet == ((coordinators \X participants)) \cup (participants) \cup ((participants \X coordinators)) \cup (coordinators)
 
@@ -42,53 +42,42 @@ Init == (* Global variables *)
         /\ participants = {p1, p2}
         /\ coordinators = {c1, c2}
         /\ messages = {}
-        /\ me = FALSE
         /\ pc = [self \in ProcSet |-> CASE self \in (coordinators \X participants) -> "Lbl_1"
-                                        [] self \in participants -> "Lbl_2"
-                                        [] self \in (participants \X coordinators) -> "Lbl_3"
-                                        [] self \in coordinators -> "Lbl_4"]
+                                        [] self \in participants -> "fork_0"
+                                        [] self \in (participants \X coordinators) -> "Lbl_2"
+                                        [] self \in coordinators -> "fork_2"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
                /\ pc[Tail(self)] = "fork_0"
-               /\ [To |-> me, From |-> Head(self), Type |-> a] \in messages
-               /\ messages' = (messages \union {[To |-> Head(self), From |-> me, Type |-> b]})
+               /\ [To |-> (Tail(self)), From |-> Head(self), Type |-> a] \in messages
+               /\ messages' = (messages \union {[To |-> Head(self), From |-> (Tail(self)), Type |-> b]})
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, me >>
+               /\ UNCHANGED << participants, coordinators >>
 
 proc_1(self) == Lbl_1(self)
-
-Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ me' = self
-               /\ pc' = [pc EXCEPT ![self] = "fork_0"]
-               /\ UNCHANGED << participants, coordinators, messages >>
 
 fork_0(self) == /\ pc[self] = "fork_0"
                 /\ \A c \in (coordinators \X participants) : pc[c] = "Done"
                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                /\ UNCHANGED << participants, coordinators, messages, me >>
+                /\ UNCHANGED << participants, coordinators, messages >>
 
-P(self) == Lbl_2(self) \/ fork_0(self)
+P(self) == fork_0(self)
 
-Lbl_3(self) == /\ pc[self] = "Lbl_3"
+Lbl_2(self) == /\ pc[self] = "Lbl_2"
                /\ pc[Tail(self)] = "fork_2"
-               /\ messages' = (messages \union {[To |-> Head(self), From |-> me, Type |-> a]})
-               /\ [To |-> me, From |-> Head(self), Type |-> b] \in messages'
+               /\ messages' = (messages \union {[To |-> Head(self), From |-> (Tail(self)), Type |-> a]})
+               /\ [To |-> (Tail(self)), From |-> Head(self), Type |-> b] \in messages'
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, me >>
+               /\ UNCHANGED << participants, coordinators >>
 
-proc_3(self) == Lbl_3(self)
-
-Lbl_4(self) == /\ pc[self] = "Lbl_4"
-               /\ me' = self
-               /\ pc' = [pc EXCEPT ![self] = "fork_2"]
-               /\ UNCHANGED << participants, coordinators, messages >>
+proc_3(self) == Lbl_2(self)
 
 fork_2(self) == /\ pc[self] = "fork_2"
                 /\ \A p \in (participants \X coordinators) : pc[p] = "Done"
                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                /\ UNCHANGED << participants, coordinators, messages, me >>
+                /\ UNCHANGED << participants, coordinators, messages >>
 
-C(self) == Lbl_4(self) \/ fork_2(self)
+C(self) == fork_2(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
