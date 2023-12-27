@@ -376,6 +376,30 @@ public class PlusCalExtensions {
             // this is correct only if there is no aliasing, which is ok to ensure for models
             ctx.binders.remove(v);
             return all;
+        } else if (stmt instanceof AST.Clause) {
+            AST.Clause clause = newClause((AST.Clause) stmt);
+            if (clause.unlabOr != null) {
+                clause.unlabOr = ((Vector<AST>) clause.unlabOr).stream()
+                        .map(c -> implicitlyQualify(c, ctx))
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                clause.labOr = ((Vector<AST>) clause.labOr).stream()
+                        .map(c -> implicitlyQualify(c, ctx))
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return clause;
+        } else if (stmt instanceof AST.Par) {
+            AST.Par par = newPar((AST.Par) stmt);
+            par.clauses = ((Vector<AST.Clause>) par.clauses).stream()
+                    .map(a -> implicitlyQualify(a, ctx))
+                    .collect(Collectors.toCollection(Vector::new));
+            return par;
+        } else if (stmt instanceof AST.MacroCall) {
+            AST.MacroCall call = newMacroCall((AST.MacroCall) stmt);
+            call.args = ((Vector<TLAExpr>) call.args).stream()
+                    .map(a -> implicitlyQualify(a, ctx))
+                    .collect(Collectors.toCollection(Vector::new));
+            return call;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign assign = newAssign((AST.Assign) stmt);
             assign.ass = ((Vector<AST.SingleAssign>) assign.ass).stream()
