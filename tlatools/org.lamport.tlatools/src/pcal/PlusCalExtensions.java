@@ -980,7 +980,7 @@ public class PlusCalExtensions {
             List<AST.Process> processesFromHere = threads.stream()
                     .map(AbstractMap.SimpleEntry::getValue)
                     .collect(Collectors.toList());
-            wait.exp = tlaExpr("\\A %s \\in (%s \\X {%s}) : pc[%s] = \"Done\"", var, tids, which.partySet, var);
+            wait.exp = tlaExpr("\\A %s \\in ({%s} \\X {%s}) : pc[%s] = \"Done\"", var, tids, which.partySet, var);
             wait.lbl = label;
 
             newProcesses.addAll(processesFromHere);
