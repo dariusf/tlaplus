@@ -750,7 +750,7 @@ public class PlusCalExtensions {
         Vector<AST.VarDecl> decls = new Vector<>();
         Vector<AST> body = new Vector<>();
         AST.When wait = new AST.When();
-        wait.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
+        wait.exp = tlaExpr("pc[Tail(self)] = \"%s\"", label);
         wait.setOrigin(set.getOrigin());
         body.add(wait);
         if (cl.unlabOr != null) {
@@ -794,14 +794,14 @@ public class PlusCalExtensions {
     private static AST.Process allStatementProcess(Role role, String label,
                                                    String q, TLAExpr qs, Vector<AST> body) {
         AST.When await = new AST.When();
-        await.exp = tlaExpr("pc[Head(self)] = \"%s\"", label);
+        await.exp = tlaExpr("pc[Tail(self)] = \"%s\"", label);
         await.setOrigin(qs.getOrigin());
 
         Vector<AST> body1 = new Vector<>();
         body1.add(await);
         body1.addAll(body);
 
-        TLAExpr product = tlaExpr("(%s \\X %s)", role.partySet, qs);
+        TLAExpr product = tlaExpr("(%s \\X %s)", qs, role.partySet);
         return createProcess(fresh("proc"), false, product, body1, new Vector<>());
     }
 
@@ -825,7 +825,7 @@ public class PlusCalExtensions {
             List<AbstractMap.SimpleEntry<String, AST.Process>> threads = clauses.stream().map(c -> {
                 String p = fresh(which.partyVar + "_par");
                 String id = String.format("\"%s\"", p);
-                TLAExpr set = tlaExpr("(%s \\X {%s})", which.partySet, id);
+                TLAExpr set = tlaExpr("(%s \\X {%s})", id, which.partySet);
 
                 // recurse and non-algebraically accumulate the new processes
                 AST.Clause c1 = new AST.Clause();
@@ -850,7 +850,7 @@ public class PlusCalExtensions {
             List<AST.Process> processesFromHere = threads.stream()
                     .map(AbstractMap.SimpleEntry::getValue)
                     .collect(Collectors.toList());
-            wait.exp = tlaExpr("\\A %s \\in (%s \\X {%s}) : pc[%s] = \"Done\"", var, which.partySet, tids, var);
+            wait.exp = tlaExpr("\\A %s \\in (%s \\X {%s}) : pc[%s] = \"Done\"", var, tids, which.partySet, var);
             wait.lbl = label;
 
             newProcesses.addAll(processesFromHere);
@@ -955,7 +955,7 @@ public class PlusCalExtensions {
             wait.setOrigin(stmt.getOrigin());
             wait.exp = tlaExpr("\\A %s %s (%s \\X %s) : pc[%s] = \"Done\"",
                     all.var, all.isEq ? "=" : "\\in",
-                    role.partySet, all.exp,
+                    all.exp, role.partySet,
                     all.var);
             wait.lbl = fresh("fork");
 
