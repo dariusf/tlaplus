@@ -249,13 +249,6 @@ public class PlusCalExtensions {
             globals.add(v);
         });
 
-        // Add me variable
-        AST.VarDecl v = new AST.VarDecl();
-        v.var = "me";
-        v.val = tlaExpr("FALSE");
-        v.isEq = true;
-        globals.add(v);
-
         // don't transform away cancellations until after projection
 
         // Ownership and projection
@@ -318,26 +311,10 @@ public class PlusCalExtensions {
                 .stream()
                 .map(e -> {
                     AST.Process v = flatMapProcessBody(e.getValue(),
-                            body -> {
-                                AST.Assign as1 = createInitialAssignment(body);
-                                return Stream.of(as1, subst("self", "me", body));
-                            });
+                            body -> Stream.of(subst("self", "Tail(self)", body)));
                     return new AbstractMap.SimpleEntry<>(e.getKey(), v);
                 })
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
-    }
-
-    private static AST.Assign createInitialAssignment(AST body) {
-        AST.Assign e1 = new AST.Assign();
-        AST.SingleAssign sa = new AST.SingleAssign();
-        sa.lhs = new AST.Lhs();
-        sa.lhs.var = "me";
-        sa.lhs.sub = tlaExpr("");
-        sa.rhs = tlaExpr("self");
-        e1.ass = new Vector<>();
-        e1.ass.add(sa);
-        copyInto(e1, body);
-        return e1;
     }
 
     private static Vector<AST> implicitlyQualify(Vector<AST> stmts, Context ctx) {
