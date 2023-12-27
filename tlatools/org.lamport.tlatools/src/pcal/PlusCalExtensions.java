@@ -65,6 +65,7 @@ public class PlusCalExtensions {
         Map<String, Role> roleDecls;
 
         // variable -> party
+        // deprecated?
         Map<String, Role> ownership;
 
         // For things like while, which use positional expressions for parties
@@ -76,6 +77,9 @@ public class PlusCalExtensions {
         // expression -> role
         Map<String, Role> party;
         // loc is stored in party decl
+
+        // bound variables in scope
+        Set<String> binders;
     }
 
     public static AST GetAll(int depth) throws ParseAlgorithmException {
@@ -256,26 +260,29 @@ public class PlusCalExtensions {
 //            });
             ctx.role.put(Printer.show(r.partySet), r);
         });
-        Map<String, Role> quantified = computeOwnership(ctx, stmts);
-        ctx.ownership.putAll(quantified);
-        Map<Role, AST.Process> res = project(ctx, stmts);
+        ctx.ownership.putAll(computeOwnership(ctx, stmts));
+        ctx.binders = new HashSet<>();
+
+        stmts = implicitlyQualify(stmts, ctx);
+
+        Map<Role, AST.Process> projected = project(ctx, stmts);
 
         boolean normalize = true;
 //        boolean normalize = false;
         if (normalize) {
-            res = res.entrySet().stream()
+            projected = projected.entrySet().stream()
                     .collect(Collectors.toMap(e -> e.getKey(),
                             e -> normalize(e.getValue())));
         }
 
-        res.entrySet().stream()
+        projected.entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
                 .forEach(e -> System.out.printf("Projection of %s:\n\n%s\n\n",
                         Printer.show(e.getKey().partySet),
                         Printer.show(e.getValue())));
 
         // Post-projection elaboration
-        List<AST.Process> res1 = res.entrySet().stream()
+        List<AST.Process> res1 = projected.entrySet().stream()
                 .flatMap(p -> expandParStatement(p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandAllStatement(p.getKey(), p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
@@ -291,6 +298,90 @@ public class PlusCalExtensions {
                 .forEach(System.out::println);
 
         return res1;
+    }
+
+    private static Vector<AST> implicitlyQualify(Vector<AST> stmts, Context ctx) {
+        return stmts.stream()
+                .map(s -> implicitlyQualify(s, ctx))
+                .collect(Collectors.toCollection(Vector::new));
+    }
+
+    private static TLAExpr implicitlyQualify(TLAExpr e, Context ctx) {
+        Vector<Vector<TLAToken>> tokens = e.tokens;
+        Vector<String> copy = new Vector<>();
+        for (Vector<TLAToken> b : tokens) {
+            for (TLAToken s : b) {
+                if (s.type == TLAToken.IDENT) {
+                    copy.add(s.string);
+                    whatToQualifyWith(ctx, s.string).ifPresent(q -> {
+                        copy.add("[");
+                        copy.add(q);
+                        copy.add("]");
+                    });
+                } else {
+                    copy.add(s.string);
+                }
+            }
+        }
+        TLAExpr res = tlaExpr(copy.stream().collect(Collectors.joining()));
+        return res;
+    }
+
+    private static AST implicitlyQualify(AST stmt, Context ctx) {
+        if (stmt instanceof AST.All) {
+            String v = ((AST.All) stmt).var;
+            ctx.binders.add(v);
+            AST.All all = newAll((AST.All) stmt);
+            all.Do = implicitlyQualify((Vector<AST>) ((AST.All) stmt).Do, ctx);
+            // this is correct only if there is no aliasing, which is ok to ensure for models
+            ctx.binders.remove(v);
+            return all;
+        } else if (stmt instanceof AST.Assign) {
+            AST.Assign assign = newAssign((AST.Assign) stmt);
+            assign.ass = ((Vector<AST.SingleAssign>) assign.ass).stream()
+                    .map(a -> {
+                        AST.SingleAssign a1 = newSingleAssign(a);
+                        a1.lhs.sub = whatToQualifyWith(ctx, a1.lhs.var)
+                                .map(b -> tlaExpr("[%s]", b))
+                                .orElse(a1.lhs.sub);
+                        a1.rhs = implicitlyQualify(a.rhs, ctx);
+                        return a1;
+                    })
+                    .collect(Collectors.toCollection(Vector::new));
+            return assign;
+        } else {
+            fail("unimplemented: implicitlyQualify " + stmt);
+            return null;
+        }
+    }
+
+    /**
+     * What to qualify a variable with.
+     * If the variable is from a particular role, identify an enclosing binder that should be used to qualify it.
+     * If there isn't exactly one, fail.
+     * (none: meaningless, as no party is acting;
+     * more than one is ambiguous, in which case the user should qualify)
+     * If the variable is bound by all, leave it.
+     */
+    private static Optional<String> whatToQualifyWith(Context ctx, String var) {
+        List<Role> possibleRoles = ctx.roleDecls.entrySet().stream()
+                .filter(e -> e.getValue().localVars.stream().anyMatch(l -> l.var.equals(var)))
+                .map(e -> e.getValue())
+                .collect(Collectors.toList());
+        if (possibleRoles.isEmpty()) {
+            return Optional.empty();
+        } else if (possibleRoles.size() > 1) {
+            fail(String.format("local variable %s belongs to more than one role?", var));
+        }
+        Role role = possibleRoles.get(0);
+        List<String> bound = ctx.binders.stream().filter(b -> ctx.party.get(b) == role)
+                .collect(Collectors.toList());
+        if (possibleRoles.size() > 1) {
+            fail(String.format("more than one binder %s", bound));
+        } else if (possibleRoles.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(bound.get(0));
     }
 
     private static void findTasks(Context ctx, Map<String, Role> tasks, Vector<AST> stmts) {
@@ -1173,9 +1264,11 @@ public class PlusCalExtensions {
     private static AST.Lhs subst(String var, String with, AST.Lhs in) {
         AST.Lhs res = new AST.Lhs();
         if (in.var != null && in.var.equals(var)) {
-            in.var = with;
+            res.var = with;
+        } else {
+            res.var = in.var;
         }
-        in.sub = subst(var, with, in.sub);
+        res.sub = subst(var, with, in.sub);
         copyInto(in, res);
         return res;
     }
@@ -1328,7 +1421,7 @@ public class PlusCalExtensions {
             if (debug) {
                 System.out.println("---");
                 System.out.println(Printer.show(a1));
-           }
+            }
         }
         if (debug) {
             System.out.println("--- fixed point");

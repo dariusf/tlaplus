@@ -2,6 +2,11 @@
 This is a collection of experimental extensions to the TLA+ tools.
 Some are described in the paper [Protocol Conformance with Choreographic PlusCal](https://dariusf.github.io/cpluscal.pdf).
 
+- [Project structure](#project-structure)
+- [Development](#development)
+- [Choreographic PlusCal](#choreographic-pluscal)
+- [MBTC flow](#mbtc-flow)
+
 # Project structure
 
 cpcal.t/run.t contains CPCal tests

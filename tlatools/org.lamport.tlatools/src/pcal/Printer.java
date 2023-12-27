@@ -51,7 +51,11 @@ public class Printer {
             result.add("}");
         } else if (p instanceof AST.Assign) {
             Vector<AST.SingleAssign> ass = ((AST.Assign) p).ass;
-            ass.forEach(a -> result.add(String.format("%s := %s;", a.lhs.var, show(a.rhs))));
+            if (ass.size() > 1) {
+                throw new IllegalArgumentException("unimplemented");
+            }
+            AST.SingleAssign ass1 = ass.get(0);
+            ass.forEach(a -> result.add(String.format("%s%s := %s;", ass1.lhs.var, show(ass1.lhs.sub), show(a.rhs))));
         } else if (p instanceof AST.When) {
             result.add(String.format("await %s;", show(((AST.When) p).exp)));
         } else if (p instanceof AST.All) {
