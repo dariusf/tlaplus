@@ -353,6 +353,18 @@ public class PlusCalExtensions {
             // this is correct only if there is no aliasing, which is ok to ensure for models
             ctx.binders.remove(v);
             return all;
+        } else if (stmt instanceof AST.While) {
+            AST.While w = newWhile((AST.While) stmt);
+            w.test = implicitlyQualify(w.test, ctx);
+            w.extraTests = w.extraTests.stream()
+                    .map(t -> implicitlyQualify(t, ctx))
+                    .collect(Collectors.toList());
+            if (w.unlabDo != null) {
+                w.unlabDo = implicitlyQualify(w.unlabDo, ctx);
+            } else {
+                w.labDo = implicitlyQualify(w.labDo, ctx);
+            }
+            return w;
         } else if (stmt instanceof AST.Clause) {
             AST.Clause clause = newClause((AST.Clause) stmt);
             if (clause.unlabOr != null) {
@@ -1263,6 +1275,9 @@ public class PlusCalExtensions {
             // nothing
         } else if (ast instanceof AST.When) {
             // nothing
+        } else if (ast instanceof AST.While) {
+            computeOwnership(ctx, res, ((AST.While) ast).labDo);
+            computeOwnership(ctx, res, ((AST.While) ast).unlabDo);
         } else if (ast instanceof AST.Clause) {
             computeOwnership(ctx, res, ((AST.Clause) ast).labOr);
             computeOwnership(ctx, res, ((AST.Clause) ast).unlabOr);
@@ -1411,6 +1426,18 @@ public class PlusCalExtensions {
                         .collect(Collectors.toCollection(Vector::new));
             }
             return i;
+        } else if (in instanceof AST.While) {
+            AST.While w = newWhile((AST.While) in);
+            w.test = subst(var, with, w.test);
+            w.extraTests = w.extraTests.stream()
+                    .map(t -> subst(var, with, t))
+                    .collect(Collectors.toList());
+            if (w.unlabDo != null) {
+                w.unlabDo = subst(var, with, w.unlabDo);
+            } else {
+                w.labDo = subst(var, with, w.labDo);
+            }
+            return w;
         } else if (in instanceof AST.Clause) {
             AST.Clause i = newClause((AST.Clause) in);
             if (i.unlabOr != null) {
@@ -1539,6 +1566,14 @@ public class PlusCalExtensions {
             AST.Task c = newTask((AST.Task) in);
             c.Do = normalizeStep((Vector<AST>) c.Do);
             result.add(c);
+        } else if (in instanceof AST.While) {
+            AST.While w = newWhile((AST.While) in);
+            if (w.unlabDo != null) {
+                w.unlabDo = normalizeStep((Vector<AST>) w.unlabDo);
+            } else {
+                w.labDo = normalizeStep((Vector<AST>) w.labDo);
+            }
+            result.add(w);
         } else {
             throw new IllegalArgumentException("normalizeStep: unimplemented " + in.getClass().getSimpleName());
         }
