@@ -47,7 +47,7 @@ CONSTANTS p1, p2, c
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "653d9480" /\ chksum(tla) = "91985464")
+\* BEGIN TRANSLATION (chksum(pcal) = "98f85278" /\ chksum(tla) = "bd85a0aa")
 VARIABLES participants, coordinators, messages, cancelled_phase1, pc
 
 vars == << participants, coordinators, messages, cancelled_phase1, pc >>
@@ -59,56 +59,83 @@ Init == (* Global variables *)
         /\ coordinators = {c}
         /\ messages = {}
         /\ cancelled_phase1 = FALSE
-        /\ pc = [self \in ProcSet |-> CASE self \in participants -> "Lbl_1"
-                                        [] self \in (participants \X c) -> "Lbl_4"
-                                        [] self = c -> "Lbl_5"]
+        /\ pc = [self \in ProcSet |-> CASE self \in participants -> "comm_0"
+                                        [] self \in (participants \X c) -> "Lbl_2"
+                                        [] self = c -> "Lbl_3"]
+
+comm_0(self) == /\ pc[self] = "comm_0"
+                /\ [To |-> Head(Tail(self)), From |-> c, Type |-> "prepare"] \in messages
+                /\ \/ /\ pc' = [pc EXCEPT ![self] = "comm_1"]
+                   \/ /\ pc' = [pc EXCEPT ![self] = "comm_2"]
+                /\ UNCHANGED << participants, coordinators, messages, 
+                                cancelled_phase1 >>
+
+comm_1(self) == /\ pc[self] = "comm_1"
+                /\ messages' = (messages \union {[To |-> c, From |-> Head(Tail(self)), Type |-> "prepared"]})
+                /\ pc' = [pc EXCEPT ![self] = "Lbl_1"]
+                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
+
+comm_2(self) == /\ pc[self] = "comm_2"
+                /\ messages' = (messages \union {[To |-> c, From |-> Head(Tail(self)), Type |-> "aborted"]})
+                /\ pc' = [pc EXCEPT ![self] = "Lbl_1"]
+                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ [To |-> Tail(self), From |-> c, Type |-> prepare] \in messages
-               /\ \/ /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> prepared]})
-                  \/ /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> aborted]})
                /\ IF aborted
-                     THEN /\ [To |-> Tail(self), From |-> c, Type |-> abort] \in messages'
-                          /\ pc' = [pc EXCEPT ![self] = "Lbl_2"]
-                     ELSE /\ [To |-> Tail(self), From |-> c, Type |-> commit] \in messages'
-                          /\ pc' = [pc EXCEPT ![self] = "Lbl_3"]
-               /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
+                     THEN /\ pc' = [pc EXCEPT ![self] = "comm_3"]
+                     ELSE /\ pc' = [pc EXCEPT ![self] = "comm_5"]
+               /\ UNCHANGED << participants, coordinators, messages, 
+                               cancelled_phase1 >>
+
+comm_3(self) == /\ pc[self] = "comm_3"
+                /\ [To |-> Head(Tail(self)), From |-> c, Type |-> "abort"] \in messages
+                /\ pc' = [pc EXCEPT ![self] = "comm_4"]
+                /\ UNCHANGED << participants, coordinators, messages, 
+                                cancelled_phase1 >>
+
+comm_4(self) == /\ pc[self] = "comm_4"
+                /\ messages' = (messages \union {[To |-> c, From |-> Head(Tail(self)), Type |-> "aborted"]})
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
+
+comm_5(self) == /\ pc[self] = "comm_5"
+                /\ [To |-> Head(Tail(self)), From |-> c, Type |-> "commit"] \in messages
+                /\ pc' = [pc EXCEPT ![self] = "comm_6"]
+                /\ UNCHANGED << participants, coordinators, messages, 
+                                cancelled_phase1 >>
+
+comm_6(self) == /\ pc[self] = "comm_6"
+                /\ messages' = (messages \union {[To |-> c, From |-> Head(Tail(self)), Type |-> "committed"]})
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
+
+P(self) == comm_0(self) \/ comm_1(self) \/ comm_2(self) \/ Lbl_1(self)
+              \/ comm_3(self) \/ comm_4(self) \/ comm_5(self)
+              \/ comm_6(self)
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> aborted]})
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
-
-Lbl_3(self) == /\ pc[self] = "Lbl_3"
-               /\ messages' = (messages \union {[To |-> c, From |-> Tail(self), Type |-> committed]})
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, cancelled_phase1 >>
-
-P(self) == Lbl_1(self) \/ Lbl_2(self) \/ Lbl_3(self)
-
-Lbl_4(self) == /\ pc[self] = "Lbl_4"
-               /\ pc[Tail(self)] = "fork_0"
+               /\ pc[Head(Tail(self))] = "fork_7"
                /\ cancelled_phase1' = TRUE
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, messages >>
 
-proc_1(self) == Lbl_4(self)
+proc_8(self) == Lbl_2(self)
 
-Lbl_5 == /\ pc[c] = "Lbl_5"
+Lbl_3 == /\ pc[c] = "Lbl_3"
          /\ IF ~ cancelled_phase1
-               THEN /\ pc' = [pc EXCEPT ![c] = "fork_0"]
+               THEN /\ pc' = [pc EXCEPT ![c] = "fork_7"]
                ELSE /\ TRUE
-                    /\ pc' = [pc EXCEPT ![c] = "Lbl_6"]
+                    /\ pc' = [pc EXCEPT ![c] = "Lbl_4"]
          /\ UNCHANGED << participants, coordinators, messages, 
                          cancelled_phase1 >>
 
-fork_0 == /\ pc[c] = "fork_0"
+fork_7 == /\ pc[c] = "fork_7"
           /\ \A p \in (participants \X c) : pc[p] = "Done"
-          /\ pc' = [pc EXCEPT ![c] = "Lbl_6"]
+          /\ pc' = [pc EXCEPT ![c] = "Lbl_4"]
           /\ UNCHANGED << participants, coordinators, messages, 
                           cancelled_phase1 >>
 
-Lbl_6 == /\ pc[c] = "Lbl_6"
+Lbl_4 == /\ pc[c] = "Lbl_4"
          /\ IF aborted
                THEN /\ TRUE
                ELSE /\ TRUE
@@ -116,7 +143,7 @@ Lbl_6 == /\ pc[c] = "Lbl_6"
          /\ UNCHANGED << participants, coordinators, messages, 
                          cancelled_phase1 >>
 
-C == Lbl_5 \/ fork_0 \/ Lbl_6
+C == Lbl_3 \/ fork_7 \/ Lbl_4
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
@@ -124,7 +151,7 @@ Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
 
 Next == C
            \/ (\E self \in participants: P(self))
-           \/ (\E self \in (participants \X c): proc_1(self))
+           \/ (\E self \in (participants \X c): proc_8(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars

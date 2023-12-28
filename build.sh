@@ -29,7 +29,6 @@ alias d='dune promote'
 tlatools() {
   name=$1
   shift
-  set -x
   java -XX:+UseParallelGC -cp "$tla2tools" "$name" "$@" 2>&1
 }
 

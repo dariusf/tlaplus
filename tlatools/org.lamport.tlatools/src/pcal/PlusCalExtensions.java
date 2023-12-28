@@ -3,6 +3,7 @@ package pcal;
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
 import tlc2.mbtc.Pair;
+import tlc2.util.Vect;
 
 import java.util.*;
 import java.util.function.Function;
@@ -291,6 +292,7 @@ public class PlusCalExtensions {
                 .flatMap(p -> expandCancellations(p.getValue()).stream().map(pr -> new AbstractMap.SimpleEntry<>(p.getKey(), pr)))
                 .map(Map.Entry::getValue)
                 .map(PlusCalExtensions::expandTask)
+                .map(PlusCalExtensions::sendReceiveGrainOfAtomicity)
                 .collect(Collectors.toList());
 
         // TODO optimize, remove the no-op processes entirely
@@ -301,6 +303,75 @@ public class PlusCalExtensions {
                 .forEach(System.out::println);
 
         return res1;
+    }
+
+    private static AST.Process sendReceiveGrainOfAtomicity(AST.Process process) {
+        return flatMapProcessBody(process, body -> sendReceiveGrainOfAtomicity(body));
+    }
+
+    private static Stream<AST> sendReceiveGrainOfAtomicity(AST ast) {
+        if (ast instanceof AST.All) {
+            AST.All all = newAll((AST.All) ast);
+            all.Do = sendReceiveGrainOfAtomicity((Vector<AST>) all.Do)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(all);
+        } else if (ast instanceof AST.LabelIf) {
+            AST.LabelIf li = newIf((AST.LabelIf) ast);
+            if (li.unlabThen != null) {
+                li.unlabThen = sendReceiveGrainOfAtomicity((Vector<AST>) li.unlabThen)
+                        .collect(Collectors.toCollection(Vector::new));
+                li.unlabElse = sendReceiveGrainOfAtomicity((Vector<AST>) li.unlabElse)
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                li.labThen = sendReceiveGrainOfAtomicity((Vector<AST>) li.labThen)
+                        .collect(Collectors.toCollection(Vector::new));
+                li.labElse = sendReceiveGrainOfAtomicity((Vector<AST>) li.labElse)
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return Stream.of(li);
+        } else if (ast instanceof AST.While) {
+            AST.While w = newWhile((AST.While) ast);
+            if (w.unlabDo != null) {
+                w.unlabDo = sendReceiveGrainOfAtomicity((Vector<AST>) w.unlabDo)
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                w.labDo = sendReceiveGrainOfAtomicity((Vector<AST>) w.labDo)
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return Stream.of(w);
+        } else if (ast instanceof AST.Clause) {
+            AST.Clause cl = newClause((AST.Clause) ast);
+            if (cl.unlabOr != null) {
+                cl.unlabOr = sendReceiveGrainOfAtomicity((Vector<AST>) cl.unlabOr)
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                cl.labOr = sendReceiveGrainOfAtomicity((Vector<AST>) cl.labOr)
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return Stream.of(cl);
+        } else if (ast instanceof AST.LabelEither) {
+                AST.LabelEither ei = newEither((AST.LabelEither) ast);
+                ei.clauses = sendReceiveGrainOfAtomicity((Vector<AST>) ei.clauses)
+                        .collect(Collectors.toCollection(Vector::new));
+                return Stream.of(ei);
+        } else if (ast instanceof AST.MacroCall &&
+                (((AST.MacroCall) ast).name.equals("Send") ||
+                        ((AST.MacroCall) ast).name.equals("Receive"))) {
+            AST.MacroCall macro = newMacroCall((AST.MacroCall) ast);
+            macro.lbl = fresh("comm");
+            return Stream.of(macro);
+        } else if (ast instanceof AST.MacroCall
+                || ast instanceof AST.Assign
+                || ast instanceof AST.Skip
+                || ast instanceof AST.When) {
+            return Stream.of(ast);
+        } else {
+            throw new IllegalArgumentException("sendReceiveGrainOfAtomicity: unimplemented " + ast.getClass().getSimpleName());
+        }
+    }
+
+    private static Stream<AST> sendReceiveGrainOfAtomicity(Vector<AST> ast) {
+        return ast.stream().flatMap(a -> sendReceiveGrainOfAtomicity(a));
     }
 
     /**

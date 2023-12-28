@@ -5,7 +5,6 @@
   $ source test.sh
 
   $ monitor_check_show Stress
-  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor Stress.tla
   1128 lines
   parse ok
   compile ok
@@ -1116,19 +1115,16 @@
   }
 
   $ monitor_check Counter
-  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor Counter.tla
   766 lines
   parse ok
   compile ok
 
   $ monitor_check TwoPhaseCommitFull
-  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor TwoPhaseCommitFull.tla
   1299 lines
   parse ok
   compile ok
 
   $ monitor_check raft
-  ++ java -XX:+UseParallelGC -cp ../tlatools/org.lamport.tlatools/dist/tla2tools.jar tlc2.TLC -monitor raft.tla
   1834 lines
   parse ok
   compile ok

@@ -41,3 +41,4 @@ tlatools/org.lamport.tlatools/classes
 _build
 **TT**
 *.old
+*.out
