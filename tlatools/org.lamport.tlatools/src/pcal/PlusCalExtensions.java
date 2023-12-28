@@ -1520,6 +1520,10 @@ public class PlusCalExtensions {
                 w.labDo = subst(var, with, w.labDo);
             }
             return w;
+        } else if (in instanceof AST.When) {
+            AST.When w = newWhen((AST.When) in);
+            w.exp = subst(var, with, w.exp);
+            return w;
         } else if (in instanceof AST.Clause) {
             AST.Clause i = newClause((AST.Clause) in);
             if (i.unlabOr != null) {
@@ -1838,7 +1842,7 @@ public class PlusCalExtensions {
 
             // try locals first
             Optional<AST.VarDecl> first = role.localVars.stream().filter(v -> v.var.equals(lhs.var)).findFirst();
-            if (first.isPresent()) {
+            if (first.isPresent() && Printer.show(lhs.sub).contains("self")) {
                 result.add(e);
             } else {
                 // try globals

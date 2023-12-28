@@ -18,87 +18,67 @@ CONSTANTS p1, p2, c1, c2
   }
 
   choreography
+    (C \in coordinators),
     (P \in participants)
       variables
         committed = {};
   {
-    all (p \in participants) {
-      committed := committed \union {<<p, coord>>};
+    all (c \in coordinators) {
+      all (p \in participants) {
+        committed := committed \union {<<p, c>>};
+      }
     }
   }
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "114cd95a" /\ chksum(tla) = "b4025a06")
-VARIABLES participants, coordinators, messages, me, pc, committed
+\* BEGIN TRANSLATION (chksum(pcal) = "580cf932" /\ chksum(tla) = "8b60c126")
+VARIABLES participants, coordinators, messages, pc, committed
 
-vars == << participants, coordinators, messages, me, pc, committed >>
+vars == << participants, coordinators, messages, pc, committed >>
 
-ProcSet == (("P_par_1" \X {participants})) \cup ((participants \ { me } \X participants)) \cup (("P_par_3" \X {participants})) \cup (participants)
+ProcSet == ((coordinators \X participants)) \cup (participants) \cup (coordinators)
 
 Init == (* Global variables *)
         /\ participants = {p1, p2}
         /\ coordinators = {c1, c2}
         /\ messages = {}
-        /\ me = FALSE
         (* Process P *)
         /\ committed = [self \in participants |-> {}]
-        /\ pc = [self \in ProcSet |-> CASE self \in ("P_par_1" \X {participants}) -> "Lbl_1"
-                                        [] self \in (participants \ { me } \X participants) -> "Lbl_2"
-                                        [] self \in ("P_par_3" \X {participants}) -> "Lbl_3"
-                                        [] self \in participants -> "Lbl_4"]
+        /\ pc = [self \in ProcSet |-> CASE self \in (coordinators \X participants) -> "Lbl_1"
+                                        [] self \in participants -> "fork_0"
+                                        [] self \in coordinators -> "Lbl_2"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ pc[Tail(self)] = "par_0"
-               /\ committed' = [committed EXCEPT ![self][ me   ] = committed[self] [ me   ] \union { << me   , coord >> }]
+               /\ pc[Head(Tail(self))] = "fork_0"
+               /\ committed' = [committed EXCEPT ![self][ Head(Tail(self)) ] = committed[self] [ Head(Tail(self)) ] \union { << Head(Tail(self)) , Head(self)>> }]
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, messages, me >>
+               /\ UNCHANGED << participants, coordinators, messages >>
 
-proc_2(self) == Lbl_1(self)
+proc_1(self) == Lbl_1(self)
 
-Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Tail(self)] = "fork_6"
-               /\ committed' = [committed EXCEPT ![self][ Head(self)] = committed[self] [ Head(self)] \union { << Head(self), coord >> }]
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, messages, me >>
-
-proc_7(self) == Lbl_2(self)
-
-Lbl_3(self) == /\ pc[self] = "Lbl_3"
-               /\ pc[Tail(self)] = "par_0"
-               /\ pc' = [pc EXCEPT ![self] = "fork_6"]
-               /\ UNCHANGED << participants, coordinators, messages, me, 
-                               committed >>
-
-fork_6(self) == /\ pc[self] = "fork_6"
-                /\ \A p \in (participants \ { me } \X participants) : pc[p] = "Done"
+fork_0(self) == /\ pc[self] = "fork_0"
+                /\ \A c \in (coordinators \X participants) : pc[c] = "Done"
                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                /\ UNCHANGED << participants, coordinators, messages, me, 
+                /\ UNCHANGED << participants, coordinators, messages, 
                                 committed >>
 
-proc_4(self) == Lbl_3(self) \/ fork_6(self)
+P(self) == fork_0(self)
 
-Lbl_4(self) == /\ pc[self] = "Lbl_4"
-               /\ me' = self
-               /\ pc' = [pc EXCEPT ![self] = "par_0"]
+Lbl_2(self) == /\ pc[self] = "Lbl_2"
+               /\ TRUE
+               /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, messages, committed >>
 
-par_0(self) == /\ pc[self] = "par_0"
-               /\ \A v_5 \in ({"P_par_1", "P_par_3"} \X {participants}) : pc[v_5] = "Done"
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << participants, coordinators, messages, me, 
-                               committed >>
-
-P(self) == Lbl_4(self) \/ par_0(self)
+C(self) == Lbl_2(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
-Next == (\E self \in ("P_par_1" \X {participants}): proc_2(self))
-           \/ (\E self \in (participants \ { me } \X participants): proc_7(self))
-           \/ (\E self \in ("P_par_3" \X {participants}): proc_4(self))
+Next == (\E self \in (coordinators \X participants): proc_1(self))
            \/ (\E self \in participants: P(self))
+           \/ (\E self \in coordinators: C(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars

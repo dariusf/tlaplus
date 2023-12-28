@@ -2,6 +2,8 @@
   $ tlaroot=.. source ../build.sh
   tla2tools at ../tlatools/org.lamport.tlatools/dist/tla2tools.jar
 
+  $ function assert_termination() { grep 'Stuttering\|The depth of'; }
+
   $ cpluscal -nocfg Hello.tla 2> /dev/null
   pcal.trans Version 1.11 of 31 December 2020
   Projection of coordinators:
@@ -57,56 +59,247 @@
   Translation completed.
   New file Hello.tla written.
 
-  $ tlc Hello.tla 2> /dev/null | grep 'Stuttering\|The depth of'
+  $ tlc Hello.tla 2> /dev/null | assert_termination
   State 29: Stuttering
   The depth of the complete state graph search is 29.
 
   $ cpluscal -nocfg Chor.tla
   pcal.trans Version 1.11 of 31 December 2020
+  Projection of coordinators:
+  
+  process (C \in coordinators)
+  {
+    skip;
+  }
+  
   Projection of participants:
   
   process (P \in participants)
     variables
       committed = { };
   {
-    par {
-      committed[ self ] := committed [ self ] \union { << self , coord >> };
-    } and {
-      all (p \in participants \ { self }) {
-        committed[ p ] := committed [ p ] \union { << p , coord >> };
-      }
+    all (c \in coordinators) {
+      committed[ self ] := committed [ self ] \union { << self , c >> };
     }
   }
   
   Final processes:
   
+  process (C \in coordinators)
+  {
+    skip;
+  }
   process (P \in participants)
     variables
       committed = { };
   {
-    par_0:
-    await \A v_5 \in ( { "P_par_1" , "P_par_3" } \X { participants } ) : pc [ v_5 ] = "Done";
+    fork_0:
+    await \A c \in ( coordinators \X participants ) : pc [ c ] = "Done";
   }
-  process (proc_2 \in ( "P_par_1" \X { participants } ))
+  process (proc_1 \in ( coordinators \X participants ))
   {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    committed[ Head(Tail(self)) ] := committed [ Head(Tail(self)) ] \union { << Head(Tail(self)) , coord >> };
-  }
-  process (proc_4 \in ( "P_par_3" \X { participants } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    fork_6:
-    await \A p \in ( participants \ { Head ( Tail ( self ) ) } \X participants ) : pc [ p ] = "Done";
-  }
-  process (proc_7 \in ( participants \ { Head ( Tail ( self ) ) } \X participants ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "fork_6";
-    committed[ Head(self) ] := committed [ Head(self) ] \union { << Head(self) , coord >> };
+    await pc [ Head ( Tail ( self ) ) ] = "fork_0";
+    committed[ Head ( Tail ( self ) ) ] := committed [ Head ( Tail ( self ) ) ] \union { << Head ( Tail ( self ) ) , Head(self) >> };
   }
   Labels added.
   Parsing completed.
   Translation completed.
   New file Chor.tla written.
+
+  $ tlc Chor.tla 2> /dev/null #| assert_termination
+  TLC2 Version 2.18 of Day Month 20?? (rev: ${git.shortRevision})
+  Running breadth-first search Model-Checking with fp 125 and seed -4066907626089647733 with 1 worker on 8 cores with 3641MB heap and 64MB offheap memory [pid: 1084] (Mac OS X 13.6.1 x86_64, Homebrew 21 x86_64, MSBDiskFPSet, DiskStateQueue).
+  Parsing file $TESTCASE_ROOT/Chor.tla
+  Projection of coordinators:
+  
+  process (C \in coordinators)
+  {
+    skip;
+  }
+  
+  Projection of participants:
+  
+  process (P \in participants)
+    variables
+      committed = { };
+  {
+    all (c \in coordinators) {
+      committed[ self ] := committed [ self ] \union { << self , c >> };
+    }
+  }
+  
+  Final processes:
+  
+  process (C \in coordinators)
+  {
+    skip;
+  }
+  process (P \in participants)
+    variables
+      committed = { };
+  {
+    fork_0:
+    await \A c \in ( coordinators \X participants ) : pc [ c ] = "Done";
+  }
+  process (proc_1 \in ( coordinators \X participants ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_0";
+    committed[ Head ( Tail ( self ) ) ] := committed [ Head ( Tail ( self ) ) ] \union { << Head ( Tail ( self ) ) , Head(self) >> };
+  }
+  
+  Unrecoverable error:
+   -- Missing labels at the following locations:
+       line 0, column 0
+       line 0, column 0.
+  
+  !! WARNING: The PlusCal algorithm in module Chor has changed since its last translation.
+  Parsing file /private/var/folders/l6/290h50ys7t995mrks71zd9zc0000gn/T/tlc-7851333448997821720/Naturals.tla (jar:file:/Users/darius/java/tlaplus/_build/default/tlatools/org.lamport.tlatools/dist/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+  Parsing file /private/var/folders/l6/290h50ys7t995mrks71zd9zc0000gn/T/tlc-7851333448997821720/TLC.tla (jar:file:/Users/darius/java/tlaplus/_build/default/tlatools/org.lamport.tlatools/dist/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+  Parsing file /private/var/folders/l6/290h50ys7t995mrks71zd9zc0000gn/T/tlc-7851333448997821720/Sequences.tla (jar:file:/Users/darius/java/tlaplus/_build/default/tlatools/org.lamport.tlatools/dist/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+  Parsing file /private/var/folders/l6/290h50ys7t995mrks71zd9zc0000gn/T/tlc-7851333448997821720/_TLCTrace.tla (jar:file:/Users/darius/java/tlaplus/_build/default/tlatools/org.lamport.tlatools/dist/tla2tools.jar!/tla2sany/StandardModules/_TLCTrace.tla)
+  Parsing file /private/var/folders/l6/290h50ys7t995mrks71zd9zc0000gn/T/tlc-7851333448997821720/FiniteSets.tla (jar:file:/Users/darius/java/tlaplus/_build/default/tlatools/org.lamport.tlatools/dist/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+  Parsing file /private/var/folders/l6/290h50ys7t995mrks71zd9zc0000gn/T/tlc-7851333448997821720/TLCExt.tla (jar:file:/Users/darius/java/tlaplus/_build/default/tlatools/org.lamport.tlatools/dist/tla2tools.jar!/tla2sany/StandardModules/TLCExt.tla)
+  Semantic processing of module Naturals
+  Semantic processing of module Sequences
+  Semantic processing of module FiniteSets
+  Semantic processing of module TLC
+  Semantic processing of module TLCExt
+  Semantic processing of module _TLCTrace
+  Semantic processing of module Chor
+  Starting... (2023-12-28 11:45:04)
+  Implied-temporal checking--satisfiability problem has 1 branches.
+  Computing initial states...
+  Finished computing initial states: 1 distinct state generated at 2023-12-28 11:45:04.
+  Warning: The EXCEPT was applied to non-existing fields of the value at
+  line 54, col 33 to line 54, col 41 of module Chor
+  (Use the -nowarning option to disable this warning.)
+  Warning: The EXCEPT was applied to non-existing fields of the value at
+  line 54, col 33 to line 54, col 41 of module Chor
+  Progress(9) at 2023-12-28 11:45:04: 222 states generated, 76 distinct states found, 0 states left on queue.
+  Checking temporal properties for the complete state space with 76 total distinct states at (2023-12-28 11:45:04)
+  Error: Temporal properties were violated.
+  
+  Error: The following behavior constitutes a counter-example:
+  
+  State 1: <Initial predicate>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Lbl_2" @@
+    c2 :> "Lbl_2" @@
+    <<c1, p1>> :> "Lbl_1" @@
+    <<c1, p2>> :> "Lbl_1" @@
+    <<c2, p1>> :> "Lbl_1" @@
+    <<c2, p2>> :> "Lbl_1" )
+  
+  State 2: <Next line 81, col 16 to line 81, col 48 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Lbl_2" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Lbl_1" @@
+    <<c1, p2>> :> "Lbl_1" @@
+    <<c2, p1>> :> "Lbl_1" @@
+    <<c2, p2>> :> "Lbl_1" )
+  
+  State 3: <Next line 79, col 10 to line 79, col 65 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Lbl_2" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Lbl_1" @@
+    <<c1, p2>> :> "Lbl_1" @@
+    <<c2, p1>> :> "Done" @@
+    <<c2, p2>> :> "Lbl_1" )
+  
+  State 4: <Next line 79, col 10 to line 79, col 65 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Lbl_2" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Done" @@
+    <<c1, p2>> :> "Lbl_1" @@
+    <<c2, p1>> :> "Done" @@
+    <<c2, p2>> :> "Lbl_1" )
+  
+  State 5: <Next line 79, col 10 to line 79, col 65 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Lbl_2" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Done" @@
+    <<c1, p2>> :> "Lbl_1" @@
+    <<c2, p1>> :> "Done" @@
+    <<c2, p2>> :> "Done" )
+  
+  State 6: <Next line 79, col 10 to line 79, col 65 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Lbl_2" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Done" @@
+    <<c1, p2>> :> "Done" @@
+    <<c2, p1>> :> "Done" @@
+    <<c2, p2>> :> "Done" )
+  
+  State 7: <Next line 81, col 16 to line 81, col 48 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "fork_0" @@
+    p2 :> "fork_0" @@
+    c1 :> "Done" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Done" @@
+    <<c1, p2>> :> "Done" @@
+    <<c2, p1>> :> "Done" @@
+    <<c2, p2>> :> "Done" )
+  
+  State 8: <Next line 80, col 16 to line 80, col 48 of module Chor>
+  /\ participants = {p1, p2}
+  /\ coordinators = {c1, c2}
+  /\ messages = {}
+  /\ committed = (p1 :> {} @@ p2 :> {})
+  /\ pc = ( p1 :> "Done" @@
+    p2 :> "fork_0" @@
+    c1 :> "Done" @@
+    c2 :> "Done" @@
+    <<c1, p1>> :> "Done" @@
+    <<c1, p2>> :> "Done" @@
+    <<c2, p1>> :> "Done" @@
+    <<c2, p2>> :> "Done" )
+  
+  State 9: Stuttering
+  Finished checking temporal properties in 00s at 2023-12-28 11:45:04
+  222 states generated, 76 distinct states found, 0 states left on queue.
+  The depth of the complete state graph search is 9.
+  Finished in 00s at (2023-12-28 11:45:04)
+  Trace exploration spec path: ./Chor_TTrace_1703735103.tla
+  [13]
 
   $ cpluscal -nocfg Par.tla
   pcal.trans Version 1.11 of 31 December 2020
@@ -116,11 +309,7 @@
     variables
       x = 1;
   {
-    par {
-      x := x + 1;
-    } and {
-      x := x + 2;
-    }
+    skip;
   }
   
   Projection of participants:
@@ -136,22 +325,11 @@
     variables
       x = 1;
   {
-    par_0:
-    await \A v_5 \in ( { "C_par_1" , "C_par_3" } \X { coord } ) : pc [ v_5 ] = "Done";
+    skip;
   }
   process (P \in participants)
   {
     skip;
-  }
-  process (proc_2 \in ( "C_par_1" \X { coord } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    x := x + 1;
-  }
-  process (proc_4 \in ( "C_par_3" \X { coord } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    x := x + 2;
   }
   Labels added.
   Parsing completed.
@@ -167,11 +345,7 @@
       x = 0;
   {
     task P, "a" {
-      par {
-        cancel a;
-      } and {
-        x := x + 2;
-      }
+      cancel a;
     }
   }
   
@@ -182,21 +356,10 @@
       x = 0;
   {
     if (~ cancelled_a) {
-      par_0:
-      await \A v_5 \in ( { "P_par_1" , "P_par_3" } \X { participants } ) : pc [ v_5 ] = "Done";
+      cancelled_a := TRUE;
     } else {
       skip;
     }
-  }
-  process (proc_2 \in ( "P_par_1" \X { participants } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    cancelled_a := TRUE;
-  }
-  process (proc_4 \in ( "P_par_3" \X { participants } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    x := x + 2;
   }
   Labels added.
   Parsing completed.
@@ -214,7 +377,7 @@
     all (p \in participants) {
       while (y > 1) {
         skip;
-        y := y - 1;
+        skip;
         skip;
       }
     }
@@ -237,7 +400,7 @@
         while (x [ p ] < 3) {
           skip;
           skip;
-          x[ p ] := x [ p ] + 1;
+          skip;
         }
       }
     }
@@ -264,7 +427,7 @@
     await pc [ Head ( Tail ( self ) ) ] = "fork_9";
     while (y > 1) {
       skip;
-      y := y - 1;
+      skip;
       skip;
     }
   }
@@ -290,7 +453,7 @@
     while (x [ Head(self) ] < 3) {
       skip;
       skip;
-      x[ Head(self) ] := x [ Head(self) ] + 1;
+      skip;
     }
   }
   Labels added.
