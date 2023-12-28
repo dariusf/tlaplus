@@ -112,13 +112,17 @@
 
   $ cpluscal -nocfg Par.tla
   pcal.trans Version 1.11 of 31 December 2020
-  Projection of coord:
+  Projection of coordinators:
   
-  process (C = coord)
+  process (C \in coordinators)
     variables
       x = 1;
   {
-    skip;
+    par {
+      x := x + 1;
+    } and {
+      x := x + 2;
+    }
   }
   
   Projection of participants:
@@ -130,42 +134,189 @@
   
   Final processes:
   
-  process (C = coord)
+  process (C \in coordinators)
     variables
       x = 1;
   {
-    skip;
+    par_0:
+    await \A v_5 \in ( { "C_par_1" , "C_par_3" } \X { coordinators } ) : pc [ v_5 ] = "Done";
   }
   process (P \in participants)
   {
     skip;
+  }
+  process (proc_2 \in ( "C_par_1" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    x := x + 1;
+  }
+  process (proc_4 \in ( "C_par_3" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    x := x + 2;
   }
   Labels added.
   Parsing completed.
   Translation completed.
   New file Par.tla written.
 
+  $ cpluscal -nocfg ParNested.tla
+  pcal.trans Version 1.11 of 31 December 2020
+  Projection of coordinators:
+  
+  process (C \in coordinators)
+    variables
+      x = 1;
+  {
+    all (p \in participants) {
+      par {
+        par {
+          x := x + 1;
+        } and {
+          x := x + 3;
+        }
+      } and {
+        x := x + 2;
+      }
+    }
+  }
+  
+  Projection of participants:
+  
+  process (P \in participants)
+  {
+    skip;
+  }
+  
+  Final processes:
+  
+  process (C \in coordinators)
+    variables
+      x = 1;
+  {
+    fork_12:
+    await \A p \in ( participants \X coordinators ) : pc [ p ] = "Done";
+  }
+  process (P \in participants)
+  {
+    skip;
+  }
+  process (proc_10 \in ( "C_par_9" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    x := x + 2;
+  }
+  process (proc_13 \in ( participants \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_12";
+    par_0:
+    await \A v_11 \in ( { "C_par_1" , "C_par_9" } \X { coordinators } ) : pc [ v_11 ] = "Done";
+  }
+  process (proc_4 \in ( "C_par_3" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_2";
+    x := x + 1;
+  }
+  process (proc_6 \in ( "C_par_5" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_2";
+    x := x + 3;
+  }
+  process (proc_8 \in ( "C_par_1" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    par_2:
+    await \A v_7 \in ( { "C_par_3" , "C_par_5" } \X { coordinators } ) : pc [ v_7 ] = "Done";
+  }
+  Labels added.
+  Parsing completed.
+  Translation completed.
+  New file ParNested.tla written.
+
   $ cpluscal -nocfg Cancel.tla
   pcal.trans Version 1.11 of 31 December 2020
+  Projection of coordinators:
+  
+  process (C \in coordinators)
+  {
+    skip;
+  }
+  
   Projection of participants:
   
   process (P \in participants)
     variables
       x = 0;
   {
-    task P, "a" {
-      cancel a;
+    all (c \in coordinators) {
+      par {
+        task P, "a" {
+          par {
+            cancel a;
+          } and {
+            x := x + 2;
+          }
+        }
+      } and {
+        all (p \in participants \ { self }) {
+          task P, "a" {
+            cancel a;
+          }
+        }
+      }
     }
   }
   
   Final processes:
   
+  process (C \in coordinators)
+  {
+    skip;
+  }
   process (P \in participants)
     variables
       x = 0;
   {
+    fork_14:
+    await \A c \in ( coordinators \X participants ) : pc [ c ] = "Done";
+  }
+  process (proc_10 \in ( "P_par_9" \X { participants } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    fork_12:
+    await \A p \in ( participants \ { Head ( Tail ( self ) ) } \X participants ) : pc [ p ] = "Done";
+  }
+  process (proc_13 \in ( participants \ { Head ( Tail ( self ) ) } \X participants ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_12";
     if (~ cancelled_a) {
       cancelled_a := TRUE;
+    } else {
+      skip;
+    }
+  }
+  process (proc_15 \in ( coordinators \X participants ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_14";
+    par_0:
+    await \A v_11 \in ( { "P_par_1" , "P_par_9" } \X { participants } ) : pc [ v_11 ] = "Done";
+  }
+  process (proc_4 \in ( "P_par_3" \X { participants } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_2";
+    cancelled_a := TRUE;
+  }
+  process (proc_6 \in ( "P_par_5" \X { participants } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_2";
+    x := x + 2;
+  }
+  process (proc_8 \in ( "P_par_1" \X { participants } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    if (~ cancelled_a) {
+      par_2:
+      await \A v_7 \in ( { "P_par_3" , "P_par_5" } \X { participants } ) : pc [ v_7 ] = "Done";
     } else {
       skip;
     }
@@ -177,17 +328,29 @@
 
   $ cpluscal -nocfg While.tla
   pcal.trans Version 1.11 of 31 December 2020
-  Projection of coord:
+  Projection of coordinators:
   
-  process (C = coord)
+  process (C = coordinators)
     variables
       y = 3;
   {
-    all (p \in participants) {
-      while (y > 1) {
-        skip;
-        skip;
-        skip;
+    par {
+      all (p \in participants) {
+        while (y [ self ] > 1) {
+          Send(self, p, 5);
+          y := y - 1;
+          skip;
+        }
+      }
+    } and {
+      all (c \in coordinators \ { self }) {
+        all (p \in participants) {
+          while (y [ c ] > 1) {
+            skip;
+            skip;
+            skip;
+          }
+        }
       }
     }
   }
@@ -198,18 +361,20 @@
     variables
       x = 1;
   {
-    par {
-      while (x [ self ] < 3) {
-        Receive(coord, self, 5);
-        skip;
-        x := x + 1;
-      }
-    } and {
-      all (p \in participants \ { self }) {
-        while (x [ p ] < 3) {
+    all (c \in coordinators) {
+      par {
+        while (x [ self ] < 3) {
+          Receive(c, self, 5);
           skip;
-          skip;
-          skip;
+          x := x + 1;
+        }
+      } and {
+        all (p \in participants \ { self }) {
+          while (x [ p ] < 3) {
+            skip;
+            skip;
+            skip;
+          }
         }
       }
     }
@@ -217,26 +382,45 @@
   
   Final processes:
   
-  process (C = coord)
+  process (C = coordinators)
     variables
       y = 3;
   {
-    fork_9:
-    await \A p \in ( participants \X coord ) : pc [ p ] = "Done";
+    par_11:
+    await \A v_16 \in ( { "C_par_12" , "C_par_14" } \X { coordinators } ) : pc [ v_16 ] = "Done";
   }
   process (P \in participants)
     variables
       x = 1;
   {
+    fork_9:
+    await \A c \in ( coordinators \X participants ) : pc [ c ] = "Done";
+  }
+  process (proc_10 \in ( coordinators \X participants ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_9";
     par_0:
     await \A v_5 \in ( { "P_par_1" , "P_par_3" } \X { participants } ) : pc [ v_5 ] = "Done";
   }
-  process (proc_10 \in ( participants \X coord ))
+  process (proc_13 \in ( "C_par_12" \X { coordinators } ))
   {
-    await pc [ Head ( Tail ( self ) ) ] = "fork_9";
-    while (y > 1) {
-      skip;
-      skip;
+    await pc [ Head ( Tail ( self ) ) ] = "par_11";
+    fork_17:
+    await \A p \in ( participants \X coordinators ) : pc [ p ] = "Done";
+  }
+  process (proc_15 \in ( "C_par_14" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_11";
+    fork_20:
+    await \A c \in ( coordinators \ { Head ( Tail ( self ) ) } \X coordinators ) : pc [ c ] = "Done";
+  }
+  process (proc_18 \in ( participants \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_17";
+    while (y [ Head ( Tail ( self ) ) ] > 1) {
+      comm_19:
+      Send(Head ( Tail ( self ) ), Head(self), 5);
+      y := y - 1;
       skip;
     }
   }
@@ -245,10 +429,25 @@
     await pc [ Head ( Tail ( self ) ) ] = "par_0";
     while (x [ Head(Tail(self)) ] < 3) {
       comm_6:
-      Receive(coord, Head(Tail(self)), 5);
+      Receive(c, Head(Tail(self)), 5);
       skip;
       x := x + 1;
     }
+  }
+  process (proc_22 \in ( participants \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_21";
+    while (y [ c ] > 1) {
+      skip;
+      skip;
+      skip;
+    }
+  }
+  process (proc_23 \in ( coordinators \ { Head ( Tail ( self ) ) } \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_20";
+    fork_21:
+    await \A p \in ( participants \X coordinators ) : pc [ p ] = "Done";
   }
   process (proc_4 \in ( "P_par_3" \X { participants } ))
   {

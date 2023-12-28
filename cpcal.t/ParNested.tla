@@ -1,10 +1,12 @@
 --------------------- MODULE Par ----------------------
 EXTENDS Naturals, TLC, Sequences
 
-CONSTANTS p1, p2, coord
+CONSTANTS c1, p1, p2
 
 (* --algorithm Par {
-  \* variables x = 1;
+  variables
+    participants = {p1, p2};
+    coordinators = {c1};
 
   macro Receive(from, to, type) {
     await [To |-> to, From |-> from, Type |-> type] \in messages;
@@ -12,17 +14,21 @@ CONSTANTS p1, p2, coord
 
   choreography
     (P \in participants),
-    (C = coord)
+    (C \in coordinators)
       variables x = 1;
   {
-    par {
-      par {
-        x := x + 1;
-      } and {
-        x := x + 3;
+    all (p \in participants) {
+      all (c \in coordinators) {
+        par {
+          par {
+            x := x + 1;
+          } and {
+            x := x + 3;
+          }
+        } and {
+          x := x + 2;
+        }
       }
-    } and {
-      x := x + 2;
     }
   }
 }

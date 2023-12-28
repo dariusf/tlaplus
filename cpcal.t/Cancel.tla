@@ -1,19 +1,27 @@
 --------------------- MODULE Cancel ----------------------
 EXTENDS Naturals, TLC, Sequences
 
-CONSTANTS p1, p2, coord
+CONSTANTS p1, p2, c1
 
 (* --algorithm Cancel {
+  variables
+    participants = {p1, p2};
+    coordinators = {c1};
 
   choreography
+    (C \in coordinators),
     (P \in participants)
       variables x = 0;
   {
-    task P, "a" {
-      par {
-        cancel "a";
-      } and {
-        x := x + 2;
+    all (c \in coordinators) {
+      all (p \in participants) {
+        task P, "a" {
+          par {
+            cancel "a";
+          } and {
+            x := x + 2;
+          }
+        }
       }
     }
   }

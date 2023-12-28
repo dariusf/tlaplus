@@ -6,6 +6,7 @@ CONSTANTS p1, p2, coord
 (* --algorithm While {
   variables
     participants = {p1, p2};
+    coordinators = {coord};
     messages = {};
 
   macro Send(from, to, type) {
@@ -17,16 +18,18 @@ CONSTANTS p1, p2, coord
   }
 
   choreography
-    (C = coord)
+    (C = coordinators)
       variables y = 3,
     (P \in participants)
       variables x = 1;
   {
-    all (p \in participants) {
-      while (y > 1), (x < 3) {
-        Transmit(coord, p, 5);
-        y := y - 1;
-        x := x + 1;
+    all (c \in coordinators) {
+      all (p \in participants) {
+        while (y > 1), (x < 3) {
+          Transmit(c, p, 5);
+          y := y - 1;
+          x := x + 1;
+        }
       }
     }
   }

@@ -642,15 +642,16 @@ public class PlusCalExtensions {
         if (possibleRoles.isEmpty()) {
             return Optional.empty();
         } else if (possibleRoles.size() > 1) {
-            fail(String.format("local variable %s belongs to more than one role?", var));
+            fail(String.format("local variable %s belongs to more than one role? %s", var, possibleRoles));
         }
         Role role = possibleRoles.get(0);
         List<String> bound = ctx.binders.stream().filter(b -> ctx.party.get(b) == role)
                 .collect(Collectors.toList());
         if (bound.size() > 1) {
-            fail(String.format("more than one binder %s", bound));
+            fail(String.format("more than one binder %s to qualify %s with", bound, var));
         } else if (bound.isEmpty()) {
-            return Optional.empty();
+            fail(String.format("no binder to qualify %s with, no role is acting?", var));
+//            return Optional.empty();
         }
         return Optional.of(bound.get(0));
     }
