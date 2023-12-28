@@ -276,6 +276,9 @@ public class PlusCalExtensions {
                             e -> normalize(e.getValue())));
         }
 
+        // do this before printing
+        projected = stripSubscripts(projected);
+
         projected.entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
                 .forEach(e -> System.out.printf("Projection of %s:\n\n%s\n\n",
@@ -350,10 +353,10 @@ public class PlusCalExtensions {
             }
             return Stream.of(cl);
         } else if (ast instanceof AST.LabelEither) {
-                AST.LabelEither ei = newEither((AST.LabelEither) ast);
-                ei.clauses = sendReceiveGrainOfAtomicity((Vector<AST>) ei.clauses)
-                        .collect(Collectors.toCollection(Vector::new));
-                return Stream.of(ei);
+            AST.LabelEither ei = newEither((AST.LabelEither) ast);
+            ei.clauses = sendReceiveGrainOfAtomicity((Vector<AST>) ei.clauses)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(ei);
         } else if (ast instanceof AST.MacroCall &&
                 (((AST.MacroCall) ast).name.equals("Send") ||
                         ((AST.MacroCall) ast).name.equals("Receive"))) {
@@ -372,6 +375,107 @@ public class PlusCalExtensions {
 
     private static Stream<AST> sendReceiveGrainOfAtomicity(Vector<AST> ast) {
         return ast.stream().flatMap(a -> sendReceiveGrainOfAtomicity(a));
+    }
+
+    /**
+     * sad
+     */
+    private static TLAExpr stripSubscripts(TLAExpr expr) {
+        String s = Printer.show(expr);
+        return tlaExpr(s.replaceAll("([a-z]+) *\\[[^]]+?]", "$1"));
+    }
+
+    private static Stream<AST> stripSubscripts(AST ast) {
+        if (ast instanceof AST.Assign) {
+            AST.Assign ass = newAssign((AST.Assign) ast);
+            ass.ass = stripSubscripts((Vector<AST>) ass.ass)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(ass);
+        } else if (ast instanceof AST.SingleAssign) {
+            AST.SingleAssign ass = newSingleAssign((AST.SingleAssign) ast);
+            ass.lhs.sub = tlaExpr("");
+            ass.rhs = stripSubscripts(ass.rhs);
+            return Stream.of(ass);
+        } else if (ast instanceof AST.Par) {
+            AST.Par par = newPar((AST.Par) ast);
+            par.clauses = stripSubscripts((Vector<AST>) par.clauses)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(par);
+        } else if (ast instanceof AST.Skip || ast instanceof AST.Cancel) {
+            return Stream.of(ast);
+        } else if (ast instanceof AST.LabelIf) {
+            AST.LabelIf li = newIf((AST.LabelIf) ast);
+            if (li.unlabThen != null) {
+                li.unlabThen = stripSubscripts((Vector<AST>) li.unlabThen)
+                        .collect(Collectors.toCollection(Vector::new));
+                li.unlabElse = stripSubscripts((Vector<AST>) li.unlabElse)
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                li.labThen = stripSubscripts((Vector<AST>) li.labThen)
+                        .collect(Collectors.toCollection(Vector::new));
+                li.labElse = stripSubscripts((Vector<AST>) li.labElse)
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return Stream.of(li);
+        } else if (ast instanceof AST.LabelEither) {
+            AST.LabelEither ei = newEither((AST.LabelEither) ast);
+            ei.clauses = stripSubscripts((Vector<AST>) ei.clauses)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(ei);
+        } else if (ast instanceof AST.Clause) {
+            AST.Clause clause = newClause((AST.Clause) ast);
+            if (clause.unlabOr != null) {
+                clause.unlabOr = stripSubscripts((Vector<AST>) clause.unlabOr)
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                clause.labOr = stripSubscripts((Vector<AST>) clause.labOr)
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return Stream.of(clause);
+        } else if (ast instanceof AST.While) {
+            AST.While w = newWhile((AST.While) ast);
+            if (w.unlabDo != null) {
+                w.unlabDo = stripSubscripts((Vector<AST>) w.unlabDo)
+                        .collect(Collectors.toCollection(Vector::new));
+            } else {
+                w.labDo = stripSubscripts((Vector<AST>) w.labDo)
+                        .collect(Collectors.toCollection(Vector::new));
+            }
+            return Stream.of(w);
+        } else if (ast instanceof AST.All) {
+            AST.All all = newAll((AST.All) ast);
+            all.Do = stripSubscripts((Vector<AST>) all.Do)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(all);
+        } else if (ast instanceof AST.Task) {
+            AST.Task task = newTask((AST.Task) ast);
+            task.Do = stripSubscripts((Vector<AST>) task.Do)
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(task);
+        } else if (ast instanceof AST.MacroCall) {
+            AST.MacroCall macro = newMacroCall((AST.MacroCall) ast);
+            macro.args = ((Vector<TLAExpr>) macro.args).stream()
+                    .map(a -> stripSubscripts(a))
+                    .collect(Collectors.toCollection(Vector::new));
+            return Stream.of(macro);
+        } else {
+            throw new IllegalArgumentException("stripSubscripts: unimplemented " + ast.getClass().getSimpleName());
+        }
+    }
+
+    private static Stream<AST> stripSubscripts(Vector<AST> ast) {
+        return ast.stream().flatMap(a -> stripSubscripts(a));
+    }
+
+    private static Map<Role, AST.Process> stripSubscripts(Map<Role, AST.Process> projected) {
+        return projected.entrySet()
+                .stream()
+                .map(e -> {
+                    AST.Process v = flatMapProcessBody(e.getValue(),
+                            body -> stripSubscripts(body));
+                    return new AbstractMap.SimpleEntry<>(e.getKey(), v);
+                })
+                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
     }
 
     /**

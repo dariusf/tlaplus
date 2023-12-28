@@ -1,9 +1,9 @@
---------------------- MODULE Chor ----------------------
+--------------------- MODULE Assign ----------------------
 EXTENDS Naturals, TLC, Sequences
 
 CONSTANTS p1, p2, c1, c2
 
-(* --algorithm Chor {
+(* --algorithm Assign {
   variables
     participants = {p1, p2};
     coordinators = {c1, c2};
@@ -32,7 +32,7 @@ CONSTANTS p1, p2, c1, c2
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "580cf932" /\ chksum(tla) = "8b60c126")
+\* BEGIN TRANSLATION (chksum(pcal) = "6e345ada" /\ chksum(tla) = "1e7e408f")
 VARIABLES participants, coordinators, messages, pc, committed
 
 vars == << participants, coordinators, messages, pc, committed >>
@@ -51,7 +51,7 @@ Init == (* Global variables *)
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
                /\ pc[Head(Tail(self))] = "fork_0"
-               /\ committed' = [committed EXCEPT ![self][ Head(Tail(self)) ] = committed[self] [ Head(Tail(self)) ] \union { << Head(Tail(self)) , Head(self)>> }]
+               /\ committed' = [committed EXCEPT ![self] = committed[self] \union { << Head(Tail(self)) , Head(self)>> }]
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators, messages >>
 
