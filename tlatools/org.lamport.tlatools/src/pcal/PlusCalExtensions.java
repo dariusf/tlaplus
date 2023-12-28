@@ -304,14 +304,21 @@ public class PlusCalExtensions {
     }
 
     /**
-     * Why do this? self may not refer to the current party any more.
+     * Unpacks the info encoded in process ids using cartesian product
+     */
+    private static String parentParty(String s) {
+        return String.format("Head(Tail(%s))", s);
+    }
+
+    /**
+     * Why do this? self may not refer to the current party in new par/all processes
      */
     private static Map<Role, AST.Process> renameSelfToMe(Map<Role, AST.Process> projected) {
         return projected.entrySet()
                 .stream()
                 .map(e -> {
                     AST.Process v = flatMapProcessBody(e.getValue(),
-                            body -> Stream.of(subst("self", "Tail(self)", body)));
+                            body -> Stream.of(subst("self", parentParty("self"), body)));
                     return new AbstractMap.SimpleEntry<>(e.getKey(), v);
                 })
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
@@ -335,6 +342,10 @@ public class PlusCalExtensions {
                         copy.add(q);
                         copy.add("]");
                     });
+                } else if (s.type == TLAToken.STRING) {
+                    copy.add("\"");
+                    copy.add(s.string);
+                    copy.add("\"");
                 } else {
                     copy.add(s.string);
                 }
@@ -925,7 +936,7 @@ public class PlusCalExtensions {
         Vector<AST.VarDecl> decls = new Vector<>();
         Vector<AST> body = new Vector<>();
         AST.When wait = new AST.When();
-        wait.exp = tlaExpr("pc[Tail(self)] = \"%s\"", label);
+        wait.exp = tlaExpr("pc[%s] = \"%s\"", parentParty("self"), label);
         wait.setOrigin(set.getOrigin());
         body.add(wait);
         if (cl.unlabOr != null) {
@@ -969,7 +980,7 @@ public class PlusCalExtensions {
     private static AST.Process allStatementProcess(Role role, String label,
                                                    String q, TLAExpr qs, Vector<AST> body) {
         AST.When await = new AST.When();
-        await.exp = tlaExpr("pc[Tail(self)] = \"%s\"", label);
+        await.exp = tlaExpr("pc[%s] = \"%s\"", parentParty("self"), label);
         await.setOrigin(qs.getOrigin());
 
         Vector<AST> body1 = new Vector<>();

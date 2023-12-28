@@ -3,6 +3,8 @@ EXTENDS Naturals, TLC, Sequences
 
 CONSTANTS p1, p2, c1, c2
 
+
+
 (* --algorithm Hello {
   variables
     participants = {p1, p2};
@@ -31,7 +33,7 @@ CONSTANTS p1, p2, c1, c2
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "2186516e" /\ chksum(tla) = "6605347b")
+\* BEGIN TRANSLATION (chksum(pcal) = "ad591e52" /\ chksum(tla) = "edb8c7c0")
 VARIABLES participants, coordinators, messages, pc
 
 vars == << participants, coordinators, messages, pc >>
@@ -48,9 +50,9 @@ Init == (* Global variables *)
                                         [] self \in coordinators -> "fork_2"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ pc[Tail(self)] = "fork_0"
-               /\ [To |-> (Tail(self)), From |-> Head(self), Type |-> a] \in messages
-               /\ messages' = (messages \union {[To |-> Head(self), From |-> (Tail(self)), Type |-> b]})
+               /\ pc[Head(Tail(self))] = "fork_0"
+               /\ [To |-> (Head(Tail(self))), From |-> Head(self), Type |-> "a"] \in messages
+               /\ messages' = (messages \union {[To |-> Head(self), From |-> (Head(Tail(self))), Type |-> "b"]})
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators >>
 
@@ -64,9 +66,9 @@ fork_0(self) == /\ pc[self] = "fork_0"
 P(self) == fork_0(self)
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Tail(self)] = "fork_2"
-               /\ messages' = (messages \union {[To |-> Head(self), From |-> (Tail(self)), Type |-> a]})
-               /\ [To |-> (Tail(self)), From |-> Head(self), Type |-> b] \in messages'
+               /\ pc[Head(Tail(self))] = "fork_2"
+               /\ messages' = (messages \union {[To |-> Head(self), From |-> (Head(Tail(self))), Type |-> "a"]})
+               /\ [To |-> (Head(Tail(self))), From |-> Head(self), Type |-> "b"] \in messages'
                /\ pc' = [pc EXCEPT ![self] = "Done"]
                /\ UNCHANGED << participants, coordinators >>
 

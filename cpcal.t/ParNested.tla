@@ -28,7 +28,7 @@ CONSTANTS p1, p2, coord
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "20b01081" /\ chksum(tla) = "927b8893")
+\* BEGIN TRANSLATION (chksum(pcal) = "4e73b733" /\ chksum(tla) = "88540b1e")
 VARIABLES pc, x
 
 vars == << pc, x >>
@@ -52,21 +52,21 @@ Lbl_1(self) == /\ pc[self] = "Lbl_1"
 P(self) == Lbl_1(self)
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Tail(self)] = "par_2"
+               /\ pc[Head(Tail(self))] = "par_2"
                /\ x' = x + 1
                /\ pc' = [pc EXCEPT ![self] = "Done"]
 
 proc_4(self) == Lbl_2(self)
 
 Lbl_3(self) == /\ pc[self] = "Lbl_3"
-               /\ pc[Tail(self)] = "par_2"
+               /\ pc[Head(Tail(self))] = "par_2"
                /\ x' = x + 3
                /\ pc' = [pc EXCEPT ![self] = "Done"]
 
 proc_6(self) == Lbl_3(self)
 
 Lbl_4(self) == /\ pc[self] = "Lbl_4"
-               /\ pc[Tail(self)] = "par_0"
+               /\ pc[Head(Tail(self))] = "par_0"
                /\ pc' = [pc EXCEPT ![self] = "par_2"]
                /\ x' = x
 
@@ -78,7 +78,7 @@ par_2(self) == /\ pc[self] = "par_2"
 proc_8(self) == Lbl_4(self) \/ par_2(self)
 
 Lbl_5(self) == /\ pc[self] = "Lbl_5"
-               /\ pc[Tail(self)] = "par_0"
+               /\ pc[Head(Tail(self))] = "par_0"
                /\ x' = x + 2
                /\ pc' = [pc EXCEPT ![self] = "Done"]
 
