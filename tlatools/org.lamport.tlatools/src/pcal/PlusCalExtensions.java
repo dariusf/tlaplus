@@ -516,12 +516,12 @@ public class PlusCalExtensions {
         Vector<Vector<TLAToken>> tokens = e.tokens;
         Vector<String> copy = new Vector<>();
         for (Vector<TLAToken> b : tokens) {
-            for (int i=0; i<b.size(); i++) {
+            for (int i = 0; i < b.size(); i++) {
                 TLAToken s = b.get(i);
                 if (s.type == TLAToken.IDENT) {
                     // if we're out of bounds, this can't be qualified
                     // else if we're in bounds, ensure next token is not [
-                    boolean notAlreadyQualified = i+1<b.size() && !b.get(i+1).string.equals("[");
+                    boolean notAlreadyQualified = i + 1 < b.size() && !b.get(i + 1).string.equals("[");
                     if (notAlreadyQualified) {
                         copy.add(s.string);
                         varToQualifyWith(ctx, s.string).ifPresent(q -> {
@@ -2074,32 +2074,32 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.MacroCall && ((AST.MacroCall) stmt).name.equals("Transmit")) {
             String sender = ithMacroArgAsVar((AST.MacroCall) stmt, 0);
             String receiver = ithMacroArgAsVar((AST.MacroCall) stmt, 1);
-            if (sender.equals("self") && sender.equals(receiver)) {
-                throw new IllegalArgumentException("invalid projection");
-            }
 //            boolean isSend = !receiver.equals("self") && (sender.equals("self") || ctx.party.get(sender).partyVar.equals(role.partyVar));
 //            boolean isRecv = !sender.equals("self") && (receiver.equals("self") || ctx.party.get(receiver).partyVar.equals(role.partyVar));
             boolean isSend = sender.equals("self");
             boolean isRecv = receiver.equals("self");
             // expand to user-provided macros
-            if (isSend) {
-                AST.MacroCall send = new AST.MacroCall();
-                send.setOrigin(stmt.getOrigin());
-                send.name = "Send";
-                send.args = new Vector<TLAExpr>();
-                send.args.add(tlaExpr("self"));
-                send.args.add(((AST.MacroCall) stmt).args.get(1));
-                send.args.add(((AST.MacroCall) stmt).args.get(2));
-                result.add(send);
-            } else if (isRecv) {
-                AST.MacroCall recv = new AST.MacroCall();
-                recv.setOrigin(stmt.getOrigin());
-                recv.name = "Receive";
-                recv.args = new Vector<TLAExpr>();
-                recv.args.add(((AST.MacroCall) stmt).args.get(0));
-                recv.args.add(tlaExpr("self"));
-                recv.args.add(((AST.MacroCall) stmt).args.get(2));
-                result.add(recv);
+            if (isSend || isRecv) {
+                if (isSend) {
+                    AST.MacroCall send = new AST.MacroCall();
+                    send.setOrigin(stmt.getOrigin());
+                    send.name = "Send";
+                    send.args = new Vector<TLAExpr>();
+                    send.args.add(tlaExpr("self"));
+                    send.args.add(((AST.MacroCall) stmt).args.get(1));
+                    send.args.add(((AST.MacroCall) stmt).args.get(2));
+                    result.add(send);
+                }
+                if (isRecv) {
+                    AST.MacroCall recv = new AST.MacroCall();
+                    recv.setOrigin(stmt.getOrigin());
+                    recv.name = "Receive";
+                    recv.args = new Vector<TLAExpr>();
+                    recv.args.add(((AST.MacroCall) stmt).args.get(0));
+                    recv.args.add(tlaExpr("self"));
+                    recv.args.add(((AST.MacroCall) stmt).args.get(2));
+                    result.add(recv);
+                }
             } else {
                 AST.Skip skip = new AST.Skip();
                 skip.setOrigin(stmt.getOrigin());
