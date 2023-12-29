@@ -243,7 +243,7 @@ public class PcalTLAGen
     /****************************************/
     /* True if expr is an empty expression. */
     /****************************************/
-    private static boolean EmptyExpr(TLAExpr expr)
+    public static boolean EmptyExpr(TLAExpr expr)
     {
         if (expr == null)
             return true;

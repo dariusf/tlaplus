@@ -461,6 +461,10 @@ public class PlusCalExtensions {
                     .map(a -> stripQualifiers(a))
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(macro);
+        } else if (ast instanceof AST.When) {
+            AST.When w = newWhen((AST.When) ast);
+            w.exp = stripQualifiers(w.exp);
+            return Stream.of(w);
         } else {
             throw new IllegalArgumentException("stripSubscripts: unimplemented " + ast.getClass().getSimpleName());
         }
@@ -512,14 +516,22 @@ public class PlusCalExtensions {
         Vector<Vector<TLAToken>> tokens = e.tokens;
         Vector<String> copy = new Vector<>();
         for (Vector<TLAToken> b : tokens) {
-            for (TLAToken s : b) {
+            for (int i=0; i<b.size(); i++) {
+                TLAToken s = b.get(i);
                 if (s.type == TLAToken.IDENT) {
-                    copy.add(s.string);
-                    varToQualifyWith(ctx, s.string).ifPresent(q -> {
-                        copy.add("[");
-                        copy.add(q);
-                        copy.add("]");
-                    });
+                    // if we're out of bounds, this can't be qualified
+                    // else if we're in bounds, ensure next token is not [
+                    boolean notAlreadyQualified = i+1<b.size() && !b.get(i+1).string.equals("[");
+                    if (notAlreadyQualified) {
+                        copy.add(s.string);
+                        varToQualifyWith(ctx, s.string).ifPresent(q -> {
+                            copy.add("[");
+                            copy.add(q);
+                            copy.add("]");
+                        });
+                    } else {
+                        copy.add(s.string);
+                    }
                 } else if (s.type == TLAToken.STRING) {
                     copy.add("\"");
                     copy.add(s.string);
@@ -614,14 +626,20 @@ public class PlusCalExtensions {
                     .map(a -> implicitlyQualify(a, ctx))
                     .collect(Collectors.toCollection(Vector::new));
             return task;
+        } else if (stmt instanceof AST.When) {
+            AST.When w = newWhen((AST.When) stmt);
+            w.exp = implicitlyQualify(w.exp, ctx);
+            return w;
         } else if (stmt instanceof AST.Assign) {
             AST.Assign assign = newAssign((AST.Assign) stmt);
             assign.ass = ((Vector<AST.SingleAssign>) assign.ass).stream()
                     .map(a -> {
                         AST.SingleAssign a1 = newSingleAssign(a);
-                        a1.lhs.sub = varToQualifyWith(ctx, a1.lhs.var)
-                                .map(b -> tlaExpr("[%s]", b))
-                                .orElse(a1.lhs.sub);
+                        if (PcalTLAGen.EmptyExpr(a1.lhs.sub)) {
+                            a1.lhs.sub = varToQualifyWith(ctx, a1.lhs.var)
+                                    .map(b -> tlaExpr("[%s]", b))
+                                    .orElse(a1.lhs.sub);
+                        }
                         a1.rhs = implicitlyQualify(a.rhs, ctx);
                         return a1;
                     })
@@ -1678,13 +1696,17 @@ public class PlusCalExtensions {
                 .collect(Collectors.toCollection(Vector::new));
     }
 
+    private static Vector<AST> removeSkips(Vector<AST> stmts) {
+        return stmts.stream()
+                .filter(e -> !(e instanceof AST.Skip))
+                .collect(Collectors.toCollection(Vector::new));
+    }
+
     private static Vector<AST> normalizeStep(AST in) {
         Vector<AST> result = new Vector<>();
         if (in instanceof AST.All) {
             AST.All a = (AST.All) in;
-            Vector<AST> stmts = ((Vector<AST>) a.Do).stream()
-                    .filter(b -> !(b instanceof AST.Skip))
-                    .collect(Collectors.toCollection(Vector::new));
+            Vector<AST> stmts = removeSkips((Vector<AST>) a.Do);
             if (stmts.isEmpty()) {
                 AST.Skip skip = new AST.Skip();
                 skip.setOrigin(in.getOrigin());
@@ -1755,6 +1777,7 @@ public class PlusCalExtensions {
         } else if (in instanceof AST.MacroCall ||
                 in instanceof AST.Skip ||
                 in instanceof AST.Assign ||
+                in instanceof AST.When ||
                 in instanceof AST.Cancel) {
             // nothing
             result.add(in);
@@ -1773,18 +1796,29 @@ public class PlusCalExtensions {
         } else if (in instanceof AST.LabelIf) {
             AST.LabelIf c = newIf((AST.LabelIf) in);
             if (c.unlabThen != null) {
-                c.unlabThen = normalizeStep((Vector<AST>) c.unlabThen);
-                c.unlabElse = normalizeStep((Vector<AST>) c.unlabElse);
+                c.unlabThen = removeSkips(normalizeStep((Vector<AST>) c.unlabThen));
+                c.unlabElse = removeSkips(normalizeStep((Vector<AST>) c.unlabElse));
+                if (c.unlabThen.isEmpty() && c.unlabElse.isEmpty()) {
+                    AST.Skip skip = new AST.Skip();
+                    skip.setOrigin(in.getOrigin());
+                    result.add(skip);
+                } else {
+                    result.add(c);
+                }
             } else {
-                c.labThen = normalizeStep((Vector<AST>) c.labThen);
-                c.labElse = normalizeStep((Vector<AST>) c.labElse);
+                c.labThen = removeSkips(normalizeStep((Vector<AST>) c.labThen));
+                c.labElse = removeSkips(normalizeStep((Vector<AST>) c.labElse));
+                if (c.labThen.isEmpty() && c.labElse.isEmpty()) {
+                    AST.Skip skip = new AST.Skip();
+                    skip.setOrigin(in.getOrigin());
+                    result.add(skip);
+                } else {
+                    result.add(c);
+                }
             }
-            result.add(c);
         } else if (in instanceof AST.Task) {
             AST.Task c = newTask((AST.Task) in);
-            c.Do = normalizeStep((Vector<AST>) c.Do).stream()
-                    .filter(e -> !(e instanceof AST.Skip))
-                    .collect(Collectors.toCollection(Vector::new));
+            c.Do = removeSkips(normalizeStep((Vector<AST>) c.Do));
             if (c.Do.isEmpty()) {
                 AST.Skip skip = new AST.Skip();
                 skip.setOrigin(in.getOrigin());

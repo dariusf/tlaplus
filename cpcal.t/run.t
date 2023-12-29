@@ -658,5 +658,8 @@
   Translation completed.
   New file SelfSend.tla written.
 
-$ cpluscal -nocfg NBAC.tla
+  $ cpluscal -nocfg Paxos.tla
+
+  $ cpluscal -nocfg NBAC.tla
+
 $ cpluscal -nocfg Raft.tla
