@@ -3,7 +3,6 @@ package pcal;
 import pcal.exception.ParseAlgorithmException;
 import pcal.exception.TokenizerException;
 import tlc2.mbtc.Pair;
-import tlc2.util.Vect;
 
 import java.util.*;
 import java.util.function.Function;
@@ -277,7 +276,7 @@ public class PlusCalExtensions {
         }
 
         // do this before printing
-        projected = stripSubscripts(projected);
+        projected = stripQualifiers(projected);
 
         projected.entrySet().stream()
                 .sorted(Comparator.comparing(e -> e.getKey().partyVar)) // det
@@ -380,82 +379,86 @@ public class PlusCalExtensions {
     /**
      * sad
      */
-    private static TLAExpr stripSubscripts(TLAExpr expr) {
+    private static TLAExpr stripQualifiers(TLAExpr expr) {
         String s = Printer.show(expr);
         return tlaExpr(s.replaceAll("([a-z]+) *\\[[^]]+?]", "$1"));
     }
 
-    private static Stream<AST> stripSubscripts(AST ast) {
+    private static Stream<AST> stripQualifiers(AST ast) {
         if (ast instanceof AST.Assign) {
             AST.Assign ass = newAssign((AST.Assign) ast);
-            ass.ass = stripSubscripts((Vector<AST>) ass.ass)
+            ass.ass = stripQualifiers((Vector<AST>) ass.ass)
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(ass);
         } else if (ast instanceof AST.SingleAssign) {
             AST.SingleAssign ass = newSingleAssign((AST.SingleAssign) ast);
             ass.lhs.sub = tlaExpr("");
-            ass.rhs = stripSubscripts(ass.rhs);
+            ass.rhs = stripQualifiers(ass.rhs);
             return Stream.of(ass);
         } else if (ast instanceof AST.Par) {
             AST.Par par = newPar((AST.Par) ast);
-            par.clauses = stripSubscripts((Vector<AST>) par.clauses)
+            par.clauses = stripQualifiers((Vector<AST>) par.clauses)
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(par);
-        } else if (ast instanceof AST.Skip || ast instanceof AST.Cancel) {
+        } else if (ast instanceof AST.Cancel) {
+            AST.Cancel c = newCancel((AST.Cancel) ast);
+            c.qualifier = "";
+            return Stream.of(c);
+        } else if (ast instanceof AST.Skip) {
             return Stream.of(ast);
         } else if (ast instanceof AST.LabelIf) {
             AST.LabelIf li = newIf((AST.LabelIf) ast);
             if (li.unlabThen != null) {
-                li.unlabThen = stripSubscripts((Vector<AST>) li.unlabThen)
+                li.unlabThen = stripQualifiers((Vector<AST>) li.unlabThen)
                         .collect(Collectors.toCollection(Vector::new));
-                li.unlabElse = stripSubscripts((Vector<AST>) li.unlabElse)
+                li.unlabElse = stripQualifiers((Vector<AST>) li.unlabElse)
                         .collect(Collectors.toCollection(Vector::new));
             } else {
-                li.labThen = stripSubscripts((Vector<AST>) li.labThen)
+                li.labThen = stripQualifiers((Vector<AST>) li.labThen)
                         .collect(Collectors.toCollection(Vector::new));
-                li.labElse = stripSubscripts((Vector<AST>) li.labElse)
+                li.labElse = stripQualifiers((Vector<AST>) li.labElse)
                         .collect(Collectors.toCollection(Vector::new));
             }
             return Stream.of(li);
         } else if (ast instanceof AST.LabelEither) {
             AST.LabelEither ei = newEither((AST.LabelEither) ast);
-            ei.clauses = stripSubscripts((Vector<AST>) ei.clauses)
+            ei.clauses = stripQualifiers((Vector<AST>) ei.clauses)
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(ei);
         } else if (ast instanceof AST.Clause) {
             AST.Clause clause = newClause((AST.Clause) ast);
             if (clause.unlabOr != null) {
-                clause.unlabOr = stripSubscripts((Vector<AST>) clause.unlabOr)
+                clause.unlabOr = stripQualifiers((Vector<AST>) clause.unlabOr)
                         .collect(Collectors.toCollection(Vector::new));
             } else {
-                clause.labOr = stripSubscripts((Vector<AST>) clause.labOr)
+                clause.labOr = stripQualifiers((Vector<AST>) clause.labOr)
                         .collect(Collectors.toCollection(Vector::new));
             }
             return Stream.of(clause);
         } else if (ast instanceof AST.While) {
             AST.While w = newWhile((AST.While) ast);
             if (w.unlabDo != null) {
-                w.unlabDo = stripSubscripts((Vector<AST>) w.unlabDo)
+                w.unlabDo = stripQualifiers((Vector<AST>) w.unlabDo)
                         .collect(Collectors.toCollection(Vector::new));
             } else {
-                w.labDo = stripSubscripts((Vector<AST>) w.labDo)
+                w.labDo = stripQualifiers((Vector<AST>) w.labDo)
                         .collect(Collectors.toCollection(Vector::new));
             }
             return Stream.of(w);
         } else if (ast instanceof AST.All) {
             AST.All all = newAll((AST.All) ast);
-            all.Do = stripSubscripts((Vector<AST>) all.Do)
+            all.Do = stripQualifiers((Vector<AST>) all.Do)
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(all);
         } else if (ast instanceof AST.Task) {
             AST.Task task = newTask((AST.Task) ast);
-            task.Do = stripSubscripts((Vector<AST>) task.Do)
+            task.Do = stripQualifiers((Vector<AST>) task.Do)
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(task);
         } else if (ast instanceof AST.MacroCall) {
             AST.MacroCall macro = newMacroCall((AST.MacroCall) ast);
             macro.args = ((Vector<TLAExpr>) macro.args).stream()
-                    .map(a -> stripSubscripts(a))
+                    .map(a -> stripQualifiers(a))
                     .collect(Collectors.toCollection(Vector::new));
             return Stream.of(macro);
         } else {
@@ -463,16 +466,16 @@ public class PlusCalExtensions {
         }
     }
 
-    private static Stream<AST> stripSubscripts(Vector<AST> ast) {
-        return ast.stream().flatMap(a -> stripSubscripts(a));
+    private static Stream<AST> stripQualifiers(Vector<AST> ast) {
+        return ast.stream().flatMap(a -> stripQualifiers(a));
     }
 
-    private static Map<Role, AST.Process> stripSubscripts(Map<Role, AST.Process> projected) {
+    private static Map<Role, AST.Process> stripQualifiers(Map<Role, AST.Process> projected) {
         return projected.entrySet()
                 .stream()
                 .map(e -> {
                     AST.Process v = flatMapProcessBody(e.getValue(),
-                            body -> stripSubscripts(body));
+                            body -> stripQualifiers(body));
                     return new AbstractMap.SimpleEntry<>(e.getKey(), v);
                 })
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
@@ -512,7 +515,7 @@ public class PlusCalExtensions {
             for (TLAToken s : b) {
                 if (s.type == TLAToken.IDENT) {
                     copy.add(s.string);
-                    whatToQualifyWith(ctx, s.string).ifPresent(q -> {
+                    varToQualifyWith(ctx, s.string).ifPresent(q -> {
                         copy.add("[");
                         copy.add(q);
                         copy.add("]");
@@ -599,8 +602,11 @@ public class PlusCalExtensions {
                     .map(a -> implicitlyQualify(a, ctx))
                     .collect(Collectors.toCollection(Vector::new));
             return call;
-        } else if (stmt instanceof AST.Cancel ||
-                stmt instanceof AST.Skip) {
+        } else if (stmt instanceof AST.Cancel) {
+            AST.Cancel c = newCancel((AST.Cancel) stmt);
+            c.qualifier = cancelQualifyWith(ctx, c);
+            return c;
+        } else if (stmt instanceof AST.Skip) {
             return stmt;
         } else if (stmt instanceof AST.Task) {
             AST.Task task = newTask((AST.Task) stmt);
@@ -613,7 +619,7 @@ public class PlusCalExtensions {
             assign.ass = ((Vector<AST.SingleAssign>) assign.ass).stream()
                     .map(a -> {
                         AST.SingleAssign a1 = newSingleAssign(a);
-                        a1.lhs.sub = whatToQualifyWith(ctx, a1.lhs.var)
+                        a1.lhs.sub = varToQualifyWith(ctx, a1.lhs.var)
                                 .map(b -> tlaExpr("[%s]", b))
                                 .orElse(a1.lhs.sub);
                         a1.rhs = implicitlyQualify(a.rhs, ctx);
@@ -626,6 +632,22 @@ public class PlusCalExtensions {
         }
     }
 
+    private static String cancelQualifyWith(Context ctx, AST.Cancel c) {
+        Role role = ctx.taskOwnership.get(c.task);
+        if (role == null) {
+            fail(String.format("invalid task %s, not associated with any role", c.task));
+        }
+
+        List<String> bound = ctx.binders.stream().filter(b -> ctx.party.get(b) == role)
+                .collect(Collectors.toList());
+        if (bound.size() > 1) {
+            fail(String.format("more than one binder %s to qualify cancel of task %s with", bound, c.task));
+        } else if (bound.isEmpty()) {
+            fail(String.format("no binder to qualify cancel of task %s with, no role is acting?", c.task));
+        }
+        return bound.get(0);
+    }
+
     /**
      * What to qualify a variable with.
      * If the variable is from a particular role, identify an enclosing binder that should be used to qualify it.
@@ -634,7 +656,7 @@ public class PlusCalExtensions {
      * more than one is ambiguous, in which case the user should qualify)
      * If the variable is bound by all, leave it.
      */
-    private static Optional<String> whatToQualifyWith(Context ctx, String var) {
+    private static Optional<String> varToQualifyWith(Context ctx, String var) {
         List<Role> possibleRoles = ctx.roleDecls.entrySet().stream()
                 .filter(e -> e.getValue().localVars.stream().anyMatch(l -> l.var.equals(var)))
                 .map(e -> e.getValue())
@@ -1580,8 +1602,13 @@ public class PlusCalExtensions {
                     .map(a -> subst(var, with, a))
                     .collect(Collectors.toCollection(Vector::new));
             return i;
-        } else if (in instanceof AST.Skip ||
-                in instanceof AST.Cancel) {
+        } else if (in instanceof AST.Cancel) {
+            AST.Cancel i = newCancel((AST.Cancel) in);
+            if (i.qualifier.equals(var)) {
+                i.qualifier = with;
+            }
+            return i;
+        } else if (in instanceof AST.Skip) {
             return in;
         } else if (in instanceof AST.LabelEither) {
             AST.LabelEither i = newEither((AST.LabelEither) in);
@@ -1755,8 +1782,16 @@ public class PlusCalExtensions {
             result.add(c);
         } else if (in instanceof AST.Task) {
             AST.Task c = newTask((AST.Task) in);
-            c.Do = normalizeStep((Vector<AST>) c.Do);
-            result.add(c);
+            c.Do = normalizeStep((Vector<AST>) c.Do).stream()
+                    .filter(e -> !(e instanceof AST.Skip))
+                    .collect(Collectors.toCollection(Vector::new));
+            if (c.Do.isEmpty()) {
+                AST.Skip skip = new AST.Skip();
+                skip.setOrigin(in.getOrigin());
+                result.add(skip);
+            } else {
+                result.add(c);
+            }
         } else if (in instanceof AST.While) {
             AST.While w = newWhile((AST.While) in);
             if (w.unlabDo != null) {
@@ -1966,7 +2001,8 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel e = (AST.Cancel) stmt;
             AST e1;
-            if (role.partyVar.equals(ctx.taskOwnership.get(e.task).partyVar)) {
+//            if (role.partyVar.equals(ctx.taskOwnership.get(e.task).partyVar)) {
+            if (e.qualifier.equals("self")) {
                 AST.Cancel e2 = new AST.Cancel();
                 e2.task = e.task;
                 e1 = e2;

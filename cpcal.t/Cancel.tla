@@ -28,57 +28,54 @@ CONSTANTS p1, p2, c1
 }
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "ccf2a011" /\ chksum(tla) = "e8bcd617")
-VARIABLES cancelled_a, pc, x
+\* BEGIN TRANSLATION (chksum(pcal) = "910b4638" /\ chksum(tla) = "7afc15d2")
+VARIABLES participants, coordinators, cancelled_a, pc, x
 
-vars == << cancelled_a, pc, x >>
+vars == << participants, coordinators, cancelled_a, pc, x >>
 
-ProcSet == ((participants \X {"P_par_1"})) \cup ((participants \X {"P_par_3"})) \cup (participants)
+ProcSet == (coordinators) \cup ((coordinators \X participants)) \cup (participants)
 
 Init == (* Global variables *)
+        /\ participants = {p1, p2}
+        /\ coordinators = {c1}
         /\ cancelled_a = FALSE
         (* Process P *)
         /\ x = [self \in participants |-> 0]
-        /\ pc = [self \in ProcSet |-> CASE self \in (participants \X {"P_par_1"}) -> "Lbl_1"
-                                        [] self \in (participants \X {"P_par_3"}) -> "Lbl_2"
-                                        [] self \in participants -> "Lbl_3"]
+        /\ pc = [self \in ProcSet |-> CASE self \in coordinators -> "Lbl_1"
+                                        [] self \in (coordinators \X participants) -> "Lbl_2"
+                                        [] self \in participants -> "fork_0"]
 
 Lbl_1(self) == /\ pc[self] = "Lbl_1"
-               /\ pc[Head(self)] = "par_0"
-               /\ cancelled_a' = TRUE
+               /\ TRUE
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ x' = x
+               /\ UNCHANGED << participants, coordinators, cancelled_a, x >>
 
-proc_2(self) == Lbl_1(self)
+C(self) == Lbl_1(self)
 
 Lbl_2(self) == /\ pc[self] = "Lbl_2"
-               /\ pc[Head(self)] = "par_0"
-               /\ x' = [x EXCEPT ![self] = x[self] + 2]
-               /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED cancelled_a
-
-proc_4(self) == Lbl_2(self)
-
-Lbl_3(self) == /\ pc[self] = "Lbl_3"
+               /\ pc[Head(Tail(self))] = "fork_0"
                /\ IF ~ cancelled_a
-                     THEN /\ pc' = [pc EXCEPT ![self] = "par_0"]
+                     THEN /\ x' = [x EXCEPT ![self] = x[self] + 2]
                      ELSE /\ TRUE
-                          /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << cancelled_a, x >>
-
-par_0(self) == /\ pc[self] = "par_0"
-               /\ \A v_5 \in (participants \X {"P_par_1", "P_par_3"}) : pc[v_5] = "Done"
+                          /\ x' = x
                /\ pc' = [pc EXCEPT ![self] = "Done"]
-               /\ UNCHANGED << cancelled_a, x >>
+               /\ UNCHANGED << participants, coordinators, cancelled_a >>
 
-P(self) == Lbl_3(self) \/ par_0(self)
+proc_1(self) == Lbl_2(self)
+
+fork_0(self) == /\ pc[self] = "fork_0"
+                /\ \A c \in (coordinators \X participants) : pc[c] = "Done"
+                /\ pc' = [pc EXCEPT ![self] = "Done"]
+                /\ UNCHANGED << participants, coordinators, cancelled_a, x >>
+
+P(self) == fork_0(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
-Next == (\E self \in (participants \X {"P_par_1"}): proc_2(self))
-           \/ (\E self \in (participants \X {"P_par_3"}): proc_4(self))
+Next == (\E self \in coordinators: C(self))
+           \/ (\E self \in (coordinators \X participants): proc_1(self))
            \/ (\E self \in participants: P(self))
            \/ Terminating
 

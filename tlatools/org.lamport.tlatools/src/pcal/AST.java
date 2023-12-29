@@ -937,11 +937,13 @@ public class AST
 
     public static class Cancel extends AST
     { public String task = "" ;
+      public String qualifier = "" ;
       public Cancel() {};
       public String toString()
       { return
               lineCol() +
                       "[type |-> \"cancel\", " +
+                      " qualifier |-> \"" + qualifier + "\", " +
                       " task |-> \"" + task + "\"]" ;
       }
     }
