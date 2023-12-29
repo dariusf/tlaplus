@@ -724,7 +724,7 @@ public class PlusCalExtensions {
             AST.While w = (AST.While) stmt;
             findTasks(ctx, res, w.unlabDo);
             findTasks(ctx, res, w.labDo);
-        } else if (stmt instanceof AST.When) {
+        } else if (stmt instanceof AST.When || stmt instanceof AST.Skip) {
             // nothing to do
         } else if (stmt instanceof AST.Clause) {
             findTasks(ctx, res, ((AST.Clause) stmt).labOr);
@@ -763,6 +763,8 @@ public class PlusCalExtensions {
             findCancellations(res, ((AST.With) stmt).Do);
         } else if (stmt instanceof AST.Task) {
             findCancellations(res, ((AST.Task) stmt).Do);
+        } else if (stmt instanceof AST.Skip) {
+            // nothing
         } else if (stmt instanceof AST.When) {
             // nothing to do
         } else if (stmt instanceof AST.Clause) {
@@ -780,7 +782,7 @@ public class PlusCalExtensions {
         } else if (stmt instanceof AST.MacroCall) {
             // nothing
         } else {
-            fail("unimplemented findCancellations " + stmt);
+            throw new IllegalArgumentException("unimplemented findCancellations " + stmt);
         }
     }
 
@@ -1062,9 +1064,8 @@ public class PlusCalExtensions {
         then1.addAll(thenContents);
         check.unlabThen = then1;
 
-        AST noop = new AST.Skip();
         Vector<AST> else1 = new Vector<>();
-        else1.add(noop);
+        else1.add(newSkip(check));
         check.unlabElse = else1;
         return check;
     }
@@ -1506,6 +1507,8 @@ public class PlusCalExtensions {
         } else if (ast instanceof AST.Assign) {
             // nothing
         } else if (ast instanceof AST.When) {
+            // nothing
+        } else if (ast instanceof AST.Skip) {
             // nothing
         } else if (ast instanceof AST.While) {
             computeOwnership(ctx, res, ((AST.While) ast).labDo);
@@ -2037,6 +2040,8 @@ public class PlusCalExtensions {
                     result.add(e1);
                 }
             }
+        } else if (stmt instanceof AST.Skip) {
+            result.add(newSkip(stmt));
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel e = (AST.Cancel) stmt;
             AST e1;
@@ -2281,6 +2286,12 @@ public class PlusCalExtensions {
         e1.isEq = e.isEq;
         e1.exp = e.exp;
         e1.Do = e.Do;
+        copyInto(e1, e);
+        return e1;
+    }
+
+    private static AST.Skip newSkip(AST e) {
+        AST.Skip e1 = new AST.Skip();
         copyInto(e1, e);
         return e1;
     }
