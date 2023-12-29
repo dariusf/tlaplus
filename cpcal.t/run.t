@@ -249,20 +249,8 @@
       x = 0;
   {
     all (c \in coordinators) {
-      par {
-        task P, "a" {
-          par {
-            cancel a;
-          } and {
-            x := x + 2;
-          }
-        }
-      } and {
-        all (p \in participants \ { self }) {
-          task P, "a" {
-            cancel a;
-          }
-        }
+      task P, "a" {
+        x := x + 2;
       }
     }
   }
@@ -277,46 +265,14 @@
     variables
       x = 0;
   {
-    fork_14:
+    fork_0:
     await \A c \in ( coordinators \X participants ) : pc [ c ] = "Done";
   }
-  process (proc_10 \in ( "P_par_9" \X { participants } ))
+  process (proc_1 \in ( coordinators \X participants ))
   {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    fork_12:
-    await \A p \in ( participants \ { Head ( Tail ( self ) ) } \X participants ) : pc [ p ] = "Done";
-  }
-  process (proc_13 \in ( participants \ { Head ( Tail ( self ) ) } \X participants ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "fork_12";
+    await pc [ Head ( Tail ( self ) ) ] = "fork_0";
     if (~ cancelled_a) {
-      cancelled_a := TRUE;
-    } else {
-      skip;
-    }
-  }
-  process (proc_15 \in ( coordinators \X participants ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "fork_14";
-    par_0:
-    await \A v_11 \in ( { "P_par_1" , "P_par_9" } \X { participants } ) : pc [ v_11 ] = "Done";
-  }
-  process (proc_4 \in ( "P_par_3" \X { participants } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_2";
-    cancelled_a := TRUE;
-  }
-  process (proc_6 \in ( "P_par_5" \X { participants } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_2";
-    x := x + 2;
-  }
-  process (proc_8 \in ( "P_par_1" \X { participants } ))
-  {
-    await pc [ Head ( Tail ( self ) ) ] = "par_0";
-    if (~ cancelled_a) {
-      par_2:
-      await \A v_7 \in ( { "P_par_3" , "P_par_5" } \X { participants } ) : pc [ v_7 ] = "Done";
+      x := x + 2;
     } else {
       skip;
     }
@@ -471,19 +427,40 @@
 
   $ cpluscal -nocfg TwoPhaseCommit.tla
   pcal.trans Version 1.11 of 31 December 2020
-  Projection of c:
+  Projection of coordinators:
   
-  process (C = c)
+  process (C \in coordinators)
   {
-    task C, "phase1" {
-      all (p \in participants) {
-        cancel phase1;
+    par {
+      task C, "phase1" {
+        all (p \in participants) {
+          Send(self, p, "prepare");
+          either {
+            Receive(p, self, "prepared");
+          } or {
+            Receive(p, self, "aborted");
+          }
+        }
       }
-    }
-    if (aborted) {
-      skip;
-    } else {
-      skip;
+      if (aborted) {
+        all (p \in participants) {
+          Send(self, p, "abort");
+          Receive(p, self, "aborted");
+        }
+      } else {
+        all (p \in participants) {
+          Send(self, p, "commit");
+          Receive(p, self, "committed");
+        }
+      }
+    } and {
+      all (c \in coordinators \ { self }) {
+        if (aborted) {
+          skip;
+        } else {
+          skip;
+        }
+      }
     }
   }
   
@@ -491,64 +468,119 @@
   
   process (P \in participants)
   {
-    Receive(c, self, "prepare");
-    either {
-      Send(self, c, "prepared");
-    } or {
-      Send(self, c, "aborted");
-    }
-    if (aborted) {
-      Receive(c, self, "abort");
-      Send(self, c, "aborted");
-    } else {
-      Receive(c, self, "commit");
-      Send(self, c, "committed");
+    all (c \in coordinators) {
+      Receive(c, self, "prepare");
+      either {
+        Send(self, c, "prepared");
+      } or {
+        Send(self, c, "aborted");
+      }
+      if (aborted) {
+        Receive(c, self, "abort");
+        Send(self, c, "aborted");
+      } else {
+        Receive(c, self, "commit");
+        Send(self, c, "committed");
+      }
     }
   }
   
   Final processes:
   
-  process (C = c)
+  process (C \in coordinators)
   {
-    if (~ cancelled_phase1) {
-      fork_0:
-      await \A p \in ( participants \X c ) : pc [ p ] = "Done";
-    } else {
-      skip;
-    }
-    if (aborted) {
-      skip;
-    } else {
-      skip;
-    }
+    par_0:
+    await \A v_5 \in ( { "C_par_1" , "C_par_3" } \X { coordinators } ) : pc [ v_5 ] = "Done";
   }
   process (P \in participants)
   {
-    comm_2:
-    Receive(c, Head(Tail(self)), "prepare");
-    either {
-      comm_3:
-      Send(Head(Tail(self)), c, "prepared");
-    } or {
-      comm_4:
-      Send(Head(Tail(self)), c, "aborted");
+    fork_21:
+    await \A c \in ( coordinators \X participants ) : pc [ c ] = "Done";
+  }
+  process (proc_11 \in ( participants \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_10";
+    comm_17:
+    Send(Head ( Tail ( self ) ), Head(self), "commit");
+    comm_18:
+    Receive(Head(self), Head ( Tail ( self ) ), "committed");
+  }
+  process (proc_2 \in ( "C_par_1" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    if (~ cancelled_phase1) {
+      fork_6:
+      await \A p \in ( participants \X coordinators ) : pc [ p ] = "Done";
+    } else {
+      skip;
     }
     if (aborted) {
-      comm_5:
-      Receive(c, Head(Tail(self)), "abort");
-      comm_6:
-      Send(Head(Tail(self)), c, "aborted");
+      fork_8:
+      await \A p \in ( participants \X coordinators ) : pc [ p ] = "Done";
     } else {
-      comm_7:
-      Receive(c, Head(Tail(self)), "commit");
-      comm_8:
-      Send(Head(Tail(self)), c, "committed");
+      fork_10:
+      await \A p \in ( participants \X coordinators ) : pc [ p ] = "Done";
     }
   }
-  process (proc_1 \in ( participants \X c ))
+  process (proc_20 \in ( coordinators \ { Head ( Tail ( self ) ) } \X coordinators ))
   {
-    await pc [ Head ( Tail ( self ) ) ] = "fork_0";
-    cancelled_phase1 := TRUE;
+    await pc [ Head ( Tail ( self ) ) ] = "fork_19";
+    if (aborted) {
+      skip;
+    } else {
+      skip;
+    }
+  }
+  process (proc_22 \in ( coordinators \X participants ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_21";
+    comm_23:
+    Receive(Head(self), Head ( Tail ( self ) ), "prepare");
+    either {
+      comm_24:
+      Send(Head ( Tail ( self ) ), Head(self), "prepared");
+    } or {
+      comm_25:
+      Send(Head ( Tail ( self ) ), Head(self), "aborted");
+    }
+    if (aborted) {
+      comm_26:
+      Receive(Head(self), Head ( Tail ( self ) ), "abort");
+      comm_27:
+      Send(Head ( Tail ( self ) ), Head(self), "aborted");
+    } else {
+      comm_28:
+      Receive(Head(self), Head ( Tail ( self ) ), "commit");
+      comm_29:
+      Send(Head ( Tail ( self ) ), Head(self), "committed");
+    }
+  }
+  process (proc_4 \in ( "C_par_3" \X { coordinators } ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "par_0";
+    fork_19:
+    await \A c \in ( coordinators \ { Head ( Tail ( self ) ) } \X coordinators ) : pc [ c ] = "Done";
+  }
+  process (proc_7 \in ( participants \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_6";
+    comm_12:
+    Send(Head ( Tail ( self ) ), Head(self), "prepare");
+    either {
+      comm_13:
+      Receive(Head(self), Head ( Tail ( self ) ), "prepared");
+    } or {
+      comm_14:
+      Receive(Head(self), Head ( Tail ( self ) ), "aborted");
+    }
+  }
+  process (proc_9 \in ( participants \X coordinators ))
+  {
+    await pc [ Head ( Tail ( self ) ) ] = "fork_8";
+    comm_15:
+    Send(Head ( Tail ( self ) ), Head(self), "abort");
+    comm_16:
+    Receive(Head(self), Head ( Tail ( self ) ), "aborted");
   }
   Labels added.
   Parsing completed.
