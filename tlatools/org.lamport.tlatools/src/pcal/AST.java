@@ -937,7 +937,7 @@ public class AST
 
     public static class Cancel extends AST
     { public String task = "" ;
-      public String qualifier = "" ;
+      public String qualifier = null;
       public Cancel() {};
       public String toString()
       { return

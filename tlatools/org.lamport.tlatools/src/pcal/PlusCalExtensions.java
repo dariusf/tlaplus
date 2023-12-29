@@ -616,7 +616,9 @@ public class PlusCalExtensions {
             return call;
         } else if (stmt instanceof AST.Cancel) {
             AST.Cancel c = newCancel((AST.Cancel) stmt);
-            c.qualifier = cancelQualifyWith(ctx, c);
+            if (c.qualifier != null) {
+                c.qualifier = cancelQualifyWith(ctx, c.task);
+            }
             return c;
         } else if (stmt instanceof AST.Skip) {
             return stmt;
@@ -650,18 +652,18 @@ public class PlusCalExtensions {
         }
     }
 
-    private static String cancelQualifyWith(Context ctx, AST.Cancel c) {
-        Role role = ctx.taskOwnership.get(c.task);
+    private static String cancelQualifyWith(Context ctx, String task) {
+        Role role = ctx.taskOwnership.get(task);
         if (role == null) {
-            fail(String.format("invalid task %s, not associated with any role", c.task));
+            fail(String.format("invalid task %s, not associated with any role", task));
         }
 
         List<String> bound = ctx.binders.stream().filter(b -> ctx.party.get(b) == role)
                 .collect(Collectors.toList());
         if (bound.size() > 1) {
-            fail(String.format("more than one binder %s to qualify cancel of task %s with", bound, c.task));
+            fail(String.format("more than one binder %s to qualify cancel of task %s with", bound, task));
         } else if (bound.isEmpty()) {
-            fail(String.format("no binder to qualify cancel of task %s with, no role is acting?", c.task));
+            fail(String.format("no binder to qualify cancel of task %s with, no role is acting?", task));
         }
         return bound.get(0);
     }
@@ -900,6 +902,9 @@ public class PlusCalExtensions {
         result.col = lastTokCol;
         result.line = lastTokLine;
         result.task = GetAlgToken();
+        if (!PeekAtAlgToken(1).equals(";")) {
+            result.qualifier = GetAlgToken();
+        }
         result.setOrigin(new Region(new PCalLocation(result.line - 1, result.col - 1),
                 new PCalLocation(lastTokLine - 1, lastTokCol - 1 + result.task.length())));
         GobbleThis(";");
@@ -1622,7 +1627,7 @@ public class PlusCalExtensions {
             return i;
         } else if (in instanceof AST.Cancel) {
             AST.Cancel i = newCancel((AST.Cancel) in);
-            if (i.qualifier.equals(var)) {
+            if (i.qualifier != null && i.qualifier.equals(var)) {
                 i.qualifier = with;
             }
             return i;
@@ -2036,7 +2041,7 @@ public class PlusCalExtensions {
             AST.Cancel e = (AST.Cancel) stmt;
             AST e1;
 //            if (role.partyVar.equals(ctx.taskOwnership.get(e.task).partyVar)) {
-            if (e.qualifier.equals("self")) {
+            if (e.qualifier != null && e.qualifier.equals("self")) {
                 AST.Cancel e2 = new AST.Cancel();
                 e2.task = e.task;
                 e1 = e2;
