@@ -38,8 +38,8 @@ CONSTANTS s1, s2, s3
           await role = "candidate";
           votes := {};
           term := term + 1;
-          par {
-            task servers, "s" {
+          task servers, "s" {
+            par {
               \* Vote for ourselves too
               all (t \in servers) {
                 Transmit(s, t, [Type |-> "RequestVote", Term |-> term[s]]);
@@ -59,13 +59,13 @@ CONSTANTS s1, s2, s3
                   }
                 }
               }
+            } and {
+              await Cardinality(votes) > Quorum(servers);
+              role := "leader";
+            } and {
+              cancel "s";
             }
-          } and {
-            await Cardinality(votes) > Quorum(servers);
-            role := "leader";
-          } and {
-            cancel "s";
-          }
+          } \* end task
         } \* end while
       }
     } and {
